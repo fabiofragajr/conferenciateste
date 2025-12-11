@@ -13,15 +13,13 @@ onmessage = function (evt) {
 
     const loc = qr.location;
 
-    // Verificar tamanho mínimo do QR
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
     const top = dist(loc.topLeftCorner, loc.topRightCorner);
     const left = dist(loc.topLeftCorner, loc.bottomLeftCorner);
-
     const area = top * left;
-    const total = width * height;
+    const frameArea = width * height;
 
-    if (area / total < 0.0015) {
+    if (area / frameArea < 0.0015) {
         postMessage(null);
         return;
     }
