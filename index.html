@@ -10,19 +10,17 @@
             margin: 0;
             background: black;
             overflow: hidden;
-            font-family: Arial;
-            color: white;
-            text-align: center;
+            font-family: Arial, sans-serif;
         }
 
         video, canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
+            position: fixed;
+            top: 0; left: 0;
             width: 100%;
             height: 100%;
             object-fit: cover;
             display: none;
+            z-index: 1;
         }
 
         #status-message {
@@ -30,62 +28,77 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.5);
             padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 22px;
+            font-size: 20px;
+            color: white;
+            z-index: 10;
+            border-radius: 8px;
         }
 
         #counter-box {
             position: fixed;
             top: 20px;
             right: 20px;
-            background: rgba(0,0,0,0.6);
-            padding: 10px 20px;
-            border-radius: 10px;
-            font-size: 22px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 15px;
+            font-size: 20px;
+            color: white;
+            border-radius: 8px;
+            z-index: 10;
         }
 
-        .btn {
-            background: linear-gradient(135deg, #007bff, #00c6ff);
-            color: white;
-            padding: 18px 35px;
-            font-size: 24px;
-            border-radius: 15px;
+        /* BOTÕES FLUTUANTES SOBRE O VÍDEO */
+        .floating-btn {
+            position: fixed;
+            z-index: 20;
+            padding: 14px 22px;
+            border-radius: 10px;
             border: none;
+            font-size: 20px;
             cursor: pointer;
-            margin-top: 20px;
+            color: white;
+            font-weight: bold;
+        }
+
+        #btn-start {
+            top: 45%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #007bff;
             display: block;
-            width: 80%;
-            max-width: 350px;
-            margin-left: auto;
-            margin-right: auto;
-            box-shadow: 0 0 20px rgba(0,150,255,0.5);
         }
 
         #btn-stop {
-            background: linear-gradient(135deg, #ff3b3b, #ff8c8c);
-            box-shadow: 0 0 20px rgba(255,50,50,0.6);
+            top: 20px;
+            left: 20px;
+            background: #ff3b3b;
+            display: none;
         }
 
+        #btn-report {
+            top: 20px;
+            left: 150px;
+            background: #00c853;
+            display: none;
+        }
     </style>
 </head>
 <body>
 
-    <button id="btn-start" class="btn">Iniciar Conferência</button>
-    <button id="btn-stop" class="btn" style="display:none;">Parar Leitura</button>
-    <button id="btn-report" class="btn" style="display:none;">Gerar Relatório</button>
+    <!-- BOTÕES -->
+    <button id="btn-start" class="floating-btn">Iniciar Conferência</button>
+    <button id="btn-stop" class="floating-btn">Parar Leitura</button>
+    <button id="btn-report" class="floating-btn">Relatório</button>
 
+    <!-- CÂMERA -->
     <video id="video" playsinline autoplay muted></video>
     <canvas id="canvas"></canvas>
 
-    <div id="counter-box">
-        Lidos: <span id="counter">0</span>
-    </div>
-
+    <!-- UI -->
+    <div id="counter-box">Lidos: <span id="counter">0</span></div>
     <div id="status-message">Aguardando...</div>
 
     <script src="main.js"></script>
-
 </body>
 </html>
