@@ -8,13 +8,24 @@
     <style>
         body {
             margin: 0;
+            background: #000;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* PARTE SUPERIOR: VÍDEO */
+        #camera-area {
+            position: relative;
+            width: 100%;
+            height: 70vh; /* AQUI DEFINIMOS O TAMANHO DA ÁREA DA CÂMERA */
             background: black;
             overflow: hidden;
-            font-family: Arial, sans-serif;
         }
 
         video, canvas {
-            position: fixed;
+            position: absolute;
             top: 0; left: 0;
             width: 100%;
             height: 100%;
@@ -23,81 +34,63 @@
             z-index: 1;
         }
 
-        #status-message {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0,0,0,0.5);
-            padding: 10px 20px;
-            font-size: 20px;
+        /* INFERIOR FIXO */
+        #control-area {
+            height: 30vh;
+            background: #111;
             color: white;
-            z-index: 10;
-            border-radius: 8px;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-around;
+            align-items: center;
+            border-top: 3px solid #333;
+        }
+
+        #status-message {
+            font-size: 18px;
+            text-align: center;
         }
 
         #counter-box {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: rgba(0,0,0,0.5);
-            padding: 8px 15px;
-            font-size: 20px;
-            color: white;
-            border-radius: 8px;
-            z-index: 10;
+            font-size: 22px;
         }
 
-        /* BOTÕES FLUTUANTES SOBRE O VÍDEO */
-        .floating-btn {
-            position: fixed;
-            z-index: 20;
-            padding: 14px 22px;
-            border-radius: 10px;
+        .control-btn {
+            width: 90%;
+            padding: 15px;
+            font-size: 22px;
             border: none;
-            font-size: 20px;
-            cursor: pointer;
             color: white;
             font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
         }
 
-        #btn-start {
-            top: 45%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: #007bff;
-            display: block;
-        }
+        #btn-start { background: #007bff; }
+        #btn-stop { background: #ff3b3b; display: none; }
+        #btn-report { background: #00c853; display: none; }
 
-        #btn-stop {
-            top: 20px;
-            left: 20px;
-            background: #ff3b3b;
-            display: none;
-        }
-
-        #btn-report {
-            top: 20px;
-            left: 150px;
-            background: #00c853;
-            display: none;
-        }
     </style>
 </head>
 <body>
 
-    <!-- BOTÕES -->
-    <button id="btn-start" class="floating-btn">Iniciar Conferência</button>
-    <button id="btn-stop" class="floating-btn">Parar Leitura</button>
-    <button id="btn-report" class="floating-btn">Relatório</button>
+    <!-- ÁREA DA CÂMERA -->
+    <div id="camera-area">
+        <video id="video" playsinline autoplay muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
 
-    <!-- CÂMERA -->
-    <video id="video" playsinline autoplay muted></video>
-    <canvas id="canvas"></canvas>
+    <!-- PAINEL DE CONTROLE -->
+    <div id="control-area">
+        <div id="status-message">Aguardando...</div>
+        <div id="counter-box">Lidos: <span id="counter">0</span></div>
 
-    <!-- UI -->
-    <div id="counter-box">Lidos: <span id="counter">0</span></div>
-    <div id="status-message">Aguardando...</div>
+        <button id="btn-start" class="control-btn">Iniciar Conferência</button>
+        <button id="btn-stop" class="control-btn">Parar Leitura</button>
+        <button id="btn-report" class="control-btn">Gerar Relatório</button>
+    </div>
 
     <script src="main.js"></script>
 </body>
