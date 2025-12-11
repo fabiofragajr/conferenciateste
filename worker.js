@@ -1,33 +1,28 @@
+// worker.js — import jsQR e filtrar falsos positivos
 importScripts("https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js");
 
-onmessage = function(evt) {
-  const { buffer, w, h } = evt.data;
-  const img = new Uint8ClampedArray(buffer);
+onmessage = function(ev) {
+  try {
+    const { buffer, w, h } = ev.data;
+    const pixels = new Uint8ClampedArray(buffer);
 
-  const qr = jsQR(img, w, h);
+    const qr = jsQR(pixels, w, h);
+    if (!qr) return postMessage(null);
 
-  if (!qr) {
+    // Filtro: área proporcional mínima (evita ruído)
+    const loc = qr.location;
+    const dist = (a,b) => Math.hypot(a.x-b.x, a.y-b.y);
+    const wbox = dist(loc.topLeftCorner, loc.topRightCorner);
+    const hbox = dist(loc.topLeftCorner, loc.bottomLeftCorner);
+    const area = wbox * hbox;
+
+    if (area < (w * h * 0.001)) return postMessage(null);
+
+    // Retorna um objeto consistente
+    postMessage({ code: String(qr.data) });
+
+  } catch (e) {
+    // falha silenciosa — evita travar
     postMessage(null);
-    return;
   }
-
-  // FILTRO DE QUALIDADE
-  const loc = qr.location;
-
-  function dist(a, b) {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  const top = dist(loc.topLeftCorner, loc.topRightCorner);
-  const side = dist(loc.topLeftCorner, loc.bottomLeftCorner);
-
-  const area = top * side;
-  const frame = w * h;
-
-  if (area / frame < 0.001) {
-    postMessage(null);
-    return;
-  }
-
-  postMessage(qr.data);
 };
