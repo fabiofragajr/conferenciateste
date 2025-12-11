@@ -3,93 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor de QR | Conferência</title>
-
-    <style>
-        body {
-            margin: 0;
-            background: #000;
-            font-family: Arial, sans-serif;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* PARTE SUPERIOR: VÍDEO */
-        #camera-area {
-            position: relative;
-            width: 100%;
-            height: 70vh; /* AQUI DEFINIMOS O TAMANHO DA ÁREA DA CÂMERA */
-            background: black;
-            overflow: hidden;
-        }
-
-        video, canvas {
-            position: absolute;
-            top: 0; left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            display: none;
-            z-index: 1;
-        }
-
-        /* INFERIOR FIXO */
-        #control-area {
-            height: 30vh;
-            background: #111;
-            color: white;
-            padding: 20px;
-            box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-around;
-            align-items: center;
-            border-top: 3px solid #333;
-        }
-
-        #status-message {
-            font-size: 18px;
-            text-align: center;
-        }
-
-        #counter-box {
-            font-size: 22px;
-        }
-
-        .control-btn {
-            width: 90%;
-            padding: 15px;
-            font-size: 22px;
-            border: none;
-            color: white;
-            font-weight: bold;
-            border-radius: 10px;
-            cursor: pointer;
-        }
-
-        #btn-start { background: #007bff; }
-        #btn-stop { background: #ff3b3b; display: none; }
-        #btn-report { background: #00c853; display: none; }
-
-    </style>
+    <title>QuickScan — Conferência de QR</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- ÁREA DA CÂMERA -->
-    <div id="camera-area">
-        <video id="video" playsinline autoplay muted></video>
+    <div id="camera-wrapper">
+        <video id="video" playsinline muted></video>
         <canvas id="canvas"></canvas>
+
+        <div id="scan-overlay">
+            <div id="scan-area"></div>
+        </div>
+
+        <div id="status-message">Aguardando...</div>
     </div>
 
-    <!-- PAINEL DE CONTROLE -->
-    <div id="control-area">
-        <div id="status-message">Aguardando...</div>
-        <div id="counter-box">Lidos: <span id="counter">0</span></div>
+    <div id="controls">
+        <div id="counter-box">
+            Lidos: <span id="counter">0</span>
+        </div>
 
-        <button id="btn-start" class="control-btn">Iniciar Conferência</button>
-        <button id="btn-stop" class="control-btn">Parar Leitura</button>
-        <button id="btn-report" class="control-btn">Gerar Relatório</button>
+        <button id="btn-start" class="control-btn primary">Iniciar Leitura</button>
+        <button id="btn-stop" class="control-btn danger">Parar Leitura</button>
+        <button id="btn-report" class="control-btn success">Gerar Relatório</button>
     </div>
 
     <script src="main.js"></script>
