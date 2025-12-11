@@ -34,14 +34,18 @@ video, canvas {
   top: 0; left: 0;
 }
 
-/* indicador (overlay) — fica por cima de vídeo/canvas */
+/* style.css: Correção Sugerida */
+
 #flash-overlay {
   position: absolute;
   top: 0; left: 0;
   width: 100%;
   height: 100%;
   pointer-events: none;
-  background: transparent;
+  
+  /* Cor inicial neutra, garantindo que a transição de cor funcione */
+  background: rgba(0,0,0,0.1); 
+  
   transition: background-color 160ms ease, opacity 160ms ease;
   opacity: 0;
   z-index: 50;
