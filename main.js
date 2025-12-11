@@ -10,12 +10,12 @@ let btnStop = document.getElementById("btn-stop");
 let btnReport = document.getElementById("btn-report");
 
 let scanning = false;
-let scannedCodes = new Set(JSON.parse(localStorage.getItem("scannedCodes") || "[]"));
 let worker = new Worker("worker.js");
 
+let scannedCodes = new Set(JSON.parse(localStorage.getItem("scannedCodes") || "[]"));
 counter.textContent = scannedCodes.size;
 
-// Sons em Base64 (super leves)
+// Sons (coloque seus Base64 reais)
 const beepSuccess = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZF...");
 const beepError   = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZF...");
 
@@ -47,9 +47,7 @@ async function startCamera() {
 
 function stopCamera() {
   scanning = false;
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(t => t.stop());
-  }
+  if (video.srcObject) video.srcObject.getTracks().forEach(t => t.stop());
   statusMsg.textContent = "Parado.";
 }
 
@@ -78,7 +76,7 @@ worker.onmessage = function(evt) {
     return;
   }
 
-  // NOVO QR
+  // NOVO
   scannedCodes.add(code);
   localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
 
@@ -86,16 +84,17 @@ worker.onmessage = function(evt) {
   updateCounter();
 };
 
+// FEEDBACK 100% GARANTIDO
 function flashSuccess() {
-  canvas.classList.add("success");
+  canvas.style.backgroundColor = "rgba(0, 255, 0, 0.35)";
   beepSuccess.play().catch(()=>{});
-  setTimeout(() => canvas.classList.remove("success"), 150);
+  setTimeout(() => canvas.style.backgroundColor = "transparent", 120);
 }
 
 function flashError() {
-  canvas.classList.add("error");
+  canvas.style.backgroundColor = "rgba(255, 0, 0, 0.35)";
   beepError.play().catch(()=>{});
-  setTimeout(() => canvas.classList.remove("error"), 150);
+  setTimeout(() => canvas.style.backgroundColor = "transparent", 120);
 }
 
 /* BOTÕES */
