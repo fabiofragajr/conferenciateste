@@ -91,16 +91,34 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-// Resposta do worker
 worker.onmessage = async (evt) => {
   const code = evt.data;
+
+  // Se não existe código, ignore (nada de contagem)
   if (!code) return;
 
-  // Duplicado
+  // Se já existe → duplicado
   if (scannedCodes.has(code)) {
     feedbackDuplicate();
     return;
   }
+
+  // NOVO QR REAL
+  scannedCodes.add(code);
+
+  // Salva no navegador
+  localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
+
+  updateCounter();
+  feedbackSuccess();
+
+  // Pausa para evitar múltiplas leituras sequenciais
+  canSendFrame = false;
+  setTimeout(() => (canSendFrame = true), 500);
+
+  simulateBackendCall(code);
+};
+
 
   // Novo QR
   scannedCodes.add(code);
