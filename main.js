@@ -1,150 +1,123 @@
-// ELEMENTOS
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
+
 const statusMessage = document.getElementById("status-message");
 const counter = document.getElementById("counter");
+const btnStart = document.getElementById("start-scan");
 
 const scannedCodes = new Set();
 const worker = new Worker("worker.js");
-let canSendFrame = true;
 
-// Carregar sessão salva
+let canSendFrame = false;
+let lastCorners = null;
+
+// Carregar histórico
 const saved = JSON.parse(localStorage.getItem("scannedCodes") || "[]");
 saved.forEach(c => scannedCodes.add(c));
 updateCounter();
 
-// Sons base64 (curtos)
-const successSound = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
-const errorSound   = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
-
 function updateCounter() {
-  counter.textContent = scannedCodes.size;
+    counter.textContent = scannedCodes.size;
 }
 
-function feedbackSuccess() {
-  successSound.play().catch(() => {});
-  canvas.classList.add("status-success");
-  setTimeout(() => canvas.classList.remove("status-success"), 500);
-}
+// Base64 beeps
+const beepOK = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
+const beepError = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
 
-function feedbackDuplicate() {
-  errorSound.play().catch(() => {});
-  canvas.classList.add("status-duplicate");
-  setTimeout(() => canvas.classList.remove("status-duplicate"), 500);
-}
+// Start camera button
+btnStart.onclick = () => startCamera();
 
-function simulateBackendCall(code) {
-  console.log("Enviando código →", code);
-  return new Promise(res => setTimeout(res, 200));
-}
-
-// Iniciar câmera
 async function startCamera() {
+    btnStart.style.display = "none";
+    statusMessage.textContent = "Abrindo câmera...";
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        facingMode: { exact: "environment" },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: { ideal: 60, max: 120 }
-      },
-      audio: false
-    });
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } },
+            audio: false
+        });
 
-    video.srcObject = stream;
-    await video.play();
+        video.srcObject = stream;
+        await video.play();
 
-    statusMessage.textContent = "Lendo QR...";
-    requestAnimationFrame(tick);
+        canSendFrame = true;
+        statusMessage.textContent = "Aponte para o QR...";
+        requestAnimationFrame(tick);
 
-  } catch (err) {
-    statusMessage.textContent = "Erro ao acessar câmera";
-    console.error(err);
-  }
-}
-
-// Loop principal
-function tick() {
-  if (video.readyState >= 2) {
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    if (canSendFrame) {
-      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      worker.postMessage(
-        {
-          buffer: imgData.data.buffer,
-          width: canvas.width,
-          height: canvas.height
-        },
-        [imgData.data.buffer]
-      );
+    } catch (err) {
+        statusMessage.textContent = "Erro ao acessar câmera";
+        console.error(err);
     }
-  }
-
-  requestAnimationFrame(tick);
 }
 
-worker.onmessage = async (evt) => {
-  const code = evt.data;
+// ===== DESENHAR CONTORNO =====
+function drawCorners(corners, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(corners.topLeftCorner.x, corners.topLeftCorner.y);
+    ctx.lineTo(corners.topRightCorner.x, corners.topRightCorner.y);
+    ctx.lineTo(corners.bottomRightCorner.x, corners.bottomRightCorner.y);
+    ctx.lineTo(corners.bottomLeftCorner.x, corners.bottomLeftCorner.y);
+    ctx.closePath();
+    ctx.stroke();
+}
 
-  // Se não existe código, ignore (nada de contagem)
-  if (!code) return;
+function feedbackOK(c) {
+    beepOK.play().catch(() => {});
+    drawCorners(c, "#00ff44");
+}
 
-  // Se já existe → duplicado
-  if (scannedCodes.has(code)) {
-    feedbackDuplicate();
-    return;
-  }
+function feedbackDuplicate(c) {
+    beepError.play().catch(() => {});
+    drawCorners(c, "#ff0033");
+}
 
-  // NOVO QR REAL
-  scannedCodes.add(code);
+// ===== LOOP =====
+function tick() {
+    if (video.readyState >= 2) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
-  // Salva no navegador
-  localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  updateCounter();
-  feedbackSuccess();
+        if (lastCorners) drawCorners(lastCorners.corners, lastCorners.color);
 
-  // Pausa para evitar múltiplas leituras sequenciais
-  canSendFrame = false;
-  setTimeout(() => (canSendFrame = true), 500);
+        if (canSendFrame) {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            worker.postMessage({
+                buffer: imgData.data.buffer,
+                width: canvas.width,
+                height: canvas.height
+            }, [imgData.data.buffer]);
+        }
+    }
 
-  simulateBackendCall(code);
+    requestAnimationFrame(tick);
+}
+
+// ===== RESPOSTA DO WORKER =====
+worker.onmessage = (evt) => {
+    const { code, corners } = evt.data || {};
+
+    if (!code) return;
+
+    // Já lido
+    if (scannedCodes.has(code)) {
+        lastCorners = { corners, color: "#ff0033" };
+        feedbackDuplicate(corners);
+        return;
+    }
+
+    // Novo QR
+    scannedCodes.add(code);
+    localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
+    updateCounter();
+
+    lastCorners = { corners, color: "#00ff44" };
+    feedbackOK(corners);
+
+    canSendFrame = false;
+    setTimeout(() => (canSendFrame = true), 500);
 };
-
-
-  // Novo QR
-  scannedCodes.add(code);
-
-  // Salvar persistente
-  localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
-
-  updateCounter();
-  feedbackSuccess();
-
-  canSendFrame = false;
-  setTimeout(() => (canSendFrame = true), 500);
-
-  simulateBackendCall(code);
-};
-
-// Baixar relatório CSV
-document.getElementById("download-report").onclick = () => {
-  const arr = [...scannedCodes];
-  if (arr.length === 0) return alert("Nenhum QR lido.");
-
-  const csv = "data:text/csv;charset=utf-8,QRCode\n" + arr.join("\n");
-  const link = document.createElement("a");
-  link.href = encodeURI(csv);
-  link.download = "relatorio_qrcodes.csv";
-  link.click();
-};
-
-startCamera();
