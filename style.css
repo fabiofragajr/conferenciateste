@@ -29,6 +29,10 @@ video, canvas {
   display: block;
 }
 
+canvas {
+  transition: background-color 0.1s ease;
+}
+
 #status-message {
   position: absolute;
   top: 10px;
@@ -50,24 +54,6 @@ video, canvas {
   font-weight: bold;
 }
 
-/* Feedback */
-.success {
-  animation: flashGreen 0.2s;
-}
-.error {
-  animation: flashRed 0.2s;
-}
-
-@keyframes flashGreen {
-  0% { background: rgba(0,255,0,0.5); }
-  100% { background: transparent; }
-}
-@keyframes flashRed {
-  0% { background: rgba(255,0,0,0.5); }
-  100% { background: transparent; }
-}
-
-/* Barra inferior */
 #bottom-bar {
   background: #222;
   padding: 12px;
