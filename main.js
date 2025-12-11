@@ -10,92 +10,82 @@ const btnStart = document.getElementById("btn-start");
 const btnStop = document.getElementById("btn-stop");
 const btnReport = document.getElementById("btn-report");
 
-const scannedCodes = new Set();
 const worker = new Worker("worker.js");
-
-let animationLoop = null;
 let isRunning = false;
 let canSendFrame = false;
 let lastCorners = null;
 
+const scannedCodes = new Set();
+
 // Carregar histórico
 const saved = JSON.parse(localStorage.getItem("scannedCodes") || "[]");
-saved.forEach(c => scannedCodes.add(c));
-updateCounter();
+saved.forEach(code => scannedCodes.add(code));
+counter.textContent = scannedCodes.size;
 
 function updateCounter() {
     counter.textContent = scannedCodes.size;
 }
 
-// Base64 beeps
-const beepOK = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
-const beepError = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
+btnStart.onclick = startCamera;
+btnStop.onclick = stopCamera;
+btnReport.onclick = generateReport;
 
-// ========= INICIAR CÂMERA =========
-btnStart.onclick = () => startCamera();
-btnStop.onclick = () => stopCamera();
-btnReport.onclick = () => downloadReport();
 
+// === INICIAR ===
 async function startCamera() {
-    statusMessage.textContent = "Abrindo câmera...";
     btnStart.style.display = "none";
+    statusMessage.textContent = "Abrindo câmera...";
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                facingMode: { ideal: "environment" },
-                width: { ideal: 1920 },
-                height: { ideal: 1080 }
-            }
+            video: { facingMode: "environment" },
+            audio: false
         });
 
         video.srcObject = stream;
+        await video.play();
 
         video.style.display = "block";
         canvas.style.display = "block";
-
-        await video.play();
-
         btnStop.style.display = "block";
         btnReport.style.display = "block";
 
-        canSendFrame = true;
         isRunning = true;
-
+        canSendFrame = true;
         statusMessage.textContent = "Aponte para o QR...";
-        tick();
 
-    } catch (err) {
-        statusMessage.textContent = "Erro ao acessar câmera. Tente novamente.";
+        requestAnimationFrame(tick);
+
+    } catch (e) {
+        statusMessage.textContent = "Erro ao acessar câmera";
         btnStart.style.display = "block";
-        console.error(err);
     }
 }
 
-// ========= PARAR A LEITURA =========
+
+// === PARAR ===
 function stopCamera() {
     isRunning = false;
     canSendFrame = false;
 
     const stream = video.srcObject;
-    if (stream) {
-        stream.getTracks().forEach(t => t.stop());
-    }
+    if (stream) stream.getTracks().forEach(t => t.stop());
 
     video.style.display = "none";
     canvas.style.display = "none";
 
     btnStart.style.display = "block";
     btnStop.style.display = "none";
+    btnReport.style.display = "none";
 
     statusMessage.textContent = "Leitura parada";
 }
 
-// ========= GERAR RELATÓRIO =========
-function downloadReport() {
-    const list = [...scannedCodes].join("\n");
 
-    const blob = new Blob([list], { type: "text/plain" });
+// === RELATÓRIO ===
+function generateReport() {
+    const content = [...scannedCodes].join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
 
     const a = document.createElement("a");
@@ -106,31 +96,8 @@ function downloadReport() {
     URL.revokeObjectURL(url);
 }
 
-// ========= DESENHAR CONTORNO =========
-function drawCorners(corners, color) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(corners.topLeftCorner.x, corners.topLeftCorner.y);
-    ctx.lineTo(corners.topRightCorner.x, corners.topRightCorner.y);
-    ctx.lineTo(corners.bottomRightCorner.x, corners.bottomRightCorner.y);
-    ctx.lineTo(corners.bottomLeftCorner.x, corners.bottomLeftCorner.y);
-    ctx.closePath();
-    ctx.stroke();
-}
 
-// ========= FEEDBACK =========
-function feedbackOK(c) {
-    beepOK.play().catch(() => {});
-    drawCorners(c, "#00ff44");
-}
-
-function feedbackDuplicate(c) {
-    beepError.play().catch(() => {});
-    drawCorners(c, "#ff0033");
-}
-
-// ========= LOOP =========
+// === LOOP ===
 function tick() {
     if (!isRunning) return;
 
@@ -139,32 +106,42 @@ function tick() {
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    if (lastCorners)
-        drawCorners(lastCorners.corners, lastCorners.color);
+    if (lastCorners) drawCorners(lastCorners.corners, lastCorners.color);
 
     if (canSendFrame) {
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
         worker.postMessage(
-            {
-                buffer: imgData.data.buffer,
-                width: canvas.width,
-                height: canvas.height
-            },
-            [imgData.data.buffer]
+            { buffer: img.data.buffer, width: canvas.width, height: canvas.height },
+            [img.data.buffer]
         );
     }
 
-    animationLoop = requestAnimationFrame(tick);
+    requestAnimationFrame(tick);
 }
 
-// ========= WORKER RESPONDE =========
+
+// === DESENHO DOS CANTOS ===
+function drawCorners(c, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(c.topLeftCorner.x, c.topLeftCorner.y);
+    ctx.lineTo(c.topRightCorner.x, c.topRightCorner.y);
+    ctx.lineTo(c.bottomRightCorner.x, c.bottomRightCorner.y);
+    ctx.lineTo(c.bottomLeftCorner.x, c.bottomLeftCorner.y);
+    ctx.closePath();
+    ctx.stroke();
+}
+
+
+// === WORKER ===
 worker.onmessage = (evt) => {
-    const { code, corners } = evt.data || {};
-    if (!code) return;
+    if (!evt.data) return;
+
+    const { code, corners } = evt.data;
 
     if (scannedCodes.has(code)) {
         lastCorners = { corners, color: "#ff0033" };
-        feedbackDuplicate(corners);
         return;
     }
 
@@ -173,8 +150,7 @@ worker.onmessage = (evt) => {
     updateCounter();
 
     lastCorners = { corners, color: "#00ff44" };
-    feedbackOK(corners);
 
     canSendFrame = false;
-    setTimeout(() => (canSendFrame = true), 700);
+    setTimeout(() => canSendFrame = true, 700);
 };
