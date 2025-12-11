@@ -46,27 +46,35 @@
             font-size: 22px;
         }
 
-        /* Botão de iniciar */
-        #start-scan {
-            position: absolute;
-            top: 45%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+        .btn {
             background: linear-gradient(135deg, #007bff, #00c6ff);
             color: white;
             padding: 18px 35px;
-            font-size: 28px;
+            font-size: 24px;
             border-radius: 15px;
             border: none;
             cursor: pointer;
-            z-index: 999;
+            margin-top: 20px;
+            display: block;
+            width: 80%;
+            max-width: 350px;
+            margin-left: auto;
+            margin-right: auto;
             box-shadow: 0 0 20px rgba(0,150,255,0.5);
         }
+
+        #btn-stop {
+            background: linear-gradient(135deg, #ff3b3b, #ff8c8c);
+            box-shadow: 0 0 20px rgba(255,50,50,0.6);
+        }
+
     </style>
 </head>
 <body>
 
-    <button id="start-scan">Iniciar Conferência</button>
+    <button id="btn-start" class="btn">Iniciar Conferência</button>
+    <button id="btn-stop" class="btn" style="display:none;">Parar Leitura</button>
+    <button id="btn-report" class="btn" style="display:none;">Gerar Relatório</button>
 
     <video id="video" playsinline autoplay muted></video>
     <canvas id="canvas"></canvas>
