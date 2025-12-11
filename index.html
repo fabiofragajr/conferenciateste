@@ -1,34 +1,37 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>QuickScan — Conferência de QR</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport"
+        content="width=device-width,initial-scale=1,viewport-fit=cover"/>
+  <title>QuickScan-PWA — Ultra Rápido</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
+  <main id="app">
 
-    <div id="camera-wrapper">
-        <video id="video" playsinline muted></video>
-        <canvas id="canvas"></canvas>
+    <!-- Área do vídeo -->
+    <div id="camera-area">
+      <video id="video" playsinline></video>
+      <canvas id="canvas"></canvas>
 
-        <div id="scan-overlay">
-            <div id="scan-area"></div>
-        </div>
-
-        <div id="status-message">Aguardando...</div>
+      <div id="status-message">Aguardando...</div>
+      <div id="counter">0</div>
     </div>
 
-    <div id="controls">
-        <div id="counter-box">
-            Lidos: <span id="counter">0</span>
-        </div>
-
-        <button id="btn-start" class="control-btn primary">Iniciar Leitura</button>
-        <button id="btn-stop" class="control-btn danger">Parar Leitura</button>
-        <button id="btn-report" class="control-btn success">Gerar Relatório</button>
+    <!-- Barra inferior de controle -->
+    <div id="bottom-bar">
+      <button id="btn-start">Iniciar Leitura</button>
+      <button id="btn-stop">Parar</button>
+      <button id="btn-report">Gerar Relatório</button>
     </div>
 
-    <script src="main.js"></script>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+  <script src="main.js"></script>
+
 </body>
 </html>
