@@ -4,25 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport"
         content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <title>QuickScan-PWA — Ultra Rápido</title>
+  <title>QuickScan — Feedback confiável</title>
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
-
   <main id="app">
 
-    <!-- Área do vídeo -->
     <div id="camera-area">
       <video id="video" playsinline></video>
       <canvas id="canvas"></canvas>
+
+      <!-- overlay independente e confiável para flashes -->
+      <div id="flash-overlay" aria-hidden="true"></div>
 
       <div id="status-message">Aguardando...</div>
       <div id="counter">0</div>
     </div>
 
-    <!-- Barra inferior -->
     <div id="bottom-bar">
       <button id="btn-start">Iniciar Leitura</button>
       <button id="btn-stop">Parar</button>
@@ -31,8 +30,8 @@
 
   </main>
 
+  <!-- jsQR CDN (worker também importa, mas manter aqui é OK) -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="main.js"></script>
-
 </body>
 </html>
