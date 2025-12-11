@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Leitor de QR Code</title>
+    <title>Leitor de QR | Conferência</title>
 
     <style>
         body {
@@ -22,6 +22,7 @@
             width: 100%;
             height: 100%;
             object-fit: cover;
+            display: none;
         }
 
         #status-message {
@@ -45,25 +46,27 @@
             font-size: 22px;
         }
 
+        /* Botão de iniciar */
         #start-scan {
             position: absolute;
-            top: 50%;
+            top: 45%;
             left: 50%;
             transform: translate(-50%, -50%);
-            background: #00aaff;
+            background: linear-gradient(135deg, #007bff, #00c6ff);
             color: white;
-            padding: 18px 30px;
-            font-size: 26px;
+            padding: 18px 35px;
+            font-size: 28px;
             border-radius: 15px;
             border: none;
             cursor: pointer;
             z-index: 999;
+            box-shadow: 0 0 20px rgba(0,150,255,0.5);
         }
     </style>
 </head>
 <body>
 
-    <button id="start-scan">Iniciar Scanner</button>
+    <button id="start-scan">Iniciar Conferência</button>
 
     <video id="video" playsinline autoplay muted></video>
     <canvas id="canvas"></canvas>
