@@ -1,31 +1,21 @@
 importScripts("https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js");
 
-onmessage = function (evt) {
+onmessage = evt => {
     const { buffer, width, height } = evt.data;
-    const data = new Uint8ClampedArray(buffer);
 
-    const qr = jsQR(data, width, height);
+    const img = new Uint8ClampedArray(buffer);
+    const qr = jsQR(img, width, height);
 
-    if (!qr) {
-        postMessage(null);
-        return;
-    }
+    if (!qr) return postMessage(null);
 
     const loc = qr.location;
 
     const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-    const top = dist(loc.topLeftCorner, loc.topRightCorner);
-    const left = dist(loc.topLeftCorner, loc.bottomLeftCorner);
-    const area = top * left;
-    const frameArea = width * height;
+    const area = dist(loc.topLeftCorner, loc.topRightCorner) *
+                 dist(loc.topLeftCorner, loc.bottomLeftCorner);
 
-    if (area / frameArea < 0.0015) {
-        postMessage(null);
-        return;
-    }
+    if (area < width * height * 0.002)
+        return postMessage(null);
 
-    postMessage({
-        code: qr.data,
-        corners: qr.location
-    });
+    postMessage({ code: qr.data });
 };
