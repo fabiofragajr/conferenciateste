@@ -21,24 +21,32 @@ function updateCounter() {
     counter.textContent = scannedCodes.size;
 }
 
-// Base64 beeps
+// Base64 beeps (curtos)
 const beepOK = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
 const beepError = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
 
-// Start camera button
+// ========= INICIAR CÂMERA =========
 btnStart.onclick = () => startCamera();
 
 async function startCamera() {
-    btnStart.style.display = "none";
     statusMessage.textContent = "Abrindo câmera...";
+
+    btnStart.style.display = "none";
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } },
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            },
             audio: false
         });
 
         video.srcObject = stream;
+        video.style.display = "block";
+        canvas.style.display = "block";
+
         await video.play();
 
         canSendFrame = true;
@@ -46,12 +54,13 @@ async function startCamera() {
         requestAnimationFrame(tick);
 
     } catch (err) {
-        statusMessage.textContent = "Erro ao acessar câmera";
+        statusMessage.textContent = "Erro ao acessar câmera. Toque para tentar.";
+        btnStart.style.display = "block";
         console.error(err);
     }
 }
 
-// ===== DESENHAR CONTORNO =====
+// ========= FUNÇÕES DE DESENHO =========
 function drawCorners(corners, color) {
     ctx.strokeStyle = color;
     ctx.lineWidth = 4;
@@ -74,7 +83,7 @@ function feedbackDuplicate(c) {
     drawCorners(c, "#ff0033");
 }
 
-// ===== LOOP =====
+// ========= LOOP DA CÂMERA =========
 function tick() {
     if (video.readyState >= 2) {
         canvas.width = video.videoWidth;
@@ -97,10 +106,9 @@ function tick() {
     requestAnimationFrame(tick);
 }
 
-// ===== RESPOSTA DO WORKER =====
+// ========= RESPOSTA DO WORKER =========
 worker.onmessage = (evt) => {
     const { code, corners } = evt.data || {};
-
     if (!code) return;
 
     // Já lido
@@ -119,5 +127,5 @@ worker.onmessage = (evt) => {
     feedbackOK(corners);
 
     canSendFrame = false;
-    setTimeout(() => (canSendFrame = true), 500);
+    setTimeout(() => (canSendFrame = true), 700);
 };
