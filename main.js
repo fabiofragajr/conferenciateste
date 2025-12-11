@@ -3,112 +3,89 @@ const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
 const statusMessage = document.getElementById("status-message");
-const counter = document.getElementById("counter");
+const counterEl = document.getElementById("counter");
 
-// Botões
 const btnStart = document.getElementById("btn-start");
 const btnStop = document.getElementById("btn-stop");
 const btnReport = document.getElementById("btn-report");
 
 const worker = new Worker("worker.js");
-let isRunning = false;
-let canSendFrame = false;
-let lastCorners = null;
+
+let running = false;
+let allowFrame = false;
 
 const scannedCodes = new Set();
 
-// Carregar histórico
-const saved = JSON.parse(localStorage.getItem("scannedCodes") || "[]");
+// carrega histórico
+const saved = JSON.parse(localStorage.getItem("qrHistory") || "[]");
 saved.forEach(code => scannedCodes.add(code));
-counter.textContent = scannedCodes.size;
+counterEl.textContent = scannedCodes.size;
 
-function updateCounter() {
-    counter.textContent = scannedCodes.size;
-}
-
-btnStart.onclick = startCamera;
-btnStop.onclick = stopCamera;
-btnReport.onclick = generateReport;
-
-
-// === INICIAR ===
-async function startCamera() {
+// ================= START CAMERA =================
+btnStart.onclick = async () => {
     btnStart.style.display = "none";
+    btnStop.style.display = "block";
+    btnReport.style.display = "block";
+
     statusMessage.textContent = "Abrindo câmera...";
 
     try {
         const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: "environment" },
+            video: { facingMode: { ideal: "environment" } },
             audio: false
         });
 
         video.srcObject = stream;
         await video.play();
 
-        video.style.display = "block";
-        canvas.style.display = "block";
-        btnStop.style.display = "block";
-        btnReport.style.display = "block";
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
 
-        isRunning = true;
-        canSendFrame = true;
-        statusMessage.textContent = "Aponte para o QR...";
+        running = true;
+        allowFrame = true;
 
-        requestAnimationFrame(tick);
+        statusMessage.textContent = "Aponte para o QR";
+
+        requestAnimationFrame(loop);
 
     } catch (e) {
         statusMessage.textContent = "Erro ao acessar câmera";
         btnStart.style.display = "block";
     }
-}
+};
 
-
-// === PARAR ===
-function stopCamera() {
-    isRunning = false;
-    canSendFrame = false;
+// ================= STOP CAMERA =================
+btnStop.onclick = () => {
+    running = false;
+    allowFrame = false;
 
     const stream = video.srcObject;
     if (stream) stream.getTracks().forEach(t => t.stop());
 
-    video.style.display = "none";
-    canvas.style.display = "none";
-
+    statusMessage.textContent = "Leitura parada";
     btnStart.style.display = "block";
     btnStop.style.display = "none";
     btnReport.style.display = "none";
+};
 
-    statusMessage.textContent = "Leitura parada";
-}
-
-
-// === RELATÓRIO ===
-function generateReport() {
-    const content = [...scannedCodes].join("\n");
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
+// ================= REPORT =================
+btnReport.onclick = () => {
+    const txt = [...scannedCodes].join("\n");
+    const blob = new Blob([txt], { type: "text/plain" });
 
     const a = document.createElement("a");
-    a.href = url;
+    a.href = URL.createObjectURL(blob);
     a.download = "relatorio_qr.txt";
     a.click();
+};
 
-    URL.revokeObjectURL(url);
-}
-
-
-// === LOOP ===
-function tick() {
-    if (!isRunning) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
+// ================= LOOP ULTRA-RÁPIDO =================
+function loop() {
+    if (!running) return;
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    if (lastCorners) drawCorners(lastCorners.corners, lastCorners.color);
-
-    if (canSendFrame) {
+    if (allowFrame) {
         const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
         worker.postMessage(
             { buffer: img.data.buffer, width: canvas.width, height: canvas.height },
@@ -116,41 +93,28 @@ function tick() {
         );
     }
 
-    requestAnimationFrame(tick);
+    requestAnimationFrame(loop);
 }
 
-
-// === DESENHO DOS CANTOS ===
-function drawCorners(c, color) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 4;
-    ctx.beginPath();
-    ctx.moveTo(c.topLeftCorner.x, c.topLeftCorner.y);
-    ctx.lineTo(c.topRightCorner.x, c.topRightCorner.y);
-    ctx.lineTo(c.bottomRightCorner.x, c.bottomRightCorner.y);
-    ctx.lineTo(c.bottomLeftCorner.x, c.bottomLeftCorner.y);
-    ctx.closePath();
-    ctx.stroke();
-}
-
-
-// === WORKER ===
-worker.onmessage = (evt) => {
+// ================= WORKER =================
+worker.onmessage = evt => {
     if (!evt.data) return;
 
-    const { code, corners } = evt.data;
+    const { code } = evt.data;
 
     if (scannedCodes.has(code)) {
-        lastCorners = { corners, color: "#ff0033" };
+        statusMessage.textContent = "QR repetido";
+        statusMessage.style.color = "#ff4444";
         return;
     }
 
     scannedCodes.add(code);
-    localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
-    updateCounter();
+    localStorage.setItem("qrHistory", JSON.stringify([...scannedCodes]));
 
-    lastCorners = { corners, color: "#00ff44" };
+    counterEl.textContent = scannedCodes.size;
+    statusMessage.textContent = "Lido!";
+    statusMessage.style.color = "#00ff77";
 
-    canSendFrame = false;
-    setTimeout(() => canSendFrame = true, 700);
+    allowFrame = false;
+    setTimeout(() => allowFrame = true, 500);
 };
