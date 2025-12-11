@@ -4,19 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
   <title>QuickScan-PWA — Leitor Ultra-Rápido de QR</title>
+
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <main id="app">
     <video id="video" playsinline style="display:none;"></video>
     <canvas id="canvas" aria-hidden="false"></canvas>
+
     <div id="ui-overlay">
-      <div id="status-message" role="status" aria-live="polite">Aguardando câmera...</div>
-      <div id="counter" aria-label="Contador de QR lidos">0</div>
+      <div id="status-message" role="status" aria-live="polite">Iniciando câmera...</div>
+      <div id="counter">0</div>
+      <button id="download-report">Baixar Relatório</button>
     </div>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js" defer></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
   <script src="main.js" type="module"></script>
 </body>
 </html>
