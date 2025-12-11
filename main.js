@@ -1,31 +1,27 @@
-// -------- CONFIG GERAL --------
+// ELEMENTOS
 const video = document.getElementById("video");
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 const statusMessage = document.getElementById("status-message");
 const counter = document.getElementById("counter");
 
-// Contador e Set para evitar duplicados
 const scannedCodes = new Set();
-
-// Worker
 const worker = new Worker("worker.js");
-
-// Controle de envio para o worker
 let canSendFrame = true;
 
-// Sons base64
-const successSound = new Audio("data:audio/mp3;base64,//uQx...");
-const errorSound   = new Audio("data:audio/mp3;base64,//uQx...");
+// Carregar sessão salva
+const saved = JSON.parse(localStorage.getItem("scannedCodes") || "[]");
+saved.forEach(c => scannedCodes.add(c));
+updateCounter();
 
+// Sons base64 (curtos)
+const successSound = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
+const errorSound   = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEA...");
 
-// -------- FUNÇÃO: Atualiza contador --------
 function updateCounter() {
   counter.textContent = scannedCodes.size;
 }
 
-
-// -------- FEEDBACK VISUAL / SONORO --------
 function feedbackSuccess() {
   successSound.play().catch(() => {});
   canvas.classList.add("status-success");
@@ -38,17 +34,13 @@ function feedbackDuplicate() {
   setTimeout(() => canvas.classList.remove("status-duplicate"), 500);
 }
 
-
-// -------- SIMULA CHAMADA DE API (FAKE) --------
 function simulateBackendCall(code) {
   console.log("Enviando código →", code);
   return new Promise(res => setTimeout(res, 200));
 }
 
-
-// -------- INICIA CÂMERA EM MODO TURBO --------
+// Iniciar câmera
 async function startCamera() {
-  statusMessage.textContent = "Iniciando câmera...";
 
   try {
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -56,8 +48,7 @@ async function startCamera() {
         facingMode: { exact: "environment" },
         width: { ideal: 1920 },
         height: { ideal: 1080 },
-        frameRate: { ideal: 60, max: 120 },
-        focusMode: "continuous"
+        frameRate: { ideal: 60, max: 120 }
       },
       audio: false
     });
@@ -66,28 +57,23 @@ async function startCamera() {
     await video.play();
 
     statusMessage.textContent = "Lendo QR...";
-
     requestAnimationFrame(tick);
 
   } catch (err) {
-    statusMessage.textContent = "Erro ao acessar câmera.";
+    statusMessage.textContent = "Erro ao acessar câmera";
     console.error(err);
   }
 }
 
-
-// -------- LOOP ULTRA-RÁPIDO --------
+// Loop principal
 function tick() {
   if (video.readyState >= 2) {
 
-    // Ajusta canvas para video em tempo real
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
 
-    // Desenha frame bruto
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    // Envia para worker
     if (canSendFrame) {
       const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
@@ -97,7 +83,7 @@ function tick() {
           width: canvas.width,
           height: canvas.height
         },
-        [imgData.data.buffer]  // Transferable Object (sem cópia)
+        [imgData.data.buffer]
       );
     }
   }
@@ -105,31 +91,42 @@ function tick() {
   requestAnimationFrame(tick);
 }
 
-
-// -------- RECEBENDO RESULTADO DO WORKER --------
+// Resposta do worker
 worker.onmessage = async (evt) => {
   const code = evt.data;
-
   if (!code) return;
 
-  // Duplicado?
+  // Duplicado
   if (scannedCodes.has(code)) {
     feedbackDuplicate();
     return;
   }
 
-  // Novo código!
+  // Novo QR
   scannedCodes.add(code);
+
+  // Salvar persistente
+  localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
+
   updateCounter();
   feedbackSuccess();
 
-  // Pausa 500ms (tempo do motorista virar caixa)
   canSendFrame = false;
   setTimeout(() => (canSendFrame = true), 500);
 
   simulateBackendCall(code);
 };
 
+// Baixar relatório CSV
+document.getElementById("download-report").onclick = () => {
+  const arr = [...scannedCodes];
+  if (arr.length === 0) return alert("Nenhum QR lido.");
 
-// -------- INICIAR --------
+  const csv = "data:text/csv;charset=utf-8,QRCode\n" + arr.join("\n");
+  const link = document.createElement("a");
+  link.href = encodeURI(csv);
+  link.download = "relatorio_qrcodes.csv";
+  link.click();
+};
+
 startCamera();
