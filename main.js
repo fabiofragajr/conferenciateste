@@ -1,120 +1,122 @@
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
+let video = document.getElementById("video");
+let canvas = document.getElementById("canvas");
+let ctx = canvas.getContext("2d");
 
-const statusMessage = document.getElementById("status-message");
-const counterEl = document.getElementById("counter");
+let statusMsg = document.getElementById("status-message");
+let counter = document.getElementById("counter");
 
-const btnStart = document.getElementById("btn-start");
-const btnStop = document.getElementById("btn-stop");
-const btnReport = document.getElementById("btn-report");
+let btnStart = document.getElementById("btn-start");
+let btnStop = document.getElementById("btn-stop");
+let btnReport = document.getElementById("btn-report");
 
-const worker = new Worker("worker.js");
+let scanning = false;
+let scannedCodes = new Set(JSON.parse(localStorage.getItem("scannedCodes") || "[]"));
+let worker = new Worker("worker.js");
 
-let running = false;
-let allowFrame = false;
+counter.textContent = scannedCodes.size;
 
-const scannedCodes = new Set();
+// Sons em Base64 (super leves)
+const beepSuccess = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZF...");
+const beepError   = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZF...");
 
-// carrega histórico
-const saved = JSON.parse(localStorage.getItem("qrHistory") || "[]");
-saved.forEach(code => scannedCodes.add(code));
-counterEl.textContent = scannedCodes.size;
-
-// ================= START CAMERA =================
-btnStart.onclick = async () => {
-    btnStart.style.display = "none";
-    btnStop.style.display = "block";
-    btnReport.style.display = "block";
-
-    statusMessage.textContent = "Abrindo câmera...";
-
-    try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: "environment" } },
-            audio: false
-        });
-
-        video.srcObject = stream;
-        await video.play();
-
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-
-        running = true;
-        allowFrame = true;
-
-        statusMessage.textContent = "Aponte para o QR";
-
-        requestAnimationFrame(loop);
-
-    } catch (e) {
-        statusMessage.textContent = "Erro ao acessar câmera";
-        btnStart.style.display = "block";
-    }
-};
-
-// ================= STOP CAMERA =================
-btnStop.onclick = () => {
-    running = false;
-    allowFrame = false;
-
-    const stream = video.srcObject;
-    if (stream) stream.getTracks().forEach(t => t.stop());
-
-    statusMessage.textContent = "Leitura parada";
-    btnStart.style.display = "block";
-    btnStop.style.display = "none";
-    btnReport.style.display = "none";
-};
-
-// ================= REPORT =================
-btnReport.onclick = () => {
-    const txt = [...scannedCodes].join("\n");
-    const blob = new Blob([txt], { type: "text/plain" });
-
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = "relatorio_qr.txt";
-    a.click();
-};
-
-// ================= LOOP ULTRA-RÁPIDO =================
-function loop() {
-    if (!running) return;
-
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-    if (allowFrame) {
-        const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        worker.postMessage(
-            { buffer: img.data.buffer, width: canvas.width, height: canvas.height },
-            [img.data.buffer]
-        );
-    }
-
-    requestAnimationFrame(loop);
+function updateCounter() {
+  counter.textContent = scannedCodes.size;
 }
 
-// ================= WORKER =================
-worker.onmessage = evt => {
-    if (!evt.data) return;
+async function startCamera() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "environment" },
+      audio: false
+    });
 
-    const { code } = evt.data;
+    video.srcObject = stream;
+    await video.play();
+    scanning = true;
 
-    if (scannedCodes.has(code)) {
-        statusMessage.textContent = "QR repetido";
-        statusMessage.style.color = "#ff4444";
-        return;
-    }
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
 
-    scannedCodes.add(code);
-    localStorage.setItem("qrHistory", JSON.stringify([...scannedCodes]));
+    statusMsg.textContent = "Lendo...";
+    tick();
 
-    counterEl.textContent = scannedCodes.size;
-    statusMessage.textContent = "Lido!";
-    statusMessage.style.color = "#00ff77";
+  } catch (err) {
+    statusMsg.textContent = "Erro ao abrir câmera.";
+  }
+}
 
-    allowFrame = false;
-    setTimeout(() => allowFrame = true, 500);
+function stopCamera() {
+  scanning = false;
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+  }
+  statusMsg.textContent = "Parado.";
+}
+
+function tick() {
+  if (!scanning) return;
+
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  worker.postMessage(
+    { buffer: frame.data.buffer, w: canvas.width, h: canvas.height },
+    [frame.data.buffer]
+  );
+
+  requestAnimationFrame(tick);
+}
+
+worker.onmessage = function(evt) {
+  const code = evt.data;
+
+  if (!code) return;
+
+  // DUPLICADO
+  if (scannedCodes.has(code)) {
+    flashError();
+    return;
+  }
+
+  // NOVO QR
+  scannedCodes.add(code);
+  localStorage.setItem("scannedCodes", JSON.stringify([...scannedCodes]));
+
+  flashSuccess();
+  updateCounter();
 };
+
+function flashSuccess() {
+  canvas.classList.add("success");
+  beepSuccess.play().catch(()=>{});
+  setTimeout(() => canvas.classList.remove("success"), 150);
+}
+
+function flashError() {
+  canvas.classList.add("error");
+  beepError.play().catch(()=>{});
+  setTimeout(() => canvas.classList.remove("error"), 150);
+}
+
+/* BOTÕES */
+btnStart.onclick = startCamera;
+btnStop.onclick = stopCamera;
+btnReport.onclick = downloadReport;
+
+function downloadReport() {
+  const arr = [...scannedCodes];
+  if (!arr.length) {
+    alert("Nenhum código lido.");
+    return;
+  }
+
+  const blob = new Blob([arr.join("\n")], { type: "text/plain" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "relatorio_qr.txt";
+  a.click();
+
+  URL.revokeObjectURL(url);
+}
