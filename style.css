@@ -1,80 +1,93 @@
-html, body {
-  margin: 0;
-  padding: 0;
-  background: #000;
-  overflow: hidden;
-  font-family: Arial, sans-serif;
-  color: white;
+/* ===== RESET ===== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
 }
 
-#app {
-  position: relative;
-  width: 100vw;
-  height: 100vh;
+body {
+    font-family: Arial, sans-serif;
+    background: #000;
+    color: #fff;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
-#canvas {
-  width: 100vw;
-  height: 100vh;
-  object-fit: cover;
-  background: #000;
+/* ===== CAMERA AREA ===== */
+#camera-wrapper {
+    position: relative;
+    width: 100%;
+    height: 65vh;
+    background: #000;
+    overflow: hidden;
 }
 
-/* UI Overlay */
-#ui-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
+video, canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 #status-message {
-  position: absolute;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0,0,0,0.6);
-  padding: 10px 20px;
-  border-radius: 10px;
-  font-size: 18px;
-  pointer-events: none;
+    position: absolute;
+    bottom: 10px;
+    width: 100%;
+    text-align: center;
+    font-size: 18px;
+    color: #fff;
+    text-shadow: 0 0 8px #000;
 }
 
-/* Counter */
-#counter {
-  position: absolute;
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 42px;
-  font-weight: bold;
-  background: rgba(0,0,0,0.7);
-  padding: 5px 20px;
-  border-radius: 10px;
-  pointer-events: none;
+/* LINHAS DE DIGITALIZAÇÃO */
+#scan-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60%;
+    height: 40%;
+    transform: translate(-50%, -50%);
+    border: 3px solid rgba(0,255,0,0.5);
+    border-radius: 14px;
+    pointer-events: none;
 }
 
-/* Download button */
-#download-report {
-  position: absolute;
-  bottom: 20px;
-  right: 20px;
-  padding: 12px 20px;
-  font-size: 16px;
-  border-radius: 12px;
-  background: #222;
-  color: white;
-  border: 2px solid #555;
-  pointer-events: auto;
+/* ===== CONTROLS ===== */
+#controls {
+    height: 35vh;
+    background: #111;
+    border-top: 3px solid #222;
+    padding: 18px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
 }
 
-/* FEEDBACK */
-.status-success {
-  outline: 8px solid #00ff55;
+#counter-box {
+    font-size: 22px;
+    margin-bottom: 10px;
+    text-align: center;
 }
 
-.status-duplicate {
-  outline: 8px solid #ff0033;
+/* Buttons */
+.control-btn {
+    width: 100%;
+    padding: 15px;
+    margin-top: 8px;
+    border: none;
+    border-radius: 12px;
+    font-size: 20px;
+    font-weight: bold;
+    cursor: pointer;
+    color: white;
+    transition: 0.2s;
 }
+
+.primary { background: #1e88e5; }
+.danger { background: #e53935; display: none; }
+.success { background: #43a047; display: none; }
+
+.control-btn:active { transform: scale(0.97); }
