@@ -11,7 +11,7 @@ onmessage = function(evt) {
     return;
   }
 
-  // FILTRO DE QUALIDADE – evita falsos positivos
+  // FILTRO DE QUALIDADE
   const loc = qr.location;
 
   function dist(a, b) {
