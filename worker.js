@@ -1,21 +1,33 @@
 importScripts("https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js");
 
-onmessage = evt => {
-    const { buffer, width, height } = evt.data;
+onmessage = function(evt) {
+  const { buffer, w, h } = evt.data;
+  const img = new Uint8ClampedArray(buffer);
 
-    const img = new Uint8ClampedArray(buffer);
-    const qr = jsQR(img, width, height);
+  const qr = jsQR(img, w, h);
 
-    if (!qr) return postMessage(null);
+  if (!qr) {
+    postMessage(null);
+    return;
+  }
 
-    const loc = qr.location;
+  // FILTRO DE QUALIDADE – evita falsos positivos
+  const loc = qr.location;
 
-    const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
-    const area = dist(loc.topLeftCorner, loc.topRightCorner) *
-                 dist(loc.topLeftCorner, loc.bottomLeftCorner);
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
 
-    if (area < width * height * 0.002)
-        return postMessage(null);
+  const top = dist(loc.topLeftCorner, loc.topRightCorner);
+  const side = dist(loc.topLeftCorner, loc.bottomLeftCorner);
 
-    postMessage({ code: qr.data });
+  const area = top * side;
+  const frame = w * h;
+
+  if (area / frame < 0.001) {
+    postMessage(null);
+    return;
+  }
+
+  postMessage(qr.data);
 };
