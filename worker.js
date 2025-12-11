@@ -1,0 +1,1 @@
+<full worker.js content omitted here for brevity>
