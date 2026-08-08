@@ -142,30 +142,54 @@ export async function usuarioLogado(): Promise<Usuario | null> {
   return u;
 }
 
+/**
+ * Provisionamento local. Cada bloco é marcado com a própria chave, então um
+ * bloco novo também roda nos aparelhos que já abriram o app antes dele existir
+ * — o seed antigo, com chave única, nunca mais rodava depois da primeira vez.
+ *
+ * O flag é gravado mesmo quando o bloco não cria nada: quem apagou o usuário
+ * de propósito não vai vê-lo voltar no próximo boot.
+ */
+async function umaVez(chave: string, passo: () => Promise<void>): Promise<boolean> {
+  if (await db.configGet(chave, false)) return false;
+  await passo();
+  await db.configSet(chave, true);
+  return true;
+}
+
 /** Primeira execução: cria o gestor padrão e grupos de exemplo. */
 export async function garantirSeed(): Promise<{ criou: boolean }> {
-  if (await db.configGet('seed.v1', false)) return { criou: false };
+  const criou = await umaVez('seed.v1', async () => {
+    const usuarios = await db.todos('usuarios');
+    if (usuarios.length === 0) {
+      await criarUsuario({
+        nome: 'Gestor de Transporte', login: 'gestor', senha: 'gestor',
+        gestor: true, funcao: 'Gestor de transporte'
+      });
+      await criarUsuario({
+        nome: 'Operador', login: 'operador', senha: 'operador',
+        gestor: false, funcao: 'Conferente'
+      });
+    }
 
-  const usuarios = await db.todos('usuarios');
-  if (usuarios.length === 0) {
+    const grupos = await db.todos('grupos');
+    if (grupos.length === 0) {
+      const modelo = (nome: string, rotas: string[]): GrupoRota => ({
+        ...novoSync(), nome, rotas, transportadora: '', ativo: true
+      });
+      await db.salvarVarios('grupos', [modelo('Carga Norte', ['FNOR']), modelo('Carga Sul', ['FSUL'])]);
+    }
+  });
+
+  // Gestor nominal da operação. A senha aqui é a de primeiro acesso: ela fica
+  // em texto no repositório, então precisa ser trocada no painel.
+  await umaVez('seed.gestor-sandro', async () => {
+    if (await buscarPorLogin('sandro')) return;
     await criarUsuario({
-      nome: 'Gestor de Transporte', login: 'gestor', senha: 'gestor',
+      nome: 'Sandro', login: 'sandro', senha: 'Lodis@123',
       gestor: true, funcao: 'Gestor de transporte'
     });
-    await criarUsuario({
-      nome: 'Operador', login: 'operador', senha: 'operador',
-      gestor: false, funcao: 'Conferente'
-    });
-  }
+  });
 
-  const grupos = await db.todos('grupos');
-  if (grupos.length === 0) {
-    const modelo = (nome: string, rotas: string[]): GrupoRota => ({
-      ...novoSync(), nome, rotas, transportadora: '', ativo: true
-    });
-    await db.salvarVarios('grupos', [modelo('Carga Norte', ['FNOR']), modelo('Carga Sul', ['FSUL'])]);
-  }
-
-  await db.configSet('seed.v1', true);
-  return { criou: true };
+  return { criou };
 }

@@ -407,6 +407,7 @@ const elLogin = {
 
 elLogin.form.addEventListener('submit', async (ev) => {
   ev.preventDefault();
+  await bootPronto; // senão o boot termina depois e rebloqueia quem acabou de entrar
   const r = await auth.entrar(elLogin.login.value, elLogin.senha.value);
   if (!r.ok || !r.usuario.gestor) {
     if (r.ok) auth.sair();
@@ -437,4 +438,8 @@ async function boot(): Promise<void> {
   await abrir(u.nome);
 }
 
-void boot();
+// O boot decide a tela inicial e demora (seed, IndexedDB, rede). Guardar a
+// promessa deixa o login esperar por ele em vez de disputar a tela.
+const bootPronto = boot().catch((e: unknown) => {
+  console.error('boot', e);
+});

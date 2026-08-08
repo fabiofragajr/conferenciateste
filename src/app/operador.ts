@@ -189,6 +189,7 @@ el.formLogin.addEventListener('submit', async (ev) => {
   ev.preventDefault();
   fb.prepararAudio(); // gesto do usuário: é aqui que o som fica liberado
   erroEm(el.loginErro, null);
+  await bootPronto;
 
   const r = await auth.entrar(el.inLogin.value, el.inSenha.value);
   if (!r.ok) {
@@ -711,4 +712,10 @@ window.addEventListener('beforeunload', () => {
   telaAcesa?.liberar();
 });
 
-void boot();
+// O boot é quem decide a tela inicial, e ele demora (seed, IndexedDB, GPS).
+// Se alguém logar antes dele terminar, o boot ainda acha que não há usuário e
+// joga a pessoa de volta para o login já autenticada. Guardar a promessa deixa
+// o submit esperar o boot em vez de disputar a tela com ele.
+const bootPronto = boot().catch((e: unknown) => {
+  console.error('boot', e);
+});
