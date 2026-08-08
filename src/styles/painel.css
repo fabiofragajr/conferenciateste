@@ -1,9 +1,13 @@
 /* painel.css — telas de desktop (gestor e diretor).
    Aqui a pessoa senta, tem teclado e tempo: densidade é bem-vinda.
-   O que não muda: divergência aparece antes de qualquer métrica agregada. */
+   O que não muda: divergência aparece antes de qualquer métrica agregada.
+
+   Identidade: barra institucional em verde escuro, conteúdo claro, cartões
+   brancos de borda fina. Empresarial e operacional — não painel de analytics. */
 
 body.painel { min-height: 100vh; }
 
+/* -------------------------------------------------- barra institucional --- */
 .p-topo {
   position: sticky;
   top: 0;
@@ -11,15 +15,34 @@ body.painel { min-height: 100vh; }
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 24px;
-  background: var(--fundo-2);
-  border-bottom: 1px solid var(--borda);
+  padding: 10px 24px;
+  background: var(--logdis-forest);
+  border-bottom: 1px solid var(--logdis-forest);
 }
-.p-topo h1 { font-size: 19px; margin: 0; }
-.p-topo h1 span { color: var(--acento); }
+.p-topo h1 { font-size: 19px; margin: 0; color: #fff; }
+/* símbolo menor que no app: aqui a barra é fina e a tela é de trabalho */
+.p-topo .marca-logdis img { width: 34px; height: 34px; }
+.p-topo .marca-nome { color: #fff; }
+.p-topo .marca-nome i { color: var(--logdis-mint); }
+.p-topo .p-titulo-painel {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, .78);
+  border-left: 1px solid rgba(255, 255, 255, .28);
+  padding-left: 16px;
+}
 .p-topo .p-espaco { flex: 1; }
-.p-topo .btn { min-height: 42px; font-size: 14px; padding: 0 14px; }
-.p-usuario { font-size: 13px; color: var(--texto-2); }
+.p-topo .btn { min-height: 40px; font-size: 14px; padding: 0 14px; }
+.p-topo .btn-fantasma {
+  border-color: rgba(255, 255, 255, .38);
+  color: #fff;
+}
+.p-topo .btn-fantasma:hover { background: rgba(255, 255, 255, .12); }
+.p-topo .chip { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .3); color: #fff; }
+.p-topo .chip-sync.sync-pendente { background: var(--dup); border-color: var(--dup); color: var(--texto); }
+.p-topo .chip-sync.sync-ok { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .3); color: #fff; }
+.p-topo label { color: rgba(255, 255, 255, .8); }
+.p-usuario { font-size: 13px; color: rgba(255, 255, 255, .8); }
 
 .p-corpo { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; }
 
@@ -33,7 +56,7 @@ body.painel { min-height: 100vh; }
   padding-bottom: 8px;
   margin-bottom: 16px;
 }
-.p-secao h3 { font-size: 15px; margin: 0 0 10px; }
+.p-secao h3 { font-size: 15px; margin: 0 0 10px; color: var(--logdis-forest); }
 
 .p-grade { display: grid; gap: 16px; }
 .p-grade-2 { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
@@ -45,7 +68,7 @@ body.painel { min-height: 100vh; }
   border-radius: var(--raio);
   padding: 16px;
 }
-.p-cartao.p-alerta { border-color: var(--div); background: rgba(217, 45, 32, .10); }
+.p-cartao.p-alerta { border-color: var(--div); background: rgba(220, 38, 38, .06); }
 
 /* faixa de divergência — nunca atrás de filtro, nunca depois de métrica */
 .p-faixa-alerta {
@@ -56,17 +79,17 @@ body.painel { min-height: 100vh; }
   padding: 16px 20px;
   border-radius: var(--raio);
   border: 2px solid var(--div);
-  background: rgba(217, 45, 32, .16);
+  background: rgba(220, 38, 38, .08);
   margin-bottom: 18px;
 }
-.p-faixa-alerta .p-num { font-size: 34px; font-weight: 800; color: #ff8f85; line-height: 1; }
+.p-faixa-alerta .p-num { font-size: 34px; font-weight: 800; color: var(--div); line-height: 1; }
 .p-faixa-alerta .p-txt { font-size: 15px; }
-.p-faixa-alerta .p-txt b { display: block; font-size: 17px; }
+.p-faixa-alerta .p-txt b { display: block; font-size: 17px; color: var(--div); }
 .p-faixa-ok {
   padding: 12px 18px;
   border-radius: var(--raio);
   border: 1px solid var(--ok);
-  background: rgba(18, 161, 80, .12);
+  background: rgba(22, 163, 74, .10);
   margin-bottom: 18px;
   font-size: 15px;
 }
@@ -75,16 +98,16 @@ body.painel { min-height: 100vh; }
 .p-kpi {
   background: var(--fundo-2);
   border: 1px solid var(--borda);
-  border-radius: 12px;
+  border-radius: var(--raio);
   padding: 14px 16px;
 }
 .p-kpi .p-kpi-rot { font-size: 12px; color: var(--texto-2); display: block; margin-bottom: 6px; }
-.p-kpi .p-kpi-val { font-size: 30px; font-weight: 800; line-height: 1; }
+.p-kpi .p-kpi-val { font-size: 30px; font-weight: 800; line-height: 1; color: var(--logdis-forest); }
 .p-kpi .p-kpi-cmp { font-size: 12px; margin-top: 6px; display: block; color: var(--texto-2); }
-.p-kpi .p-sobe { color: #ff9d94; }
-.p-kpi .p-desce { color: #7ff0b0; }
+.p-kpi .p-sobe { color: var(--div); font-weight: 700; }
+.p-kpi .p-desce { color: var(--logdis-forest); font-weight: 700; }
 .p-kpi .p-neutro { color: var(--texto-2); }
-.p-kpi.p-destaque { border-color: var(--acento); }
+.p-kpi.p-destaque { border-color: var(--logdis-green); border-width: 2px; }
 
 /* tabelas densas */
 .p-tab-wrap { overflow-x: auto; }
@@ -105,7 +128,7 @@ table.p-tab th {
   color: var(--texto-2);
   z-index: 1;
 }
-table.p-tab tbody tr:hover { background: var(--fundo-3); }
+table.p-tab tbody tr:hover { background: var(--logdis-mint-surface); }
 table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 .p-num-col { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -117,7 +140,7 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
   border-radius: 999px;
   font-size: 11.5px;
   font-weight: 700;
-  color: #0b1220;
+  color: var(--tinta-status, #fff);
   background: var(--cor-status, var(--inv));
 }
 .p-tag::before { content: attr(data-forma); font-size: 10px; }
@@ -146,8 +169,8 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 
 /* gráficos: uma série por gráfico (small multiples), sem eixo duplo */
 .p-graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; }
-.p-gr { background: var(--fundo-2); border: 1px solid var(--borda); border-radius: 12px; padding: 14px 16px; }
-.p-gr h4 { font-size: 13px; margin: 0 0 2px; }
+.p-gr { background: var(--fundo-2); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px 16px; }
+.p-gr h4 { font-size: 13px; margin: 0 0 2px; color: var(--logdis-forest); }
 .p-gr .p-gr-sub { font-size: 11.5px; color: var(--texto-2); margin: 0 0 10px; }
 .p-gr svg { width: 100%; height: auto; display: block; overflow: visible; }
 .p-gr .p-eixo { fill: var(--texto-2); font-size: 9px; }
@@ -157,13 +180,22 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 .p-barras { display: grid; gap: 8px; }
 .p-barra-linha { display: grid; grid-template-columns: minmax(90px, 190px) 1fr auto; gap: 10px; align-items: center; font-size: 13px; }
 .p-barra-trilho { background: var(--fundo-3); border-radius: 4px; height: 14px; overflow: hidden; }
-.p-barra-fill { height: 100%; border-radius: 4px; background: var(--acento); }
+.p-barra-fill { height: 100%; border-radius: 4px; background: var(--logdis-green); }
 .p-barra-fill.st-div { background: var(--div); }
-.p-barra-fill.st-oc { background: var(--oc); }
+.p-barra-fill.st-oc { background: var(--dup); }
 .p-barra-val { font-variant-numeric: tabular-nums; color: var(--texto-2); font-size: 12.5px; }
 
 /* mapa relativo das bipagens (sem base cartográfica) */
-.p-mapa { background: var(--fundo-3); border-radius: 10px; padding: 10px; }
+/* O viewBox é fixo: sem teto de largura, numa tela de 1400 px o SVG vira um
+   bloco de 600 px de altura quase vazio. É referência de posição, não a peça
+   principal da tela. */
+.p-mapa {
+  background: var(--fundo-3);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 10px;
+  max-width: 620px;
+}
 .p-mapa svg { width: 100%; height: auto; }
 .p-mapa-legenda { display: flex; flex-wrap: wrap; gap: 12px; font-size: 11.5px; color: var(--texto-2); margin-top: 8px; }
 .p-mapa-legenda span { display: inline-flex; align-items: center; gap: 5px; }
@@ -173,7 +205,7 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 .p-gaveta {
   position: fixed;
   inset: 0;
-  background: rgba(3, 7, 15, .8);
+  background: rgba(34, 38, 37, .55);
   z-index: 120;
   display: flex;
   justify-content: flex-end;
@@ -194,4 +226,5 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 @media (max-width: 720px) {
   .p-corpo { padding: 16px 12px 50px; }
   .p-topo { padding: 10px 12px; flex-wrap: wrap; }
+  .p-topo .p-titulo-painel { border-left: 0; padding-left: 0; }
 }

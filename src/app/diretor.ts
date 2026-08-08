@@ -13,15 +13,20 @@ import type { Leitura, Ocorrencia, Sessao } from '../types.js';
 import * as db from '../lib/db.js';
 import * as auth from '../lib/auth.js';
 import * as sync from '../lib/sync.js';
+import { EMPRESA, FOREST, DIV, cabecalhoPDF, rodapePDF } from '../lib/marca.js';
 import { etiquetaTexto, pedidosIncompletos, MOMENTO_ROTULO } from '../lib/model.js';
 import { graficoMensal, mapaCalor, ranking } from '../lib/graficos.js';
 import { cardOcorrencia, hidratarFotos } from '../lib/relatorio.js';
 import { $, chaveMes, dataHora, esc, mesAnterior, pct, rotuloMes } from '../lib/util.js';
 
-const COR_DIVERGENCIA = '#d92d20';
-const COR_OCORRENCIA = '#7c5cff';
-const COR_GRAVE = '#e8a33d';
-const COR_VOLUME = '#2f7bff';
+// Paleta dos gráficos: uma rampa de severidade, não cores decorativas.
+// Verde = atividade (não é problema); âmbar = atenção; vermelho = alarme.
+// A divergência mantém exatamente o vermelho de status do resto do app.
+const COR_VOLUME = '#109976';      // --logdis-green
+const COR_DIVERGENCIA = '#dc2626'; // --div
+const COR_OCORRENCIA = '#d97706';  // --dup
+const COR_GRAVE = '#991b1b';       // vermelho mais fechado: pior que divergência
+const COR_CALOR = '#105945';       // --logdis-forest, rampa sequencial por opacidade
 
 interface Base {
   sessoes: Sessao[];
@@ -294,7 +299,7 @@ function pintarCalor(): void {
   const pontos = r.leituras
     .filter((l) => l.lat !== null && l.lng !== null && l.geoStatus === 'OK')
     .map((l) => ({ lat: l.lat as number, lng: l.lng as number }));
-  $('#calor').innerHTML = mapaCalor(pontos, COR_VOLUME);
+  $('#calor').innerHTML = mapaCalor(pontos, COR_CALOR);
 }
 
 /* ----------------------------------------------------------------- PDF --- */
@@ -311,15 +316,14 @@ async function exportarPDFPeriodo(): Promise<void> {
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const larg = doc.internal.pageSize.getWidth();
 
-  doc.setFontSize(16);
-  doc.setFont('helvetica', 'bold');
-  doc.text('LogDis Entrega — visão da diretoria', 14, 16);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Milfarma • ${rotuloMes(mesSelecionado)} (comparado com ${rotuloMes(mesAnterior(mesSelecionado))})`, 14, 22);
+  const y0 = await cabecalhoPDF(
+    doc,
+    'Visão da diretoria',
+    `${EMPRESA} • ${rotuloMes(mesSelecionado)} (comparado com ${rotuloMes(mesAnterior(mesSelecionado))})`
+  );
 
   autoTable(doc, {
-    startY: 28,
+    startY: y0,
     head: [['Indicador', rotuloMes(mesSelecionado), rotuloMes(mesAnterior(mesSelecionado))]],
     body: [
       ['Conferências registradas', atual.conferencias, anterior.conferencias],
@@ -330,7 +334,7 @@ async function exportarPDFPeriodo(): Promise<void> {
       ['Pedidos embarcados incompletos', atual.incompletos, anterior.incompletos]
     ],
     styles: { fontSize: 9 },
-    headStyles: { fillColor: [30, 41, 59] }
+    headStyles: { fillColor: FOREST }
   });
 
   let y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY ?? 40) + 8;
@@ -343,11 +347,14 @@ async function exportarPDFPeriodo(): Promise<void> {
   doc.setFontSize(9);
   y += 6;
 
+  // O texto de quem estava na doca é o que explica a métrica. Vai na íntegra.
   for (const o of graves.slice(0, 25)) {
-    if (y > 262) { doc.addPage(); y = 16; }
+    if (y > 255) { doc.addPage(); y = 16; }
     const s = r.sessoes.find((x) => x.id === o.sessaoId);
     doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...DIV);
     doc.text(`${MOMENTO_ROTULO[o.momento]} — ${s?.transportadora || s?.grupoNome || ''} — ${dataHora(o.timestamp)}`, 14, y);
+    doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'normal');
     y += 4.4;
     const linhas = doc.splitTextToSize(o.texto || '(sem descrição)', larg - 32) as string[];
@@ -356,6 +363,8 @@ async function exportarPDFPeriodo(): Promise<void> {
   }
 
   if (!graves.length) doc.text('Nenhuma ocorrência grave registrada no período.', 14, y);
+
+  rodapePDF(doc, rotuloMes(mesSelecionado));
 
   doc.save(`diretoria_${mesSelecionado}.pdf`);
 }

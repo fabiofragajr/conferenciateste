@@ -26,7 +26,8 @@ function marca(status: StatusLeitura, x: number, y: number, impreciso: boolean):
   // que não existe.
   const pintura = impreciso
     ? `fill="none" stroke="${cor}" stroke-width="1.6" stroke-dasharray="2 1.6"`
-    : `fill="${cor}" stroke="#0b1220" stroke-width="1"`;
+    // contorno claro só para separar pontos sobrepostos, não para colorir
+    : `fill="${cor}" stroke="#ffffff" stroke-width="1"`;
   const r = 4.6;
 
   switch (status) {
@@ -98,11 +99,11 @@ export function renderMapa(leituras: Leitura[]): string {
 
   return `<div class="p-mapa">
     <svg viewBox="0 0 ${L} ${A}" role="img" aria-label="Dispersão das bipagens da conferência">
-      <rect x="0" y="0" width="${L}" height="${A}" fill="rgba(255,255,255,.02)" rx="8" />
+      <rect x="0" y="0" width="${L}" height="${A}" fill="#ffffff" rx="8" />
       ${marcas}
       <g>
-        <line x1="${M}" y1="${A - 6}" x2="${M + barraPx}" y2="${A - 6}" stroke="#a9b4c8" stroke-width="1.5" />
-        <text x="${M + barraPx + 6}" y="${A - 3}" fill="#a9b4c8" font-size="9">${barraM} m</text>
+        <line x1="${M}" y1="${A - 6}" x2="${M + barraPx}" y2="${A - 6}" stroke="#66706d" stroke-width="1.5" />
+        <text x="${M + barraPx + 6}" y="${A - 3}" fill="#66706d" font-size="9">${barraM} m</text>
       </g>
     </svg>
     <div class="p-mapa-legenda">${legenda}${temImpreciso ? '<span>contorno tracejado = posição imprecisa</span>' : ''}</div>

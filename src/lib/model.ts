@@ -18,10 +18,13 @@ export const STATUS = {
 } as const satisfies Record<string, StatusLeitura>;
 
 export const STATUS_INFO: Record<StatusLeitura, { rotulo: string; curto: string; cor: string; classe: string }> = {
-  OK: { rotulo: 'Volume liberado', curto: 'OK', cor: '#12a150', classe: 'st-ok' },
-  ROTA_DIVERGENTE: { rotulo: 'Volume de outra rota', curto: 'Divergente', cor: '#d92d20', classe: 'st-div' },
-  DUPLICADO: { rotulo: 'Já bipado nesta conferência', curto: 'Duplicado', cor: '#e8a33d', classe: 'st-dup' },
-  INVALIDO: { rotulo: 'Etiqueta não reconhecida', curto: 'Inválido', cor: '#8a8f98', classe: 'st-inv' }
+  // `cor` espelha os tokens --ok/--div/--dup/--inv de base.css. É a mesma cor no
+  // flash de tela cheia, no mapa do gestor e na etiqueta de status: se divergir
+  // aqui, o operador vê um vermelho e o gestor vê outro.
+  OK: { rotulo: 'Volume liberado', curto: 'OK', cor: '#16a34a', classe: 'st-ok' },
+  ROTA_DIVERGENTE: { rotulo: 'Volume de outra rota', curto: 'Divergente', cor: '#dc2626', classe: 'st-div' },
+  DUPLICADO: { rotulo: 'Já bipado nesta conferência', curto: 'Duplicado', cor: '#d97706', classe: 'st-dup' },
+  INVALIDO: { rotulo: 'Etiqueta não reconhecida', curto: 'Inválido', cor: '#6b7280', classe: 'st-inv' }
 };
 
 export const MOMENTO_ROTULO: Record<Momento, string> = {

@@ -1,4 +1,8 @@
-/* app.css — telas do operador. De pé, com pressa, caixa na mão, luva e luz ruim. */
+/* app.css — telas do operador. De pé, com pressa, caixa na mão, luva e luz ruim.
+ *
+ * A marca aparece de canto: o que ocupa a tela é câmera, resultado, contadores
+ * e última leitura, nessa ordem. Nenhum bloco verde grande atrás da câmera.
+ */
 
 .app { overflow: hidden; height: 100%; }
 
@@ -9,6 +13,7 @@
   flex-direction: column;
   overflow-y: auto;
   padding-top: env(safe-area-inset-top);
+  background: var(--fundo);
 }
 .view[hidden] { display: none; }
 
@@ -23,15 +28,25 @@
 }
 
 /* ------------------------------------------------------------- login --- */
+/* Único lugar do app de bipagem onde o gradiente institucional cabe: é capa,
+   não tela de trabalho. Da câmera em diante, superfície neutra. */
+#view-login {
+  background: linear-gradient(135deg, #105945 0%, #109976 55%, #2eb58d 100%);
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+}
 .login-box {
   margin: auto;
   width: 100%;
   max-width: 460px;
-  padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+  background: var(--fundo-2);
+  border-radius: 20px;
+  padding: 24px 20px 26px;
+  box-shadow: 0 10px 30px rgba(16, 89, 69, .22);
 }
-.marca { font-size: 34px; letter-spacing: -.5px; }
-.marca span { color: var(--acento); }
-.marca-sub { margin: 0 0 22px; color: var(--texto-2); }
+.login-marca { margin-bottom: 4px; }
+.login-marca img { width: 56px; height: 56px; }
+.login-marca .marca-nome { font-size: 24px; }
+.marca-sub { margin: 0 0 22px; color: var(--texto-2); font-size: 15px; }
 #form-login .btn { margin-top: 22px; }
 
 .aviso-lgpd {
@@ -39,12 +54,12 @@
   padding: 14px;
   border: 1px solid var(--borda);
   border-radius: var(--raio);
-  background: var(--fundo-2);
+  background: var(--logdis-mint-surface);
   font-size: 13.5px;
-  color: var(--texto-2);
+  color: var(--texto);
   line-height: 1.45;
 }
-.aviso-lgpd strong { color: var(--texto); display: block; margin-bottom: 6px; }
+.aviso-lgpd strong { color: var(--logdis-forest); display: block; margin-bottom: 6px; }
 .aviso-lgpd p { margin: 0; }
 .dica { margin-top: 16px; font-size: 13px; color: var(--texto-2); text-align: center; }
 
@@ -54,26 +69,33 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  padding: 18px 18px 8px;
+  padding: 14px 18px 10px;
+  background: var(--fundo-2);
+  border-bottom: 1px solid var(--borda);
 }
-.topo-titulo { margin: 0; font-size: 24px; font-weight: 700; }
+/* Assinatura discreta: quem manda nesta tela é a pergunta, não a marca. */
+.topo-marca { margin-bottom: 8px; gap: 7px; }
+.topo-marca img { width: 24px; height: 24px; }
+.topo-marca .marca-nome { font-size: 13px; letter-spacing: .04em; }
+.topo-titulo { margin: 0; font-size: 24px; font-weight: 700; color: var(--logdis-forest); }
 .topo-sub { margin: 4px 0 0; color: var(--texto-2); font-size: 15px; }
 
-.grupos { display: flex; flex-direction: column; gap: 14px; padding: 12px 18px 24px; }
+.grupos { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px 24px; }
 .grupo-btn {
   width: 100%;
   min-height: 96px;
-  border-radius: 18px;
+  border-radius: var(--raio);
   border: 1px solid var(--borda);
+  border-left: 6px solid var(--logdis-green);
   background: var(--fundo-2);
   color: var(--texto);
   text-align: left;
   padding: 16px 18px;
   cursor: pointer;
 }
-.grupo-btn b { display: block; font-size: 24px; margin-bottom: 6px; }
+.grupo-btn b { display: block; font-size: 24px; margin-bottom: 6px; color: var(--logdis-forest); }
 .grupo-btn span { color: var(--texto-2); font-size: 16px; }
-.grupo-btn:active { background: var(--fundo-3); }
+.grupo-btn:active { background: var(--logdis-mint-surface); border-left-color: var(--logdis-forest); }
 
 .vazio { padding: 24px 18px; color: var(--texto-2); }
 .vazio-sub { font-size: 14px; }
@@ -85,7 +107,7 @@
   justify-content: space-between;
   gap: 12px;
 }
-.rodape-links a { color: var(--texto-2); font-size: 15px; }
+.rodape-links a { font-size: 15px; }
 
 /* ----------------------------------------------------------- bipagem --- */
 #view-bipagem { overflow: hidden; }
@@ -95,27 +117,34 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px;
+  padding: 8px 12px;
   background: var(--fundo-2);
   border-bottom: 1px solid var(--borda);
 }
-.bip-carga strong { display: block; font-size: 17px; }
+.bip-marca { width: 30px; height: 30px; flex: none; display: block; }
+.bip-carga { flex: 1; min-width: 0; }
+.bip-carga strong { display: block; font-size: 17px; color: var(--logdis-forest); }
 .bip-carga span { color: var(--texto-2); font-size: 13px; }
 .bip-topo-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
-.chip-geo.geo-ok { background: rgba(18,161,80,.22); color: #7ff0b0; }
-.chip-geo.geo-impreciso { background: rgba(232,163,61,.22); color: #ffd79a; }
-.chip-geo.geo-ruim { background: rgba(138,143,152,.22); color: #cfd5e0; }
+.chip-geo.geo-ok { background: rgba(22, 163, 74, .16); border-color: var(--ok); color: var(--texto); }
+.chip-geo.geo-impreciso { background: rgba(217, 119, 6, .16); border-color: var(--dup); color: var(--texto); }
+.chip-geo.geo-ruim { background: var(--fundo-3); border-color: var(--inv); color: var(--texto-2); }
 .chip-btn {
   min-height: 44px;
   padding: 0 14px;
   border-radius: 999px;
   border: 1px solid var(--borda);
-  background: var(--fundo-3);
+  background: var(--fundo-2);
   color: var(--texto);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
-.chip-btn[aria-pressed="true"] { background: #f2c94c; color: #201800; border-color: #f2c94c; }
+/* estado selecionado = verde da marca (é escolha do operador, não status) */
+.chip-btn[aria-pressed="true"] {
+  background: var(--logdis-green);
+  color: #fff;
+  border-color: var(--logdis-green);
+}
 
 #camera-area {
   position: relative;
@@ -132,9 +161,9 @@
   width: 62%;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  border: 3px solid rgba(255,255,255,.75);
+  border: 3px solid rgba(255, 255, 255, .8);
   border-radius: 18px;
-  box-shadow: 0 0 0 2000px rgba(0,0,0,.28);
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, .28);
   pointer-events: none;
 }
 /* [hidden] não vence um display explícito — sem esta regra o aviso de erro
@@ -148,7 +177,9 @@
   justify-content: center;
   text-align: center;
   padding: 18px;
-  background: rgba(11,18,32,.94);
+  /* fica sobre a câmera: aqui o fundo é escuro e o texto, claro */
+  background: rgba(17, 24, 22, .94);
+  color: #fff;
   font-size: 16px;
   line-height: 1.4;
 }
@@ -156,8 +187,8 @@
 
 .banner {
   padding: 14px 16px;
-  background: var(--cor-status, var(--fundo-3));
-  color: #fff;
+  background: var(--cor-status, var(--logdis-mint-surface));
+  color: var(--tinta-status, #fff);
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -165,11 +196,13 @@
   justify-content: center;
   transition: background-color 120ms ease;
 }
-.banner.st-neutro { --cor-status: var(--fundo-3); }
+/* estado de espera: superfície da marca, sem simular resultado nenhum */
+.banner.st-neutro {
+  --cor-status: var(--logdis-mint-surface);
+  --tinta-status: var(--logdis-forest);
+}
 #banner-status { font-size: 24px; font-weight: 800; line-height: 1.1; }
 #banner-codigo { font-size: 15px; opacity: .92; font-family: ui-monospace, Menlo, monospace; }
-.banner.st-dup { color: #241700; }
-.banner.st-inv { color: #0b1220; }
 
 .contadores {
   display: grid;
@@ -179,7 +212,7 @@
   border-bottom: 1px solid var(--borda);
 }
 .cont { background: var(--fundo-2); padding: 8px 4px; text-align: center; }
-.cont b { display: block; font-size: 22px; color: var(--cor-status, var(--texto)); }
+.cont b { display: block; font-size: 23px; font-weight: 800; color: var(--cor-status, var(--texto)); }
 .cont small { font-size: 11px; color: var(--texto-2); }
 
 .leituras {
@@ -193,8 +226,9 @@
   align-items: center;
   gap: 10px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--raio);
   background: var(--fundo-2);
+  border: 1px solid var(--borda);
   border-left: 6px solid var(--cor-status, var(--inv));
   margin-bottom: 8px;
 }
@@ -208,17 +242,26 @@
   text-overflow: ellipsis;
 }
 .leitura-meta { font-size: 13px; color: var(--texto-2); }
-.leitura-meta b { color: var(--cor-status); }
+/* o status vira etiqueta sólida: legível de longe, sem depender do texto */
+.leitura-meta b {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--cor-status, var(--inv));
+  color: var(--tinta-status, #fff);
+  font-size: 12px;
+  font-weight: 700;
+}
 .btn-oc {
   min-height: 48px;
   min-width: 48px;
   padding: 0 14px;
-  border-radius: 12px;
-  border: 1px solid var(--borda);
-  background: var(--fundo-3);
-  color: var(--texto);
+  border-radius: var(--raio);
+  border: 1px solid var(--logdis-forest);
+  background: var(--fundo-2);
+  color: var(--logdis-forest);
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
 }
 /* marcador de ocorrência: informação diferente do status da rota, por isso
    forma e cor próprias — não pode se confundir com verde/vermelho/âmbar */
@@ -248,38 +291,52 @@
 .momento-toggle .mom {
   flex: 1;
   min-height: 52px;
-  border-radius: 12px;
+  border-radius: var(--raio);
   border: 1px solid var(--borda);
-  background: var(--fundo-3);
+  background: var(--fundo-2);
   color: var(--texto-2);
   font-size: 16px;
-  font-weight: 600;
+  font-weight: 700;
 }
-.momento-toggle .mom[aria-pressed="true"] { background: var(--acento); color: #fff; border-color: var(--acento); }
+.momento-toggle .mom[aria-pressed="true"] {
+  background: var(--logdis-green);
+  color: #fff;
+  border-color: var(--logdis-green);
+}
 
 .oc-et-titulo { margin: 16px 0 8px; font-size: 14px; color: var(--texto-2); font-weight: 600; }
 .oc-etiquetas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .et {
   min-height: 58px;
   padding: 8px 10px;
-  border-radius: 12px;
+  border-radius: var(--raio);
   border: 1px solid var(--borda);
-  background: var(--fundo-3);
+  background: var(--fundo-2);
   color: var(--texto);
   font-size: 14px;
   line-height: 1.2;
   text-align: left;
 }
-.et[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); }
-.et.grave[aria-pressed="true"] { background: var(--div); border-color: var(--div); }
-.et .marca-grave { display: block; font-size: 11px; opacity: .8; margin-top: 3px; }
+.et[aria-pressed="true"] {
+  background: var(--logdis-green);
+  border-color: var(--logdis-green);
+  color: #fff;
+}
+/* grave foge da paleta institucional de propósito: é alerta sanitário */
+.et.grave[aria-pressed="true"] {
+  background: var(--oc-grave);
+  border-color: var(--oc-grave);
+  color: #fff;
+}
+.et .marca-grave { display: block; font-size: 11px; opacity: .85; margin-top: 3px; }
 
 .aviso-grave {
   margin-top: 12px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(217,45,32,.16);
+  background: rgba(220, 38, 38, .09);
   border: 1px solid var(--div);
+  color: var(--texto);
   font-size: 13.5px;
   line-height: 1.4;
 }
@@ -308,7 +365,7 @@
 }
 
 /* --------------------------------------------------------- relatório --- */
-.acoes-relatorio { display: flex; gap: 10px; padding: 0 18px 12px; }
+.acoes-relatorio { display: flex; gap: 10px; padding: 12px 18px; }
 .acoes-relatorio .btn { flex: 1; }
 .relatorio-area {
   flex: 1;

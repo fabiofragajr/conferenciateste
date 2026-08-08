@@ -1,49 +1,105 @@
-/* base.css — tokens, reset e controles comuns ao app e aos painéis. */
+/* base.css — tokens, reset e controles comuns ao app e aos painéis.
+ *
+ * Identidade LOGDIS: verde institucional, superfícies claras, alto contraste.
+ * Duas famílias de cor convivem aqui e não se misturam:
+ *
+ *   MARCA     (--logdis-*)  — cabeçalho, ação primária, seleção, gráficos.
+ *   OPERAÇÃO  (--ok/--div/--dup/--inv) — status de leitura.
+ *
+ * Status nunca herda cor de marca: divergência é vermelha mesmo que a marca
+ * seja verde. Quem está na doca precisa entender sem ler.
+ */
+
+@import './fonte.css';
 
 :root {
-  --ok: #12a150;
-  --div: #d92d20;
-  --dup: #e8a33d;
-  --inv: #8a8f98;
-  --oc: #7c5cff;
+  /* ---------------------------------------------------------- marca --- */
+  --logdis-forest: #105945;
+  --logdis-green: #109976;
+  --logdis-mint: #2eb58d;
+  --logdis-mint-surface: #e8f6f2;
 
-  --fundo: #0b1220;
-  --fundo-2: #131c2e;
-  --fundo-3: #1c2740;
-  --borda: #2a3752;
-  --texto: #f4f7fb;
-  --texto-2: #a9b4c8;
-  --acento: #2f7bff;
+  /* ------------------------------------------------------- operação --- */
+  --ok: #16a34a;
+  --div: #dc2626;
+  --dup: #d97706;
+  --inv: #6b7280;
 
-  --raio: 14px;
+  /* Ocorrência é outra informação, não um status de rota: cor institucional
+     e forma próprias para não competir com verde/vermelho/âmbar da leitura. */
+  --oc: #105945;
+  --oc-grave: #dc2626;
+
+  /* ----------------------------------------------------- superfície --- */
+  --fundo: #f7f9f8;
+  --fundo-2: #ffffff;
+  --fundo-3: #eff3f1; /* preenchimento discreto: trilho, chip, hover */
+  --borda: #dce4e1;
+  --texto: #222625;
+  --texto-2: #66706d;
+  --acento: #109976;
+
+  --raio: 12px;
   --toque: 56px; /* alvo mínimo de toque */
 }
+
+/* Tinta que fica legível sobre cada cor sólida de status (AA em texto
+   pequeno). Sem isso, "duplicado" branco sobre âmbar some sob luz de galpão. */
+.st-ok  { --cor-status: var(--ok);  --tinta-status: var(--texto); }
+.st-div { --cor-status: var(--div); --tinta-status: #fff; }
+.st-dup { --cor-status: var(--dup); --tinta-status: var(--texto); }
+.st-inv { --cor-status: var(--inv); --tinta-status: #fff; }
 
 * { box-sizing: border-box; }
 
 html, body { margin: 0; padding: 0; min-height: 100%; }
 
 body {
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
   background: var(--fundo);
   color: var(--texto);
   -webkit-text-size-adjust: 100%;
 }
 
-h1, h2, h3, h4 { margin: 0 0 8px; line-height: 1.2; }
-a { color: var(--acento); }
-code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+h1, h2, h3, h4 { margin: 0 0 8px; line-height: 1.2; color: var(--logdis-forest); }
+a { color: var(--logdis-forest); text-decoration-color: var(--logdis-mint); }
+a:hover { color: var(--logdis-green); }
+code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
 button { font: inherit; }
 
+/* ------------------------------------------------------------ marca --- */
+/* Assinatura: símbolo oficial + nome. O símbolo é imagem, nunca redesenho. */
+.marca-logdis {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.marca-logdis img {
+  width: 38px;
+  height: 38px;
+  flex: none;
+  display: block;
+}
+.marca-logdis .marca-nome {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: .01em;
+  color: var(--logdis-forest);
+  white-space: nowrap;
+}
+.marca-logdis .marca-nome i { font-style: normal; font-weight: 500; color: var(--logdis-green); }
+
+/* ---------------------------------------------------------- botões --- */
 .btn {
   min-height: var(--toque);
   padding: 0 18px;
-  border: 1px solid transparent;
+  border: 1px solid var(--borda);
   border-radius: var(--raio);
-  background: var(--fundo-3);
+  background: var(--fundo-2);
   color: var(--texto);
   font-size: 17px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
@@ -53,12 +109,20 @@ button { font: inherit; }
 }
 .btn:active { transform: translateY(1px); }
 .btn-grande { width: 100%; min-height: 62px; font-size: 19px; }
-.btn-primario { background: var(--acento); }
-.btn-secundario { background: var(--fundo-3); border-color: var(--borda); }
-.btn-perigo { background: var(--div); }
+.btn-primario { background: var(--logdis-green); border-color: var(--logdis-green); color: #fff; }
+.btn-primario:hover { background: var(--logdis-mint); border-color: var(--logdis-mint); }
+.btn-secundario { background: var(--fundo-2); border-color: var(--logdis-forest); color: var(--logdis-forest); }
+.btn-secundario:hover { background: var(--logdis-mint-surface); }
+.btn-perigo { background: var(--div); border-color: var(--div); color: #fff; }
 .btn-fantasma { background: transparent; border-color: var(--borda); color: var(--texto-2); }
-.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn:disabled {
+  background: var(--borda);
+  border-color: var(--borda);
+  color: var(--texto-2);
+  cursor: not-allowed;
+}
 
+/* ---------------------------------------------------------- campos --- */
 label {
   display: block;
   margin: 14px 0 6px;
@@ -73,31 +137,36 @@ input[type="date"], input[type="search"], select, textarea {
   width: 100%;
   min-height: 52px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--raio);
   border: 1px solid var(--borda);
   background: var(--fundo-2);
   color: var(--texto);
+  font-family: inherit;
   font-size: 17px; /* 16px+ evita zoom automático no iOS */
 }
 textarea { min-height: 120px; resize: vertical; line-height: 1.4; }
-input:focus, select:focus, textarea:focus {
-  outline: 3px solid rgba(47, 123, 255, .45);
+input::placeholder, textarea::placeholder { color: var(--texto-2); opacity: .8; }
+input:focus, select:focus, textarea:focus, button:focus-visible, a:focus-visible {
+  outline: 3px solid var(--logdis-mint);
   outline-offset: 1px;
+  border-color: var(--logdis-green);
 }
 
+/* --------------------------------------------------------- avisos --- */
 .erro {
-  background: rgba(217, 45, 32, .16);
+  background: rgba(220, 38, 38, .09);
   border: 1px solid var(--div);
-  color: #ffd7d3;
+  color: var(--div);
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 15px;
+  font-weight: 600;
   margin: 12px 0 0;
 }
 .sucesso {
-  background: rgba(18, 161, 80, .16);
+  background: rgba(22, 163, 74, .12);
   border: 1px solid var(--ok);
-  color: #cdf5de;
+  color: var(--texto);
   padding: 10px 12px;
   border-radius: 10px;
   font-size: 15px;
@@ -110,16 +179,17 @@ input:focus, select:focus, textarea:focus {
   border-radius: 999px;
   background: var(--fundo-3);
   color: var(--texto-2);
+  border: 1px solid var(--borda);
   white-space: nowrap;
 }
-.chip-sync.sync-pendente { background: rgba(232,163,61,.22); color: #ffd79a; }
-.chip-sync.sync-ok { background: rgba(18,161,80,.22); color: #7ff0b0; }
+.chip-sync.sync-pendente { background: rgba(217, 119, 6, .16); border-color: var(--dup); color: var(--texto); }
+.chip-sync.sync-ok { background: rgba(22, 163, 74, .16); border-color: var(--ok); color: var(--texto); }
 
-/* modal */
+/* ----------------------------------------------------------- modal --- */
 .modal {
   position: fixed;
   inset: 0;
-  background: rgba(3, 7, 15, .78);
+  background: rgba(34, 38, 37, .55);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -149,12 +219,6 @@ input:focus, select:focus, textarea:focus {
 .modal-acoes .btn { flex: 1; }
 .linha-2 { display: flex; gap: 12px; }
 .linha-2 > div { flex: 1; }
-
-/* cores de status reaproveitadas em todo lugar */
-.st-ok  { --cor-status: var(--ok); }
-.st-div { --cor-status: var(--div); }
-.st-dup { --cor-status: var(--dup); }
-.st-inv { --cor-status: var(--inv); }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

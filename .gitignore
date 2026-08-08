@@ -2,6 +2,9 @@ node_modules/
 dist/
 dev-dist/
 tests/saida/
+# Mockups de apresentação da marca (~7 MB). O que o app usa está em public/:
+# favicon.png, logdis-simbolo.png, icone-192.png, icone-512.png.
+LOGDIS_Logos_Completos/
 .env
 .env.local
 *.log

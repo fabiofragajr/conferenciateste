@@ -7,6 +7,9 @@ import type {
   ResumoLeituras, Sessao, Usuario
 } from '../types.js';
 import * as db from './db.js';
+import {
+  ASSINATURA, DIV, DUP_TEXTO, FOREST, OK_TEXTO, cabecalhoPDF, rodapePDF
+} from './marca.js';
 import { MOMENTO_ROTULO, STATUS_INFO, etiquetaTexto, pedidosIncompletos, resumir } from './model.js';
 import { baixarArquivo, dataHora, duracao, esc, hora, minutosEntre, paraCSV } from './util.js';
 
@@ -147,7 +150,7 @@ export function renderizarHTML(r: DadosRelatorio): string {
     <header class="rel-cab">
       <div>
         <h2>Relatório de conferência</h2>
-        <p class="rel-emp">Milfarma — LogDis Entrega</p>
+        <p class="rel-emp">${ASSINATURA}</p>
       </div>
       <dl>
         <div><dt>Início</dt><dd>${dataHora(sessao.inicio)}</dd></div>
@@ -260,17 +263,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
   const { sessao, usuario, leituras, ocorrencias, resumo, incompletos, divergentes, porLeitura, ritmo } = r;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
   const larg = doc.internal.pageSize.getWidth();
-  const alt = doc.internal.pageSize.getHeight();
-  let y = 14;
-
-  doc.setFontSize(15);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Relatório de conferência de volumes', 14, y);
-  y += 6;
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'normal');
-  doc.text('Milfarma — LogDis Entrega', 14, y);
-  y += 6;
+  let y = await cabecalhoPDF(doc, 'Relatório de conferência de volumes', ASSINATURA);
 
   autoTable(doc, {
     startY: y,
@@ -290,7 +283,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
 
   // A divergência é a informação mais importante da página.
   if (divergentes.length) {
-    doc.setFillColor(217, 45, 32);
+    doc.setFillColor(...DIV);
     doc.rect(14, y, larg - 28, 9, 'F');
     doc.setTextColor(255, 255, 255);
     doc.setFont('helvetica', 'bold');
@@ -304,7 +297,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
       head: [['Código', 'Rota', 'Pedido', 'Volume', 'Hora']],
       body: divergentes.map((l) => [l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', hora(l.timestamp)]),
       styles: { fontSize: 8 },
-      headStyles: { fillColor: [217, 45, 32] }
+      headStyles: { fillColor: DIV }
     });
     y = finalY(doc) + 5;
   }
@@ -314,7 +307,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
     head: [['Total', 'Liberados', 'Outra rota', 'Duplicados', 'Inválidos', 'Pedidos', 'Vol/min']],
     body: [[resumo.total, resumo.ok, resumo.divergentes, resumo.duplicados, resumo.invalidos, resumo.qtdPedidos, ritmo]],
     styles: { fontSize: 9, halign: 'center' },
-    headStyles: { fillColor: [30, 41, 59] }
+    headStyles: { fillColor: FOREST }
   });
   y = finalY(doc) + 6;
 
@@ -329,7 +322,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
       ? incompletos.map((p) => [p.pedido, p.rota, p.bipados, p.total, p.faltando.join(', ')])
       : [['—', '—', '—', '—', 'Nenhum pedido incompleto']],
     styles: { fontSize: 8 },
-    headStyles: { fillColor: [30, 41, 59] }
+    headStyles: { fillColor: FOREST }
   });
   y = finalY(doc) + 6;
 
@@ -355,7 +348,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
     if (y > 250) { doc.addPage(); y = 16; }
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    if (o.grave) doc.setTextColor(217, 45, 32);
+    if (o.grave) doc.setTextColor(...DIV);
     doc.text(`${MOMENTO_ROTULO[o.momento]}${o.grave ? ' — GRAVE' : ''} — ${dataHora(o.timestamp)}`, 14, y);
     doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'normal');
@@ -410,24 +403,17 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
       hora(l.timestamp)
     ]),
     styles: { fontSize: 7.5, cellPadding: 1.4 },
-    headStyles: { fillColor: [30, 41, 59] },
+    headStyles: { fillColor: FOREST },
     didParseCell: (d) => {
       if (d.section !== 'body' || d.column.index !== 4) return;
       const v = String(d.cell.raw);
-      if (v === 'Divergente') { d.cell.styles.textColor = [217, 45, 32]; d.cell.styles.fontStyle = 'bold'; }
-      else if (v === 'Duplicado') d.cell.styles.textColor = [180, 110, 20];
-      else if (v === 'OK') d.cell.styles.textColor = [18, 120, 60];
+      if (v === 'Divergente') { d.cell.styles.textColor = DIV; d.cell.styles.fontStyle = 'bold'; }
+      else if (v === 'Duplicado') d.cell.styles.textColor = DUP_TEXTO;
+      else if (v === 'OK') d.cell.styles.textColor = OK_TEXTO;
     }
   });
 
-  const total = doc.getNumberOfPages();
-  for (let i = 1; i <= total; i++) {
-    doc.setPage(i);
-    doc.setFontSize(7.5);
-    doc.setTextColor(120, 120, 120);
-    doc.text(`LogDis Entrega — sessão ${sessao.id}`, 14, alt - 8);
-    doc.text(`${i}/${total}`, larg - 20, alt - 8);
-  }
+  rodapePDF(doc, `sessão ${sessao.id}`);
 
   doc.save(`conferencia_${sessao.id.slice(0, 8)}.pdf`);
 }

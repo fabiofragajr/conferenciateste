@@ -3,9 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
-  <meta name="theme-color" content="#0b1220" />
+  <meta name="theme-color" content="#105945" />
   <meta name="description" content="Conferência de volumes por bipagem na expedição da Milfarma." />
-  <title>LogDis Entrega — Conferência de volumes</title>
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <link rel="apple-touch-icon" href="./icone-192.png" />
+  <title>LOGDIS Connect — Conferência de volumes</title>
 </head>
 <body class="app">
 
@@ -15,7 +17,10 @@
   <!-- ------------------------------------------------------------ LOGIN -->
   <section id="view-login" class="view">
     <div class="login-box">
-      <h1 class="marca">LogDis <span>Entrega</span></h1>
+      <h1 class="marca-logdis login-marca">
+        <img src="./logdis-simbolo.png" alt="" width="56" height="56" />
+        <span class="marca-nome">LOGDIS <i>Connect</i></span>
+      </h1>
       <p class="marca-sub">Conferência de volumes — Milfarma</p>
 
       <form id="form-login">
@@ -48,6 +53,10 @@
   <section id="view-grupo" class="view" hidden>
     <header class="topo">
       <div>
+        <span class="marca-logdis topo-marca">
+          <img src="./logdis-simbolo.png" alt="" width="28" height="28" />
+          <span class="marca-nome">LOGDIS <i>Connect</i></span>
+        </span>
         <p class="topo-titulo">Qual carga você vai conferir?</p>
         <p class="topo-sub" id="grupo-usuario"></p>
       </div>
@@ -70,6 +79,7 @@
   <!-- ---------------------------------------------------------- BIPAGEM -->
   <section id="view-bipagem" class="view" hidden>
     <div class="bip-topo">
+      <img class="bip-marca" src="./logdis-simbolo.png" alt="" width="30" height="30" />
       <div class="bip-carga">
         <strong id="bip-grupo">—</strong>
         <span id="bip-rotas">—</span>
