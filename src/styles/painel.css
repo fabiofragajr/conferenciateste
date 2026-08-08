@@ -5,7 +5,23 @@
    Identidade: barra institucional em verde escuro, conteúdo claro, cartões
    brancos de borda fina. Empresarial e operacional — não painel de analytics. */
 
-body.painel { min-height: 100vh; }
+/* Grade do painel: lateral à esquerda em toda a altura, topo e corpo à direita.
+   Abaixo de 1024px a lateral sai do fluxo e vira gaveta sobre o conteúdo. */
+body.painel {
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 248px 1fr;
+  grid-template-areas:
+    "lateral topo"
+    "lateral corpo";
+  grid-template-rows: auto 1fr;
+}
+body.painel > .p-topo { grid-area: topo; }
+body.painel > .p-lateral { grid-area: lateral; }
+/* Sem min-width: 0 o conteúdo se recusa a encolher abaixo da tabela mais larga
+   e empurra a página inteira para o lado — foi o que fez o painel vazar 72px
+   num aparelho de 320px. */
+body.painel > .p-corpo { grid-area: corpo; min-width: 0; }
 
 /* -------------------------------------------------- barra institucional --- */
 .p-topo {
@@ -59,8 +75,11 @@ body.painel { min-height: 100vh; }
 .p-secao h3 { font-size: 15px; margin: 0 0 10px; color: var(--logdis-forest); }
 
 .p-grade { display: grid; gap: 16px; }
-.p-grade-2 { grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); }
-.p-grade-3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+/* O `min()` é o que faz a coluna desistir da largura mínima quando a tela é
+   menor que ela. Sem isso, `minmax(380px, …)` continua pedindo 380px numa tela
+   de 320px e a página inteira ganha rolagem horizontal. */
+.p-grade-2 { grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr)); }
+.p-grade-3 { grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
 
 .p-cartao {
   background: var(--fundo-2);
@@ -225,7 +244,6 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 
 @media (max-width: 720px) {
   .p-corpo { padding: 16px 12px 50px; }
-  .p-topo { padding: 10px 12px; flex-wrap: wrap; }
   .p-topo .p-titulo-painel { border-left: 0; padding-left: 0; }
 }
 
@@ -253,3 +271,149 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 
 .p-acao-inline { display: inline-flex; gap: 6px; align-items: center; }
 .p-acao-inline select { min-width: 150px; min-height: 32px; font-size: 12px; padding: 4px 8px; }
+
+/* ------------------------------------------------------------- lateral --- */
+.p-lateral {
+  background: var(--fundo-2);
+  border-right: 1px solid var(--borda);
+  padding: 16px 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+.p-lateral-grupo h2 {
+  font-size: 11px;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--texto-2);
+  margin: 0 0 6px;
+  padding: 0 18px;
+}
+.p-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  font-size: 14.5px;
+  color: var(--texto);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+.p-item:hover { background: var(--logdis-mint-surface); color: var(--texto); }
+.p-item.ativo {
+  background: var(--logdis-mint-surface);
+  border-left-color: var(--logdis-green);
+  color: var(--logdis-forest);
+  font-weight: 700;
+}
+.p-lateral-rodape {
+  margin-top: auto;
+  padding: 16px 18px 0;
+  border-top: 1px solid var(--borda);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+.p-lateral-rodape .p-usuario { color: var(--texto-2); }
+.p-lateral-rodape .btn { min-height: 40px; font-size: 14px; display: flex; align-items: center; justify-content: center; }
+
+/* badge de divergência: o item leva até ela, e o número aparece sem abrir nada */
+.p-badge {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--div);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  flex: none;
+}
+.p-badge[hidden] { display: none; }
+
+/* faixa que acompanha TODA seção enquanto houver divergência no dia */
+.p-alerta-fixo {
+  border: 2px solid var(--div);
+  background: rgba(220, 38, 38, .08);
+  border-radius: var(--raio);
+  padding: 12px 18px;
+  margin-bottom: 18px;
+  font-size: 15px;
+}
+.p-alerta-fixo[hidden] { display: none; }
+.p-alerta-fixo a { color: var(--div); font-weight: 700; }
+
+/* hambúrguer: só existe abaixo de 1024px */
+.p-hamburguer {
+  display: none;
+  flex: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  width: 44px;
+  height: 44px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .38);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.p-hamburguer span { display: block; height: 2px; background: #fff; border-radius: 2px; }
+/* O título da seção é o que sobra do cabeçalho antigo: encolhe antes de todo o
+   resto, porque quem precisa caber inteiro é o alerta e o chip de fila. */
+.p-titulo-secao {
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.p-topo .chip-sync { flex: none; }
+.p-fundo-gaveta { display: none; }
+
+@media (max-width: 1023px) {
+  body.painel {
+    grid-template-columns: 1fr;
+    grid-template-areas: "topo" "corpo";
+  }
+  .p-hamburguer { display: flex; }
+  /* Título do painel some: no celular a barra é estreita e quem manda é a seção. */
+  .p-topo { padding: 8px 12px; gap: 8px; }
+  .p-topo .p-titulo-painel { display: none; }
+  .p-topo .marca-nome { display: none; }
+  .p-topo .marca-logdis img { width: 28px; height: 28px; }
+  .p-topo .p-espaco { display: none; }
+  .p-titulo-secao { flex: 1 1 auto; }
+
+  body.painel > .p-lateral {
+    position: fixed;
+    z-index: 200;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: min(300px, 84vw);
+    transform: translateX(-100%);
+    /* `visibility` junto do `transform`: gaveta fechada precisa sair do alcance
+       do toque e do leitor de tela, não só de vista. */
+    visibility: hidden;
+    transition: transform .18s ease-out, visibility .18s;
+    box-shadow: 0 0 32px rgba(0, 0, 0, .18);
+  }
+  body.painel > .p-lateral.aberta { transform: translateX(0); visibility: visible; }
+  .p-fundo-gaveta {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 150;
+    background: rgba(34, 38, 37, .5);
+  }
+  .p-fundo-gaveta[hidden] { display: none; }
+  .p-item { min-height: 48px; }
+}
