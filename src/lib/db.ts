@@ -179,19 +179,55 @@ export async function salvarVarios<S extends NomeStore>(store: S, objs: ValorDe<
 }
 
 /**
+ * Índices únicos do cadastro. Quando o valor colide, quem manda é o servidor:
+ * é lá que o gestor cadastra, e `codigo` só tem valor porque tem um dono só.
+ */
+const INDICE_UNICO: Partial<Record<NomeStore, string>> = {
+  usuarios: 'login',
+  rotas: 'codigo'
+};
+
+/** Visão frouxa da store: o tipo do `idb` amarra o índice ao literal da store. */
+interface LojaFrouxa {
+  index(nome: string): { getKey(valor: IDBValidKey): Promise<IDBValidKey | undefined> };
+  put(valor: unknown): Promise<unknown>;
+  delete(chave: IDBValidKey): Promise<void>;
+}
+
+/**
  * Grava o que desceu do servidor SEM reenfileirar: o registro já está lá.
  * Sem isso, cada sincronização de descida devolveria tudo para a fila de subida.
+ *
+ * Antes de gravar, resolve colisão de índice único. O caso real: o servidor tem
+ * FNOR com um id e o aparelho tem FNOR com outro. O `put` cru era recusado pelo
+ * índice, a transação inteira abortava e o aparelho NUNCA mais recebia cadastro
+ * nenhum — nem as rotas novas que o gestor tinha acabado de cadastrar. Some com
+ * o registro local conflitante e aceita o do servidor.
  */
 export async function salvarDoServidor<S extends NomeStore>(store: S, objs: ValorDe<S>[]): Promise<void> {
   if (!objs.length) return;
   const banco = await db();
+  const indice = INDICE_UNICO[store];
   const tx = banco.transaction(store, 'readwrite');
-  await Promise.all([
-    ...objs.map((o) => tx.store.put({
-      ...o, sync: 'ENVIADO' as StatusSync, syncErro: null, syncTentativas: 0
-    } as ValorDe<S>)),
-    tx.done
-  ]);
+  const loja = tx.store as unknown as LojaFrouxa;
+
+  for (const o of objs) {
+    const registro = { ...o, sync: 'ENVIADO' as StatusSync, syncErro: null, syncTentativas: 0 };
+
+    if (indice) {
+      const valor = (registro as unknown as Record<string, unknown>)[indice];
+      if (typeof valor === 'string' && valor) {
+        const chaveEmUso = await loja.index(indice).getKey(valor);
+        if (chaveEmUso !== undefined && chaveEmUso !== registro.id) {
+          await loja.delete(chaveEmUso);
+        }
+      }
+    }
+
+    await loja.put(registro);
+  }
+
+  await tx.done;
 }
 
 export async function obter<S extends NomeStore>(store: S, id: string): Promise<ValorDe<S> | undefined> {

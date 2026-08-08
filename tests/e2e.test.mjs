@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
+import { prepararAparelho, isolarDaProducao, entrar as fazerLogin, SENHA as SENHA_ANTIGA } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -13,66 +14,46 @@ const ctx = await navegador.newContext({
   locale: 'pt-BR'
 });
 const p = await ctx.newPage();
-p.on('console', (m) => { if (m.type() === 'error') erros.push(`[console] ${m.text()}`); });
-p.on('pageerror', (e) => erros.push(`[pageerror] ${e.message}`));
+
+/**
+ * A escuta de erro começa DEPOIS da preparação: o primeiro boot roda com o
+ * caminho até a produção cortado, e o ruído de rede dessa janela é do arranjo
+ * do teste, não do app. O que interessa é o app já com o cadastro na mão.
+ */
+const vigiarErros = (pagina, quem) => {
+  pagina.on('console', (m) => { if (m.type() === 'error') erros.push(`[${quem}] ${m.text()}`); });
+  pagina.on('pageerror', (e) => erros.push(`[${quem} pageerror] ${e.message}`));
+};
 
 const passo = async (nome, fn) => {
   try { await fn(); console.log('ok  -', nome); }
   catch (e) { console.log('FALHA -', nome, '\n     ', e.message); process.exitCode = 1; }
 };
 
-// Preparação: o cadastro é do gestor, e é ele que dá sentido à divergência.
-// FSUL passa a ser de outra transportadora — é isso que o operador vai
-// descobrir ao bipar uma caixa dela na carga errada.
-await p.goto(`${BASE}/gestor.html`);
-await passo('preparar cadastro (gestor)', async () => {
-  await p.waitForSelector('#bloqueio:not([hidden])', { timeout: 8000 });
-  await p.fill('#in-login', 'gestor');
-  await p.fill('#in-senha', 'gestor');
-  await p.click('#form-login button[type=submit]');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+// O aparelho recebe o cadastro da base — é assim que ele passa a existir, e
+// FNOR/FSUL já nascem com donas diferentes. É essa diferença que o operador vai
+// descobrir ao bipar uma caixa de FSUL na carga da LOGDIS.
+await prepararAparelho(p, BASE, 'index.html');
+vigiarErros(p, 'operador');
 
-  await p.fill('#t-nome', 'Transportadora Sul');
-  await p.click('#form-transportadora button[type=submit]');
-  await p.waitForTimeout(400);
-
-  const opcoes = await p.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
-  const sul = opcoes.find(([, t]) => t === 'Transportadora Sul');
-  if (!sul) throw new Error('transportadora não entrou no select');
-
-  // FSUL nasceu do seed na transportadora LOGDIS: desativa e recadastra na Sul.
-  await p.evaluate(async () => {
-    const req = indexedDB.open('logdis');
-    const banco = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
-    const tx = banco.transaction('rotas', 'readwrite');
-    const todas = await new Promise((ok) => {
-      const r = tx.objectStore('rotas').getAll();
-      r.onsuccess = () => ok(r.result);
-    });
-    for (const rota of todas) {
-      if (rota.codigo === 'FSUL') tx.objectStore('rotas').delete(rota.id);
-    }
-  });
-  await p.waitForTimeout(200);
-
-  await p.selectOption('#r-transportadora', sul[0]);
-  await p.fill('#r-codigo', 'FSUL');
-  await p.fill('#r-nome', 'Carga Sul');
-  await p.click('#form-rota button[type=submit]');
-  await p.waitForTimeout(400);
-  if (!/Transportadora Sul/.test(await p.innerHTML('#lista-rotas'))) {
-    throw new Error('FSUL não ficou com a Transportadora Sul');
-  }
+await passo('aparelho sem cadastro avisa em vez de recusar a senha certa', async () => {
+  // Contexto próprio: IndexedDB vazio de verdade, e sem alcançar a base — é o
+  // celular novo que ainda não conseguiu baixar o cadastro e por isso não tem
+  // contra o que conferir a senha.
+  const zerado = await navegador.newContext({ viewport: { width: 420, height: 900 }, locale: 'pt-BR' });
+  await isolarDaProducao(zerado);
+  const v = await zerado.newPage();
+  await v.goto(`${BASE}/index.html`);
+  await v.waitForSelector('#dica-seed:not([hidden])', { timeout: 8000 });
+  const dica = await v.textContent('#dica-seed');
+  if (!/ainda não recebeu o cadastro/.test(dica)) throw new Error(`dica: ${dica}`);
+  await zerado.close();
 });
-
-await p.goto(`${BASE}/index.html`);
 
 await passo('login do operador', async () => {
   await p.click('#btn-sair').catch(() => {});
   await p.waitForTimeout(200);
-  await p.fill('#in-login', 'operador');
-  await p.fill('#in-senha', 'operador');
-  await p.click('#form-login button[type=submit]');
+  await fazerLogin(p, 'ana');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 5000 });
 });
 
@@ -179,16 +160,14 @@ await p.screenshot({ path: 'tests/saida/tela-relatorio.png', fullPage: true });
 // ---- painel do gestor (é tela de desktop, ao contrário do app de bipagem)
 const g = await ctx.newPage();
 await g.setViewportSize({ width: 1440, height: 900 });
-g.on('console', (m) => { if (m.type() === 'error') erros.push(`[gestor] ${m.text()}`); });
-g.on('pageerror', (e) => erros.push(`[gestor pageerror] ${e.message}`));
+vigiarErros(g, 'gestor');
 await g.goto(`${BASE}/gestor.html`);
 
 await passo('painel do gestor exige gestor e mostra divergência do dia', async () => {
   await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
-  await g.fill('#in-login', 'gestor');
-  await g.fill('#in-senha', 'gestor');
-  await g.click('#form-login button[type=submit]');
+  await fazerLogin(g, 'sandro');
   await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+  await g.waitForSelector('#lista-usuarios button[data-editar]', { timeout: 10000 });
   const faixa = await g.innerHTML('#faixa-divergencia');
   if (!/outra rota hoje/.test(faixa)) throw new Error('faixa de divergência não apareceu');
   const oc = await g.innerHTML('#oc-lista');
@@ -245,6 +224,111 @@ await passo('código de rota não pode ter dois donos', async () => {
   if (!/já pertence/.test(msg ?? '')) throw new Error(`esperava recusa por duplicidade, veio: ${msg}`);
 });
 
+// ---- acessos: o gestor cria e administra quem entra, sem e-mail no caminho
+await passo('gestor cria acesso sem senha e sem e-mail', async () => {
+  await g.fill('#u-nome', 'Marcos Ajudante');
+  await g.fill('#u-login', 'marcos');
+  await g.fill('#u-funcao', 'Ajudante');
+  await g.click('#u-salvar');
+  await g.waitForTimeout(400);
+  const lista = await g.innerHTML('#lista-usuarios');
+  if (!/marcos/.test(lista)) throw new Error('acesso não apareceu na lista');
+  if (!/escolhe na 1ª entrada/.test(lista)) throw new Error('deveria indicar senha pendente');
+});
+
+await passo('quem foi cadastrado hoje entra hoje', async () => {
+  const ctxMarcos = await navegador.newContext({ viewport: { width: 420, height: 900 }, locale: 'pt-BR' });
+  const m = await ctxMarcos.newPage();
+  await prepararAparelho(m, BASE, 'index.html');
+  // O aparelho do Marcos não conhece o login novo: entrega como a base entregaria.
+  await m.evaluate(async (novo) => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    await new Promise((ok) => {
+      const tx = bd.transaction('usuarios', 'readwrite');
+      tx.objectStore('usuarios').put(novo);
+      tx.oncomplete = ok;
+    });
+    bd.close();
+  }, {
+    id: '00000000-0000-4000-8000-000000000003', nome: 'Marcos Ajudante', login: 'marcos',
+    senhaHash: '', gestor: false, funcao: 'Ajudante', telefone: '', placa: '', ativo: true,
+    sync: 'ENVIADO', syncTentativas: 0, syncErro: null, atualizadoEm: '2026-01-01T00:00:00.000Z'
+  });
+  await m.reload();
+  await fazerLogin(m, 'marcos', 'senha-do-marcos');
+  await m.waitForSelector('#view-grupo:not([hidden])', { timeout: 5000 });
+  await ctxMarcos.close();
+});
+
+await passo('editar acesso pelo mesmo formulário', async () => {
+  await g.click('#lista-usuarios button[data-editar]>>nth=0');
+  await g.waitForTimeout(200);
+  if ((await g.textContent('#u-salvar')).trim() !== 'Salvar') throw new Error('form não entrou em edição');
+  await g.fill('#u-funcao', 'Conferente sênior');
+  await g.click('#u-salvar');
+  await g.waitForTimeout(400);
+  if (!/Conferente sênior/.test(await g.innerHTML('#lista-usuarios'))) {
+    throw new Error('edição não gravou');
+  }
+  if ((await g.textContent('#u-salvar')).trim() !== 'Cadastrar') throw new Error('form não voltou ao modo cadastro');
+});
+
+await passo('redefinir senha devolve a escolha para a pessoa', async () => {
+  const linhas = await g.$$('#lista-usuarios tbody tr');
+  let alvo = null;
+  for (const linha of linhas) {
+    if (/marcos/.test(await linha.innerHTML())) alvo = linha;
+  }
+  if (!alvo) throw new Error('linha do marcos não encontrada');
+  await (await alvo.$('button[data-senha]')).click();
+  await g.waitForTimeout(400);
+  if (!/escolhe a nova senha/.test(await g.textContent('#u-ok'))) {
+    throw new Error('sem confirmação do que acontece agora');
+  }
+});
+
+await passo('gestor troca a própria senha na tela', async () => {
+  // O acesso nasce com uma senha provisória que alguém entregou na mão. Trocar
+  // sozinho, sem pedir nada a ninguém, é o que faz essa senha deixar de rodar
+  // pela operação.
+  const linhas = await g.$$('#lista-usuarios tbody tr');
+  let minha = null;
+  for (const linha of linhas) {
+    if (/sandro/.test(await linha.innerHTML())) minha = linha;
+  }
+  if (!minha) throw new Error('o gestor não se encontra na lista');
+  await (await minha.$('button[data-editar]')).click();
+  await g.waitForTimeout(200);
+
+  await g.fill('#u-senha', 'nova-senha-do-sandro');
+  await g.click('#u-salvar');
+  await g.waitForTimeout(500);
+
+  await g.click('#btn-sair');
+  await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
+
+  await fazerLogin(g, 'sandro', SENHA_ANTIGA);
+  await g.waitForSelector('#login-erro:not([hidden])', { timeout: 5000 });
+  if (await g.isVisible('#conteudo:not([hidden])')) throw new Error('a senha antiga ainda entra');
+
+  await fazerLogin(g, 'sandro', 'nova-senha-do-sandro');
+  await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+});
+
+await passo('gestor não consegue tirar o próprio acesso', async () => {
+  const linhas = await g.$$('#lista-usuarios tbody tr');
+  let alvo = null;
+  for (const linha of linhas) {
+    if (/sandro/.test(await linha.innerHTML())) alvo = linha;
+  }
+  await (await alvo.$('button[data-usuario]')).click();
+  await g.waitForTimeout(300);
+  if (!/não pode desativar o próprio acesso/.test(await g.textContent('#u-msg'))) {
+    throw new Error('deixou o gestor se trancar para fora');
+  }
+});
+
 await passo('rota lida sem cadastro vira fila de decisão do gestor', async () => {
   const html = await g.innerHTML('#nao-mapeados');
   if (!/RDESC/.test(html)) throw new Error('código não cadastrado não apareceu para o gestor');
@@ -256,12 +340,18 @@ await passo('rota lida sem cadastro vira fila de decisão do gestor', async () =
 // ---- painel do diretor
 const d = await ctx.newPage();
 await d.setViewportSize({ width: 1440, height: 900 });
-d.on('console', (m) => { if (m.type() === 'error') erros.push(`[diretor] ${m.text()}`); });
-d.on('pageerror', (e) => erros.push(`[diretor pageerror] ${e.message}`));
+vigiarErros(d, 'diretor');
 await d.goto(`${BASE}/diretor.html`);
 
 await passo('painel do diretor mostra indicadores e tendência', async () => {
   await d.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+  // `#conteudo` aparece antes de os blocos pintarem: espera o conteúdo, não a
+  // caixa vazia. Sem isto o teste falha uma vez a cada tantas rodadas.
+  await d.waitForFunction(
+    () => (document.querySelector('#kpis')?.textContent ?? '').includes('Taxa de divergência'),
+    null,
+    { timeout: 10000 }
+  );
   const kpis = await d.innerHTML('#kpis');
   if (!/Taxa de divergência de rota/.test(kpis)) throw new Error('KPI ausente');
   if (!/informe as cargas previstas/.test(kpis)) throw new Error('cobertura deveria pedir o número');

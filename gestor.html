@@ -169,15 +169,19 @@
         <h2>4. Cadastros</h2>
         <div class="p-grade p-grade-2">
           <div class="p-cartao">
-            <h3>Pessoas</h3>
+            <h3 id="u-titulo">Acessos</h3>
             <p class="p-vazio" style="padding-top:0">
-              Cadastro mínimo: nome, login e senha. Função, telefone e placa são
-              descritivos e aparecem no relatório — não liberam nem bloqueiam nada.
+              Cadastro mínimo: nome e login. Sem e-mail e sem confirmação — quem
+              foi cadastrado hoje entra hoje. Função, telefone e placa são
+              descritivos e aparecem no relatório: não liberam nem bloqueiam nada.
             </p>
             <form id="form-usuario" class="p-filtros">
               <div class="p-campo"><label for="u-nome">Nome</label><input id="u-nome" type="text" required /></div>
-              <div class="p-campo"><label for="u-login">Login</label><input id="u-login" type="text" autocapitalize="none" required /></div>
-              <div class="p-campo"><label for="u-senha">Senha</label><input id="u-senha" type="text" required /></div>
+              <div class="p-campo"><label for="u-login">Login</label><input id="u-login" type="text" autocapitalize="none" autocomplete="off" required /></div>
+              <div class="p-campo">
+                <label for="u-senha">Senha <em>opcional</em></label>
+                <input id="u-senha" type="text" autocomplete="off" placeholder="a pessoa escolhe na 1ª entrada" />
+              </div>
               <div class="p-campo"><label for="u-funcao">Função <em>opcional</em></label><input id="u-funcao" type="text" /></div>
               <div class="p-campo"><label for="u-placa">Placa <em>opcional</em></label><input id="u-placa" type="text" /></div>
               <div class="p-campo"><label for="u-telefone">Telefone <em>opcional</em></label><input id="u-telefone" type="text" /></div>
@@ -185,9 +189,11 @@
                 <label for="u-gestor">Acesso ao painel</label>
                 <select id="u-gestor"><option value="nao">Não</option><option value="sim">Sim</option></select>
               </div>
-              <button class="btn btn-primario" type="submit">Cadastrar</button>
+              <button id="u-salvar" class="btn btn-primario" type="submit">Cadastrar</button>
+              <button id="u-cancelar" class="btn btn-fantasma" type="button" hidden>Cancelar</button>
             </form>
             <p id="u-msg" class="erro" hidden></p>
+            <p id="u-ok" class="p-vazio" hidden></p>
             <div id="lista-usuarios" class="p-tab-wrap"></div>
           </div>
 

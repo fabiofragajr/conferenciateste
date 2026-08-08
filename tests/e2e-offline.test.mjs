@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
+import { prepararAparelho, entrar as fazerLogin } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -16,11 +17,8 @@ const passo = async (nome, fn) => {
   catch (e) { falhou = true; console.log('FALHA -', nome, '\n     ', e.message); }
 };
 
-await p.goto(`${BASE}/index.html`);
-await p.fill('#in-login', 'operador');
-await p.fill('#in-senha', 'operador');
-await p.click('#form-login button[type=submit]');
-// Com uma transportadora só, o app pula a escolha e já abre a câmera.
+await prepararAparelho(p, BASE, 'index.html');
+await fazerLogin(p, 'ana');
 await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])');
 
 await passo('service worker registrado (precache do PWA)', async () => {
@@ -39,8 +37,8 @@ await passo('bipagem completa offline', async () => {
   for (let i = 1; i <= 25; i++) {
     await p.click('#btn-manual');
     await p.fill('#man-codigo', `EMB${String(i).padStart(10, '0')}`);
-    // FSUL é da outra transportadora do seed? Não: aqui o que interessa é o
-    // volume da fila, então tudo entra pela rota cadastrada da transportadora.
+    // Tudo pela rota da própria transportadora: aqui o que se testa é a fila
+    // segurando 25 volumes sem rede, não a divergência.
     await p.fill('#man-rota', 'FNOR 100');
     await p.fill('#man-pedido', `86945${String(i % 5).padStart(3, '0')}`);
     await p.fill('#man-volume', '0001/0002');

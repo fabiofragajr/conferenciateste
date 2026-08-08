@@ -143,10 +143,12 @@ function erroEm(node: HTMLElement, msg: string | null): void {
 /* --------------------------------------------------------------- boot ---- */
 
 async function boot(): Promise<void> {
-  const seed = await auth.garantirSeed();
-  if (seed.criou) {
+  // Aparelho novo não tem cadastro: ele desce da base. Enquanto não descer, a
+  // tela diz o que fazer em vez de ficar recusando a senha certa.
+  if (!(await sync.garantirCadastroLocal())) {
     el.dicaSeed.hidden = false;
-    el.dicaSeed.textContent = 'Primeiro acesso: gestor / gestor — troque a senha no painel.';
+    el.dicaSeed.textContent =
+      'Este aparelho ainda não recebeu o cadastro. Conecte-se à internet uma vez para baixá-lo.';
   }
 
   sync.iniciarAuto();

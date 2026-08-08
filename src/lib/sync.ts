@@ -92,7 +92,9 @@ const linhaUsuario = (u: Usuario): Record<string, unknown> => ({
   id: u.id,
   nome: u.nome,
   login: u.login,
-  // senhaHash NUNCA sai do aparelho: autenticação é local nesta versão.
+  // O hash acompanha o cadastro: é o que faz a senha valer no celular da doca,
+  // e não só no aparelho onde ela foi digitada. Ver a nota em schema.sql.
+  senha_hash: u.senhaHash || null,
   gestor: u.gestor,
   funcao: u.funcao,
   telefone: u.telefone,
@@ -225,8 +227,9 @@ interface LinhaRota {
   descricao: string | null; ativo: boolean; atualizado_em: string;
 }
 interface LinhaUsuario {
-  id: string; nome: string; login: string; gestor: boolean; funcao: string | null;
-  telefone: string | null; placa: string | null; ativo: boolean; atualizado_em: string;
+  id: string; nome: string; login: string; senha_hash: string | null; gestor: boolean;
+  funcao: string | null; telefone: string | null; placa: string | null;
+  ativo: boolean; atualizado_em: string;
 }
 
 const daLinhaTransportadora = (l: LinhaTransportadora): Transportadora => ({
@@ -291,17 +294,28 @@ async function baixarCadastro(): Promise<{ baixados: number; erro: string | null
   return { baixados, erro: null };
 }
 
-/** Atualiza o cadastro do usuário preservando a senha local, que nunca trafega. */
+/**
+ * Atualiza o cadastro do usuário.
+ *
+ * A senha vem do servidor — é assim que a senha definida pelo gestor no desktop
+ * passa a valer no celular, e que "redefinir senha" (hash nulo) chega ao
+ * aparelho da pessoa. A exceção é o registro que ainda não subiu: aí a senha
+ * digitada aqui agora é mais nova que a do servidor e não pode ser perdida.
+ */
 async function aplicarUsuarios(linhas: LinhaUsuario[]): Promise<number> {
   const novos: Usuario[] = [];
   for (const l of linhas) {
-    const local = await db.obter('usuarios', l.id);
+    // Por login também: um aparelho pode ter a mesma pessoa com outro id, de
+    // quando o cadastro nascia local. A senha ainda não enviada é dela.
+    const local = (await db.obter('usuarios', l.id))
+      ?? (await db.umPorIndice('usuarios', 'login', l.login));
+    const naoSubiu = local?.sync === 'PENDENTE' && Boolean(local.senhaHash);
     novos.push({
       id: l.id,
       nome: l.nome,
       login: l.login,
-      // '' = ainda sem senha neste aparelho; definida no primeiro acesso.
-      senhaHash: local?.senhaHash ?? '',
+      // '' = sem senha; a pessoa define na primeira entrada.
+      senhaHash: naoSubiu ? local!.senhaHash : (l.senha_hash ?? ''),
       gestor: l.gestor,
       funcao: l.funcao ?? '',
       telefone: l.telefone ?? '',
@@ -450,26 +464,31 @@ export async function sincronizar(): Promise<EstadoSync> {
 
     // Sobe primeiro o que foi feito aqui, depois desce o que mudou lá: assim
     // uma alteração de cadastro nunca sobrescreve leitura que ainda não subiu.
-    let erro: string | null = null;
+    //
+    // Cada store segue mesmo que a anterior falhe. Isto não é zelo: `rotas` vem
+    // antes de `leituras`, e um código de rota recusado pelo servidor (dois
+    // donos para o mesmo prefixo) já foi suficiente para segurar TODA a
+    // conferência do aparelho, indefinidamente. Cadastro emperrado não pode
+    // prender caixa bipada — a leitura é o dado que não pode se perder.
+    const falhas: string[] = [];
     let enviados = 0;
     for (const store of db.STORES_SYNC) {
       const r = await enviarStore(store);
       enviados += r.enviados;
-      if (r.erro) { erro = r.erro; break; }
+      if (r.erro) falhas.push(r.erro);
     }
 
-    if (!erro) {
-      const descida = await baixarCadastro();
-      if (descida.erro) erro = descida.erro;
-      else estado.ultimaDescida = agora();
-    }
+    // A descida também roda sempre: é ela que cura o aparelho: o cadastro certo
+    // desce e substitui o registro local que o servidor está recusando.
+    const descida = await baixarCadastro();
+    if (descida.erro) falhas.push(descida.erro);
+    else estado.ultimaDescida = agora();
 
+    const erro = falhas.length ? falhas.join(' | ') : null;
     estado.ultimoErro = erro;
-    if (!erro && enviados > 0) estado.ultimoEnvio = agora();
+    if (enviados > 0) estado.ultimoEnvio = agora();
 
-    if (!erro) {
-      await registrarDispositivo(await db.contarPendentes(), estado.usuarioAtual);
-    }
+    await registrarDispositivo(await db.contarPendentes(), estado.usuarioAtual);
     return estadoSync();
   } catch (e) {
     estado.ultimoErro = e instanceof Error ? e.message : 'Falha inesperada na sincronização.';
@@ -484,6 +503,38 @@ export async function sincronizar(): Promise<EstadoSync> {
 /** Empurra a fila sem travar quem chamou. */
 export function sincronizarEmSegundoPlano(): void {
   void sincronizar();
+}
+
+/**
+ * Busca o cadastro agora, sem esperar o ciclo automático.
+ *
+ * Serve ao login: a mesma pessoa usa mais de um aparelho, e a senha pode ter
+ * sido definida ou trocada em outro — ou pelo gestor, no desktop. Sem isto, o
+ * celular recusaria a senha certa até a sincronização de fundo passar.
+ *
+ * Devolve `true` se conseguiu falar com a base, para quem chamou saber se vale
+ * tentar de novo.
+ */
+export async function baixarCadastroAgora(): Promise<boolean> {
+  if (!navigator.onLine || !(await estaConfigurado())) return false;
+  const r = await baixarCadastro();
+  if (!r.erro) estado.ultimaDescida = agora();
+  return !r.erro;
+}
+
+/**
+ * Garante que este aparelho conhece o cadastro antes de pedir a senha.
+ *
+ * Não existe cadastro de exemplo: aparelho novo começa vazio e recebe pessoas,
+ * transportadoras e rotas da base. Sem esta espera, a tela de login recusaria a
+ * senha certa só porque a descida ainda não terminou — e a pessoa procuraria um
+ * erro que não existe. Roda uma vez, no boot, e só quando não há nada local.
+ */
+export async function garantirCadastroLocal(): Promise<boolean> {
+  if ((await db.todos('usuarios')).length > 0) return true;
+  if (!navigator.onLine || !(await estaConfigurado())) return false;
+  await sincronizar();
+  return (await db.todos('usuarios')).length > 0;
 }
 
 export async function tentarNovamente(): Promise<EstadoSync> {
