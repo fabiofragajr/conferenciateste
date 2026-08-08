@@ -202,16 +202,12 @@ async function boot(): Promise<void> {
     return;
   }
 
-  if (usuario.gestor) {
-    // Exceção de um clique só: "Abrir bipagem" no painel é o gestor pedindo
-    // pra bipar agora, não o app reabrindo do zero. Sem essa marca ele nunca
-    // sairia do painel — a recarga de página perde o clique, só sobra a rota.
-    if (sessionStorage.getItem('logdis:ir-bipar')) {
-      sessionStorage.removeItem('logdis:ir-bipar');
-    } else {
-      levarParaOPainel();
-      return;
-    }
+  // "Abrir bipagem" no painel manda #bipar: é o gestor pedindo pra bipar agora,
+  // não o app reabrindo do zero. A recarga perde o clique — por isso a intenção
+  // viaja na URL, onde ela sobrevive até a aba nova.
+  if (usuario.gestor && location.hash !== '#bipar') {
+    levarParaOPainel();
+    return;
   }
 
   await irParaGrupos();

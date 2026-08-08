@@ -139,13 +139,6 @@ $('#btn-sair').addEventListener('click', () => {
   location.reload();
 });
 
-// "Abrir bipagem" é o gestor pedindo pra bipar, não só reabrindo o app. Sem
-// essa marca, o boot do index.html manda todo gestor de volta pra cá antes de
-// ele decidir — a recarga de página perde o clique, só sobra a intenção.
-$('#btn-bipar').addEventListener('click', () => {
-  sessionStorage.setItem('logdis:ir-bipar', '1');
-});
-
 /* ---------------------------------------------------------------- boot --- */
 
 async function boot(): Promise<void> {
