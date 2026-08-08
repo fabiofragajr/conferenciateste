@@ -9,3 +9,5 @@ LOGDIS_Logos_Completos/
 .env.local
 *.log
 .DS_Store
+# Mockups do brainstorming visual — rascunho de conversa, não entra no repo.
+.superpowers/
