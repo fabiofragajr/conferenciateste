@@ -169,11 +169,18 @@ await g.goto(`${BASE}/index.html`);
 await g.evaluate(() => localStorage.removeItem('logdis.usuarioLogado'));
 await g.goto(`${BASE}/gestor.html`);
 
+/** O painel virou seções: chegar a um cartão é escolher o item do menu antes. */
+const secao = async (pagina, id) => {
+  await pagina.click(`.p-item[href="#${id}"]`);
+  await pagina.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 5000 });
+};
+
 await passo('painel do gestor exige gestor e mostra divergência do dia', async () => {
   await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
   await fazerLogin(g, 'sandro');
   await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
-  await g.waitForSelector('#lista-usuarios button[data-editar]', { timeout: 10000 });
+  // Espera a pintura, não a visibilidade: a seção de Pessoas nasce escondida.
+  await g.waitForSelector('#lista-usuarios button[data-editar]', { state: 'attached', timeout: 10000 });
   const faixa = await g.innerHTML('#faixa-divergencia');
   if (!/outra rota hoje/.test(faixa)) throw new Error('faixa de divergência não apareceu');
   const oc = await g.innerHTML('#oc-lista');
@@ -181,6 +188,7 @@ await passo('painel do gestor exige gestor e mostra divergência do dia', async 
 });
 
 await passo('busca no texto livre da ocorrência', async () => {
+  await secao(g, 'ocorrencias');
   await g.fill('#oc-busca', 'doca 3');
   await g.waitForTimeout(200);
   if (!/Cheguei 7h/.test(await g.innerHTML('#oc-lista'))) throw new Error('busca não encontrou');
@@ -191,16 +199,20 @@ await passo('busca no texto livre da ocorrência', async () => {
 });
 
 await passo('detalhe da sessão abre com mapa', async () => {
+  await secao(g, 'conferencias');
   await g.click('#tabela-sessoes button[data-sessao]');
   await g.waitForSelector('#gaveta:not([hidden])', { timeout: 5000 });
   if (!/Dispersão das bipagens/.test(await g.innerHTML('#gaveta-mapa'))) throw new Error('mapa ausente');
   await g.screenshot({ path: 'tests/saida/tela-sessao.png', fullPage: true });
   await g.click('#gaveta-fechar');
   await g.waitForTimeout(200);
+  // A foto do painel é a de Hoje: é a tela que o gestor abre de manhã.
+  await secao(g, 'hoje');
   await g.screenshot({ path: 'tests/saida/tela-gestor.png', fullPage: true });
 });
 
 await passo('cadastro de transportadora e código de rota', async () => {
+  await secao(g, 'transportadoras');
   await g.fill('#t-nome', 'Transportadora Beta');
   await g.click('#form-transportadora button[type=submit]');
   await g.waitForTimeout(400);
@@ -208,6 +220,7 @@ await passo('cadastro de transportadora e código de rota', async () => {
     throw new Error('transportadora não cadastrada');
   }
 
+  await secao(g, 'rotas');
   const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
   const beta = opcoes.find(([, t]) => t === 'Transportadora Beta');
   await g.selectOption('#r-transportadora', beta[0]);
@@ -219,6 +232,7 @@ await passo('cadastro de transportadora e código de rota', async () => {
 });
 
 await passo('código de rota não pode ter dois donos', async () => {
+  await secao(g, 'rotas');
   const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
   const beta = opcoes.find(([, t]) => t === 'Transportadora Beta');
   await g.selectOption('#r-transportadora', beta[0]);
@@ -232,6 +246,7 @@ await passo('código de rota não pode ter dois donos', async () => {
 
 // ---- acessos: o gestor cria e administra quem entra, sem e-mail no caminho
 await passo('gestor cria acesso sem senha e sem e-mail', async () => {
+  await secao(g, 'pessoas');
   await g.fill('#u-nome', 'Marcos Ajudante');
   await g.fill('#u-login', 'marcos');
   await g.fill('#u-funcao', 'Ajudante');
@@ -268,6 +283,7 @@ await passo('quem foi cadastrado hoje entra hoje', async () => {
 });
 
 await passo('editar acesso pelo mesmo formulário', async () => {
+  await secao(g, 'pessoas');
   await g.click('#lista-usuarios button[data-editar]>>nth=0');
   await g.waitForTimeout(200);
   if ((await g.textContent('#u-salvar')).trim() !== 'Salvar') throw new Error('form não entrou em edição');
@@ -281,6 +297,7 @@ await passo('editar acesso pelo mesmo formulário', async () => {
 });
 
 await passo('redefinir senha devolve a escolha para a pessoa', async () => {
+  await secao(g, 'pessoas');
   const linhas = await g.$$('#lista-usuarios tbody tr');
   let alvo = null;
   for (const linha of linhas) {
@@ -298,6 +315,7 @@ await passo('gestor troca a própria senha na tela', async () => {
   // O acesso nasce com uma senha provisória que alguém entregou na mão. Trocar
   // sozinho, sem pedir nada a ninguém, é o que faz essa senha deixar de rodar
   // pela operação.
+  await secao(g, 'pessoas');
   const linhas = await g.$$('#lista-usuarios tbody tr');
   let minha = null;
   for (const linha of linhas) {
@@ -323,6 +341,7 @@ await passo('gestor troca a própria senha na tela', async () => {
 });
 
 await passo('gestor não consegue tirar o próprio acesso', async () => {
+  await secao(g, 'pessoas');
   const linhas = await g.$$('#lista-usuarios tbody tr');
   let alvo = null;
   for (const linha of linhas) {

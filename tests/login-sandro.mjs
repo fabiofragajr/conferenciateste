@@ -32,6 +32,18 @@ const novoAparelho = async (arquivo, viewport = { width: 1440, height: 900 }) =>
   return { ctx, p };
 };
 
+/**
+ * No celular o menu do painel é gaveta, e "Abrir bipagem" mora no rodapé dela:
+ * o caminho até a câmera passa por abrir o menu.
+ */
+const abrirBipagem = async (p) => {
+  if (!(await p.isVisible('#btn-bipar'))) {
+    await p.click('.p-hamburguer');
+    await p.waitForSelector('.p-lateral.aberta', { timeout: 8000 });
+  }
+  await p.click('#btn-bipar');
+};
+
 await passo('sandro entra no painel do gestor', async () => {
   const { ctx, p } = await novoAparelho('gestor.html');
   await entrar(p, 'sandro');
@@ -85,7 +97,7 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   await entrar(p, 'sandro');
   await p.waitForURL(/gestor\.html/, { timeout: 8000 });
 
-  await p.click('#btn-bipar');
+  await abrirBipagem(p);
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
   await p.click('.grupo-btn >> nth=0');
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
@@ -113,7 +125,7 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
 
   // A sessão continua ABERTA: o boot precisa devolver o caminho de volta ao
   // painel, não só a câmera — senão a única saída visível vira "Encerrar".
-  await p.click('#btn-bipar');
+  await abrirBipagem(p);
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
   if (!(await p.isVisible('#btn-painel-bip'))) throw new Error('gestor voltou pra bipagem sem caminho de volta');
   await ctx.close();

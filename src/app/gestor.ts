@@ -18,6 +18,7 @@ import {
   ETIQUETAS, etiquetaTexto, pedidosIncompletos, pendenciasDaCarga, prefixoRota
 } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
+import { montarShell, type ItemMenu, type Shell } from '../lib/painel-shell.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -47,6 +48,19 @@ let base: Base = {
 };
 let dispositivos: Dispositivo[] = [];
 let relatorioAberto: DadosRelatorio | null = null;
+let shell: Shell | null = null;
+
+const MENU: ItemMenu[] = [
+  { id: 'hoje', rotulo: 'Hoje', grupo: 'Operação' },
+  { id: 'conferencias', rotulo: 'Conferências', grupo: 'Operação' },
+  { id: 'ocorrencias', rotulo: 'Ocorrências', grupo: 'Operação' },
+  { id: 'desempenho', rotulo: 'Desempenho', grupo: 'Análise' },
+  { id: 'diretor', rotulo: 'Visão do diretor', grupo: 'Análise', href: 'diretor.html' },
+  { id: 'pessoas', rotulo: 'Pessoas', grupo: 'Cadastros' },
+  { id: 'transportadoras', rotulo: 'Transportadoras', grupo: 'Cadastros' },
+  { id: 'rotas', rotulo: 'Códigos de rota', grupo: 'Cadastros' },
+  { id: 'sincronizacao', rotulo: 'Sincronização', grupo: 'Sistema' }
+];
 
 async function carregar(): Promise<void> {
   const [usuarios, transportadoras, rotas, sessoes, leituras, ocorrencias] = await Promise.all([
@@ -112,8 +126,7 @@ const elLogin = {
   form: $<HTMLFormElement>('#form-login'),
   login: $<HTMLInputElement>('#in-login'),
   senha: $<HTMLInputElement>('#in-senha'),
-  erro: $('#login-erro'),
-  usuario: $('#p-usuario')
+  erro: $('#login-erro')
 };
 
 elLogin.form.addEventListener('submit', async (ev) => {
@@ -134,11 +147,6 @@ elLogin.form.addEventListener('submit', async (ev) => {
   await iniciarPainel();
 });
 
-$('#btn-sair').addEventListener('click', () => {
-  auth.sair();
-  location.reload();
-});
-
 /* ---------------------------------------------------------------- boot --- */
 
 async function boot(): Promise<void> {
@@ -146,12 +154,16 @@ async function boot(): Promise<void> {
   sync.iniciarAuto();
 
   sync.aoMudarSync((estado) => {
-    const chip = $('#chip-sync');
-    chip.textContent = !estado.configurado
-      ? `${estado.pendentes} só no aparelho`
-      : estado.pendentes === 0 ? 'Tudo sincronizado' : `${estado.pendentes} na fila`;
-    chip.classList.toggle('sync-pendente', estado.pendentes > 0);
-    chip.classList.toggle('sync-ok', estado.pendentes === 0 && estado.configurado);
+    // O chip vive na barra do shell, que só nasce depois do login: antes disso
+    // não há onde escrever, e sync não pode explodir por causa da tela.
+    const chip = document.querySelector('#chip-sync');
+    if (chip) {
+      chip.textContent = !estado.configurado
+        ? `${estado.pendentes} só no aparelho`
+        : estado.pendentes === 0 ? 'Tudo sincronizado' : `${estado.pendentes} na fila`;
+      chip.classList.toggle('sync-pendente', estado.pendentes > 0);
+      chip.classList.toggle('sync-ok', estado.pendentes === 0 && estado.configurado);
+    }
     pintarFila(estado.ultimoErro, estado.pendentes, estado.configurado, estado.ultimoEnvio);
   });
 
@@ -168,9 +180,19 @@ async function boot(): Promise<void> {
 }
 
 async function iniciarPainel(): Promise<void> {
+  shell = montarShell(MENU, {
+    titulo: 'Painel do gestor',
+    usuario: usuario ? `${usuario.nome} • gestor` : '',
+    inicial: 'hoje'
+  });
+
+  $('#btn-sair').addEventListener('click', () => {
+    auth.sair();
+    location.reload();
+  });
+
   elLogin.bloqueio.hidden = true;
   elLogin.conteudo.hidden = false;
-  elLogin.usuario.textContent = usuario ? `${usuario.nome} • gestor` : '';
 
   const hoje = new Date();
   const trintaDias = new Date(hoje.getTime() - 29 * 86400000);
@@ -208,6 +230,15 @@ function pintarAgora(): void {
   const divergentes = leiturasHoje.filter((l) => l.status === 'ROTA_DIVERGENTE');
 
   pintarAtencao(leiturasHoje);
+
+  // Com o painel em seções, a faixa abaixo deixa de estar sempre na tela. O
+  // badge e a faixa do shell recolocam o alarme em toda seção — inclusive em
+  // Cadastros, onde ninguém iria procurar por ele.
+  shell?.definirBadge('hoje', divergentes.length);
+  shell?.definirAlerta(divergentes.length
+    ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
+       Não podem embarcar — <a href="#hoje">ver quais são</a>.`
+    : null);
 
   // A divergência vem antes de tudo, sem filtro, sem clique.
   $('#faixa-divergencia').innerHTML = divergentes.length
@@ -283,12 +314,14 @@ function pintarAtencao(leiturasHoje: Leitura[]): void {
 
   const aguardando = base.sessoes.filter((s) => s.status === 'ENCERRADA' && !s.liberadaEm
     && dentro(s.inicio, limitesDoDia().inicio, limitesDoDia().fim)).length;
-  if (aguardando) itens.push({ texto: `${aguardando} carga(s) aguardando liberação`, alvo: '#tabela-sessoes' });
+  // Aviso que mora em outra seção leva ao item de menu, não ao id do cartão:
+  // rolar até um elemento escondido não mostra nada.
+  if (aguardando) itens.push({ texto: `${aguardando} carga(s) aguardando liberação`, alvo: '#conferencias' });
 
   const paradas = dispositivos.filter((d) => d.pendentes > 0);
   if (paradas.length) {
     const total = paradas.reduce((n, d) => n + d.pendentes, 0);
-    itens.push({ texto: `${total} leitura(s) ainda num aparelho sem sincronizar`, alvo: '#dispositivos' });
+    itens.push({ texto: `${total} leitura(s) ainda num aparelho sem sincronizar`, alvo: '#sincronizacao' });
   }
 
   $('#atencao').innerHTML = itens.length

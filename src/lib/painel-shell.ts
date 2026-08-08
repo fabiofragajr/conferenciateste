@@ -49,6 +49,10 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
         </a>`).join('')}
     </div>`).join('');
 
+  // A grade com lateral só vale onde o menu existe: o painel do diretor divide
+  // esta folha de estilo e ainda usa o cabeçalho antigo, sem gaveta.
+  document.body.classList.add('p-com-menu');
+
   document.body.insertAdjacentHTML('afterbegin', `
     <header class="p-topo">
       <button class="p-hamburguer" type="button" aria-expanded="false" aria-label="Abrir menu">
@@ -144,12 +148,18 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
       if (!b) return;
       b.textContent = String(n);
       b.hidden = n <= 0;
+
+      // O badge da barra repete o da seção inicial: com a gaveta fechada, ele é
+      // a única coisa que denuncia problema sem a pessoa abrir o menu.
+      if (id !== op.inicial) return;
+      const topo = document.querySelector<HTMLElement>('[data-badge-topo]');
+      if (!topo) return;
+      topo.textContent = String(n);
+      topo.hidden = n <= 0;
     },
     definirAlerta: (html) => {
       alerta.innerHTML = html ?? '';
       alerta.hidden = !html;
-      const topo = document.querySelector<HTMLElement>('[data-badge-topo]');
-      if (topo) topo.hidden = !html;
     }
   };
 }
