@@ -112,8 +112,9 @@ await passo('encerrar gera relatório com alerta de divergência', async () => {
 
 await p.screenshot({ path: 'tests/saida/tela-relatorio.png', fullPage: true });
 
-// ---- painel do gestor
+// ---- painel do gestor (é tela de desktop, ao contrário do app de bipagem)
 const g = await ctx.newPage();
+await g.setViewportSize({ width: 1440, height: 900 });
 g.on('console', (m) => { if (m.type() === 'error') erros.push(`[gestor] ${m.text()}`); });
 g.on('pageerror', (e) => erros.push(`[gestor pageerror] ${e.message}`));
 await g.goto(`${BASE}/gestor.html`);
@@ -144,8 +145,10 @@ await passo('detalhe da sessão abre com mapa', async () => {
   await g.click('#tabela-sessoes button[data-sessao]');
   await g.waitForSelector('#gaveta:not([hidden])', { timeout: 5000 });
   if (!/Dispersão das bipagens/.test(await g.innerHTML('#gaveta-mapa'))) throw new Error('mapa ausente');
-  await g.screenshot({ path: 'tests/saida/tela-gestor.png', fullPage: true });
+  await g.screenshot({ path: 'tests/saida/tela-sessao.png', fullPage: true });
   await g.click('#gaveta-fechar');
+  await g.waitForTimeout(200);
+  await g.screenshot({ path: 'tests/saida/tela-gestor.png', fullPage: true });
 });
 
 await passo('cadastro de grupo de rota', async () => {
@@ -158,6 +161,7 @@ await passo('cadastro de grupo de rota', async () => {
 
 // ---- painel do diretor
 const d = await ctx.newPage();
+await d.setViewportSize({ width: 1440, height: 900 });
 d.on('console', (m) => { if (m.type() === 'error') erros.push(`[diretor] ${m.text()}`); });
 d.on('pageerror', (e) => erros.push(`[diretor pageerror] ${e.message}`));
 await d.goto(`${BASE}/diretor.html`);
@@ -168,6 +172,9 @@ await passo('painel do diretor mostra indicadores e tendência', async () => {
   if (!/Taxa de divergência de rota/.test(kpis)) throw new Error('KPI ausente');
   if (!/informe as cargas previstas/.test(kpis)) throw new Error('cobertura deveria pedir o número');
   if (!/svg/.test(await d.innerHTML('#tendencias'))) throw new Error('gráficos de tendência ausentes');
+  // painel largo não pode ter barra de rolagem horizontal no corpo
+  const estoura = await d.evaluate(() => document.body.scrollWidth > window.innerWidth + 1);
+  if (estoura) throw new Error('corpo do painel rola na horizontal');
   await d.screenshot({ path: 'tests/saida/tela-diretor.png', fullPage: true });
 });
 
