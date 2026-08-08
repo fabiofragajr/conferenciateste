@@ -348,7 +348,8 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 }
 .p-badge[hidden] { display: none; }
 
-/* faixa que acompanha TODA seção enquanto houver divergência no dia */
+/* faixa que acompanha as DEMAIS seções enquanto houver divergência no dia
+   (em Hoje ela se cala: lá o alarme já é o conteúdo da tela) */
 .p-alerta-fixo {
   border: 2px solid var(--div);
   background: rgba(220, 38, 38, .08);

@@ -232,13 +232,14 @@ function pintarAgora(): void {
   pintarAtencao(leiturasHoje);
 
   // Com o painel em seções, a faixa abaixo deixa de estar sempre na tela. O
-  // badge e a faixa do shell recolocam o alarme em toda seção — inclusive em
-  // Cadastros, onde ninguém iria procurar por ele.
+  // badge e a faixa do shell recolocam o alarme nas demais seções — inclusive em
+  // Cadastros, onde ninguém iria procurar por ele. Em Hoje a faixa do shell se
+  // cala: o alarme já está aqui, com os volumes na frente do gestor.
   shell?.definirBadge('hoje', divergentes.length);
   shell?.definirAlerta(divergentes.length
     ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
        Não podem embarcar — <a href="#hoje">ver quais são</a>.`
-    : null);
+    : null, { redundanteEm: 'hoje' });
 
   // A divergência vem antes de tudo, sem filtro, sem clique.
   $('#faixa-divergencia').innerHTML = divergentes.length

@@ -26,16 +26,131 @@ const passo = async (nome, fn) => {
   catch (e) { console.log('FALHA -', nome, '\n     ', e.message); falhou = true; }
 };
 
-const painelAberto = async (viewport = { width: 1440, height: 900 }) => {
+const painelAberto = async (viewport = { width: 1440, height: 900 }, semear = null) => {
   const ctx = await navegador.newContext({ viewport, locale: 'pt-BR' });
   const p = await ctx.newPage();
   await prepararAparelho(p, BASE, 'gestor.html');
+  if (semear) await semear(p);
   await entrar(p, 'sandro');
   await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
   return { ctx, p };
 };
 
 const SECOES = ['conferencias', 'ocorrencias', 'desempenho', 'pessoas', 'transportadoras', 'rotas', 'sincronizacao'];
+
+/** Duas, e não uma: badge com "2" não passa por acaso, badge com "1" passaria. */
+const DIVERGENCIAS = 2;
+
+/**
+ * Divergência de hoje gravada direto na base do aparelho.
+ *
+ * Aqui se prova a moldura, não a conferência — essa já tem teste próprio em
+ * `e2e`. Bipar pela câmera só para acender o badge custaria meio minuto de
+ * teste e traria a tela do operador junto.
+ */
+const semearDivergencia = async (pagina) => {
+  await pagina.evaluate(async (quantas) => {
+    const agora = new Date().toISOString();
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok, falhou) => {
+      req.onsuccess = () => ok(req.result);
+      req.onerror = () => falhou(req.error);
+    });
+
+    const sincronizavel = { sync: 'PENDENTE', syncTentativas: 0, syncErro: null, atualizadoEm: agora };
+    const sessao = {
+      ...sincronizavel,
+      id: 'sessao-com-divergencia',
+      transportadoraId: '00000000-0000-4000-8000-000000000010',
+      usuarioId: '00000000-0000-4000-8000-000000000002',
+      inicio: agora,
+      fim: agora,
+      status: 'ENCERRADA',
+      transportadoraNome: 'LOGDIS',
+      rotas: ['FNOR'],
+      usuarioNome: 'Ana Paula',
+      geoInicio: null,
+      geoFim: null,
+      liberadaEm: null,
+      liberadaPor: null,
+      liberadaComPendencias: false
+    };
+
+    // Caixa da Transportadora Sul na carga da LOGDIS: é a divergência que o
+    // painel precisa gritar de qualquer seção.
+    const leitura = (n) => ({
+      ...sincronizavel,
+      id: `leitura-divergente-${n}`,
+      sessaoId: sessao.id,
+      codigoVolume: `EMB000839999${n}`,
+      rota: 'FSUL 200',
+      rotaPrefixo: 'FSUL',
+      rotaId: '00000000-0000-4000-8000-000000000021',
+      transportadoraDonaId: '00000000-0000-4000-8000-000000000011',
+      transportadoraDonaNome: 'Transportadora Sul',
+      volume: '0001/0001',
+      volumeAtual: 1,
+      volumeTotal: 1,
+      pedido: `8694557${n}`,
+      status: 'ROTA_DIVERGENTE',
+      timestamp: agora,
+      rawData: `EMB000839999${n};FSUL 200;0001/0001;8694557${n}`,
+      origem: 'MANUAL',
+      motivoInvalido: null,
+      dispositivoId: 'aparelho-de-teste',
+      lat: null,
+      lng: null,
+      precisaoMetros: null,
+      geoStatus: 'INDISPONIVEL'
+    });
+
+    await new Promise((ok, falhou) => {
+      const tx = bd.transaction(['sessoes', 'leituras'], 'readwrite');
+      tx.objectStore('sessoes').put(sessao);
+      for (let n = 1; n <= quantas; n++) tx.objectStore('leituras').put(leitura(n));
+      tx.oncomplete = ok;
+      tx.onerror = () => falhou(tx.error);
+    });
+
+    bd.close();
+  }, DIVERGENCIAS);
+};
+
+const irParaSecao = async (p, id) => {
+  await p.click(`.p-item[href="#${id}"]`);
+  await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
+};
+
+await passo('em Hoje o alarme não aparece duas vezes', async () => {
+  const { ctx, p } = await painelAberto(undefined, semearDivergencia);
+  await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
+
+  // A faixa fixa é para quem está longe do alarme. Em Hoje o gestor está nele,
+  // com a tabela dos volumes divergentes na frente: repetir o aviso aqui ensina
+  // a ignorar a faixa nas seções onde ela é a única notícia do problema.
+  if (await p.isVisible('.p-alerta-fixo')) throw new Error('o alarme apareceu duas vezes em Hoje');
+  if (!(await p.isVisible('#faixa-divergencia'))) throw new Error('a divergência sumiu da própria seção Hoje');
+
+  for (const id of ['transportadoras', 'sincronizacao']) {
+    await irParaSecao(p, id);
+    if (!(await p.isVisible('.p-alerta-fixo'))) throw new Error(`${id}: longe de Hoje, o alarme sumiu`);
+  }
+  await ctx.close();
+});
+
+await passo('o badge de divergência acompanha toda seção, inclusive Hoje', async () => {
+  const { ctx, p } = await painelAberto(undefined, semearDivergencia);
+  await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
+
+  // O badge é a contagem, não a repetição do aviso: ele fica mesmo em Hoje.
+  for (const id of ['hoje', 'transportadoras', 'sincronizacao']) {
+    await irParaSecao(p, id);
+    if (!(await p.isVisible('[data-badge="hoje"]'))) throw new Error(`${id}: badge escondido`);
+    const n = (await p.textContent('[data-badge="hoje"]')).trim();
+    if (n !== String(DIVERGENCIAS)) throw new Error(`${id}: badge diz ${n}, e são ${DIVERGENCIAS}`);
+  }
+  await ctx.close();
+});
 
 await passo('cada item do menu mostra sua seção e escreve o hash', async () => {
   const { ctx, p } = await painelAberto();

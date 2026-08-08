@@ -6,7 +6,9 @@
 //
 // A regra que justifica o badge e a faixa: com menu, a divergência do dia
 // passaria a viver atrás de um item — e divergência escondida é exatamente o
-// que este sistema existe para evitar.
+// que este sistema existe para evitar. A faixa se cala na seção que já mostra o
+// alarme inteiro (ver `redundanteEm`); o badge, nunca — ele é a contagem, e
+// contagem não é aviso repetido.
 
 import { $, $$, esc } from './util.js';
 
@@ -26,12 +28,21 @@ export interface OpcoesShell {
   inicial: string;
 }
 
+export interface OpcoesAlerta {
+  /**
+   * Seção onde a faixa é redundante: ela se cala enquanto essa seção estiver
+   * visível. A faixa existe para quem está LONGE do alarme — dentro da seção
+   * que já mostra o problema inteiro, o aviso repetido só ensina a ignorá-lo.
+   */
+  redundanteEm?: string;
+}
+
 export interface Shell {
   aoTrocarSecao(fn: (id: string) => void): void;
   irPara(id: string): void;
   secaoAtual(): string;
   definirBadge(id: string, n: number): void;
-  definirAlerta(html: string | null): void;
+  definirAlerta(html: string | null, op?: OpcoesAlerta): void;
 }
 
 export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
@@ -105,7 +116,20 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
 
   const ehSecao = (id: string): boolean => secoes.some((s) => s.id === id);
 
+  // Quem decide se a faixa aparece é a seção visível, não quem chama
+  // `definirAlerta` — o painel repinta a cada 15s e trocaria de seção no meio.
+  let visivel = op.inicial;
+  let alertaHtml: string | null = null;
+  let alertaRedundanteEm: string | undefined;
+
+  const pintarAlerta = (): void => {
+    alerta.innerHTML = alertaHtml ?? '';
+    alerta.hidden = !alertaHtml || alertaRedundanteEm === visivel;
+  };
+
   const mostrar = (id: string): void => {
+    visivel = id;
+    pintarAlerta();
     for (const secao of $$<HTMLElement>('[data-secao]')) {
       secao.hidden = secao.dataset.secao !== id;
     }
@@ -142,7 +166,7 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
       if (location.hash.slice(1) === id) mostrar(id);
       else location.hash = id;
     },
-    secaoAtual: atual,
+    secaoAtual: () => visivel,
     definirBadge: (id, n) => {
       const b = document.querySelector<HTMLElement>(`[data-badge="${id}"]`);
       if (!b) return;
@@ -157,9 +181,10 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
       topo.textContent = String(n);
       topo.hidden = n <= 0;
     },
-    definirAlerta: (html) => {
-      alerta.innerHTML = html ?? '';
-      alerta.hidden = !html;
+    definirAlerta: (html, opAlerta) => {
+      alertaHtml = html;
+      alertaRedundanteEm = opAlerta?.redundanteEm;
+      pintarAlerta();
     }
   };
 }
