@@ -190,10 +190,36 @@ export async function redefinirSenha(id: string): Promise<Usuario> {
   return novo;
 }
 
-export async function entrar(
-  login: string,
-  senha: string
-): Promise<{ ok: true; usuario: Usuario; primeiroAcesso?: boolean } | { ok: false; erro: string }> {
+type Resultado =
+  | { ok: true; usuario: Usuario; primeiroAcesso?: boolean }
+  | { ok: false; erro: string };
+
+/**
+ * Entra, e se não der, busca o cadastro e tenta uma segunda vez.
+ *
+ * A mesma pessoa usa mais de um aparelho, e a senha vive no cadastro: ela pode
+ * ter sido definida no celular e estar sendo usada no desktop, ou trocada pelo
+ * gestor cinco minutos atrás. O aparelho que ainda não sincronizou recusaria a
+ * senha certa e mandaria a pessoa procurar um erro que não existe.
+ *
+ * A segunda tentativa só acontece quando a primeira falha — o caminho normal
+ * continua sem tocar na rede, que é o que faz o login funcionar no galpão sem
+ * sinal.
+ */
+export async function entrar(login: string, senha: string): Promise<Resultado> {
+  const primeira = await tentarEntrar(login, senha);
+  if (primeira.ok) return primeira;
+
+  // Inativo é decisão do gestor, não desencontro de cadastro: não insiste.
+  if (primeira.erro.startsWith('Usuário inativo')) return primeira;
+
+  const sync = await import('./sync.js');
+  if (!(await sync.baixarCadastroAgora())) return primeira;
+
+  return tentarEntrar(login, senha);
+}
+
+async function tentarEntrar(login: string, senha: string): Promise<Resultado> {
   const u = await buscarPorLogin(login);
   if (!u) return { ok: false, erro: 'Login ou senha incorretos.' };
   if (!u.ativo) return { ok: false, erro: 'Usuário inativo. Procure o gestor.' };

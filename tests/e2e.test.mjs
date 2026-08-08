@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
-import { prepararAparelho, isolarDaProducao, entrar as fazerLogin } from './cadastro.mjs';
+import { prepararAparelho, isolarDaProducao, entrar as fazerLogin, SENHA as SENHA_ANTIGA } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -167,6 +167,7 @@ await passo('painel do gestor exige gestor e mostra divergência do dia', async 
   await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
   await fazerLogin(g, 'sandro');
   await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+  await g.waitForSelector('#lista-usuarios button[data-editar]', { timeout: 10000 });
   const faixa = await g.innerHTML('#faixa-divergencia');
   if (!/outra rota hoje/.test(faixa)) throw new Error('faixa de divergência não apareceu');
   const oc = await g.innerHTML('#oc-lista');
@@ -287,6 +288,34 @@ await passo('redefinir senha devolve a escolha para a pessoa', async () => {
   }
 });
 
+await passo('gestor troca a própria senha na tela', async () => {
+  // O acesso nasce com uma senha provisória que alguém entregou na mão. Trocar
+  // sozinho, sem pedir nada a ninguém, é o que faz essa senha deixar de rodar
+  // pela operação.
+  const linhas = await g.$$('#lista-usuarios tbody tr');
+  let minha = null;
+  for (const linha of linhas) {
+    if (/sandro/.test(await linha.innerHTML())) minha = linha;
+  }
+  if (!minha) throw new Error('o gestor não se encontra na lista');
+  await (await minha.$('button[data-editar]')).click();
+  await g.waitForTimeout(200);
+
+  await g.fill('#u-senha', 'nova-senha-do-sandro');
+  await g.click('#u-salvar');
+  await g.waitForTimeout(500);
+
+  await g.click('#btn-sair');
+  await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
+
+  await fazerLogin(g, 'sandro', SENHA_ANTIGA);
+  await g.waitForSelector('#login-erro:not([hidden])', { timeout: 5000 });
+  if (await g.isVisible('#conteudo:not([hidden])')) throw new Error('a senha antiga ainda entra');
+
+  await fazerLogin(g, 'sandro', 'nova-senha-do-sandro');
+  await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+});
+
 await passo('gestor não consegue tirar o próprio acesso', async () => {
   const linhas = await g.$$('#lista-usuarios tbody tr');
   let alvo = null;
@@ -316,6 +345,13 @@ await d.goto(`${BASE}/diretor.html`);
 
 await passo('painel do diretor mostra indicadores e tendência', async () => {
   await d.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+  // `#conteudo` aparece antes de os blocos pintarem: espera o conteúdo, não a
+  // caixa vazia. Sem isto o teste falha uma vez a cada tantas rodadas.
+  await d.waitForFunction(
+    () => (document.querySelector('#kpis')?.textContent ?? '').includes('Taxa de divergência'),
+    null,
+    { timeout: 10000 }
+  );
   const kpis = await d.innerHTML('#kpis');
   if (!/Taxa de divergência de rota/.test(kpis)) throw new Error('KPI ausente');
   if (!/informe as cargas previstas/.test(kpis)) throw new Error('cobertura deveria pedir o número');

@@ -506,6 +506,23 @@ export function sincronizarEmSegundoPlano(): void {
 }
 
 /**
+ * Busca o cadastro agora, sem esperar o ciclo automático.
+ *
+ * Serve ao login: a mesma pessoa usa mais de um aparelho, e a senha pode ter
+ * sido definida ou trocada em outro — ou pelo gestor, no desktop. Sem isto, o
+ * celular recusaria a senha certa até a sincronização de fundo passar.
+ *
+ * Devolve `true` se conseguiu falar com a base, para quem chamou saber se vale
+ * tentar de novo.
+ */
+export async function baixarCadastroAgora(): Promise<boolean> {
+  if (!navigator.onLine || !(await estaConfigurado())) return false;
+  const r = await baixarCadastro();
+  if (!r.erro) estado.ultimaDescida = agora();
+  return !r.erro;
+}
+
+/**
  * Garante que este aparelho conhece o cadastro antes de pedir a senha.
  *
  * Não existe cadastro de exemplo: aparelho novo começa vazio e recebe pessoas,
