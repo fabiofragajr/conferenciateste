@@ -1,7 +1,12 @@
 # Repaginação do LOGDIS — fatia 1: a fundação
 
 Data: 2026-08-08
-Estado: aprovado (aguardando revisão do spec escrito)
+Estado: aprovado. Plano de implementação em `docs/superpowers/plans/2026-08-08-repaginacao-fundacao.md`.
+
+**Correção pós-aprovação:** o menu tinha 12 itens e deixava `pintarDesempenho`
+(`gestor.ts:619`) sem casa — volumes e taxa de divergência por pessoa e por rota, que é a
+terceira pergunta do CLAUDE.md §9. Ela não cabe em Indicadores, porque a §10 proíbe ranking
+de pessoas ali. Voltou como 13º item, em Análise.
 
 Cobre os itens **1, 2, 3, 4, 5, 18, 19 e 20** do pedido de repaginação de UX/UI. As demais
 fatias estão listadas na §11.
@@ -62,7 +67,7 @@ componente comum morar, então cada tela reinventa o seu.
 | `.html` antigos | Redirecionam `301` para a rota nova | O atalho salvo na tela do celular da doca continua abrindo |
 | Hospedagem | **Vercel/Netlify**, na raiz de um domínio | Confirmado com o usuário. Rewrite trivial e HTTPS incluído, que a câmera exige |
 | Painel do diretor | Vira a seção **Indicadores**, dentro do painel único | A palavra "diretor" some da interface; a leitura agregada continua existindo |
-| Menu | 12 itens em 4 grupos (§4.2) | `Divergências` e `Pedidos incompletos` ganham destino próprio: é para onde o drill-down leva |
+| Menu | 13 itens em 4 grupos (§4.2) | `Divergências` e `Pedidos incompletos` ganham destino próprio: é para onde o drill-down leva |
 | Celular do painel | **Barra inferior** de 5 abas + folha "Mais" | Zona do polegar; e o badge da divergência fica visível sem abrir nada |
 | Celular da operação | **Nenhuma navegação** | Quem está com caixa na mão não navega, bipa |
 | Linguagem visual | **Linhas, não caixas** — seção é título + régua | Densidade de sistema de gestão; menos cromo por bloco |
@@ -84,6 +89,7 @@ componente comum morar, então cada tela reinventa o seu.
 /painel/incompletos        destino do drill-down
 /painel/conferencias
 /painel/ocorrencias
+/painel/desempenho
 /painel/indicadores        o ex-painel do diretor
 /painel/mapa
 /painel/relatorios
@@ -140,7 +146,7 @@ conviverem sem virar dois produtos.
 
 | | Desktop (≥1024px) | Celular (<1024px) |
 |---|---|---|
-| **Painel** | Lateral fixa de 248px com 4 grupos e badge no item; cabeçalho de página; conteúdo em largura total | Topo compacto; conteúdo; **barra inferior** com 5 abas; "Mais" abre folha com os 8 itens restantes |
+| **Painel** | Lateral fixa de 248px com 4 grupos e badge no item; cabeçalho de página; conteúdo em largura total | Topo compacto; conteúdo; **barra inferior** com 5 abas; "Mais" abre folha com os 9 itens restantes |
 | **Operação** | Mesma tela do celular, centralizada com largura máxima | Topo de uma linha; sem navegação nenhuma |
 
 Barra inferior: **Início · Alertas · Conferências · Mapa · Mais**. `Alertas` leva a
@@ -158,6 +164,7 @@ navegador para absorver o entalhe.
 | Operação | Pedidos incompletos | `/painel/incompletos` | `#incompletos-hoje` |
 | Operação | Conferências | `/painel/conferencias` | `pintarHistorico`, `abrirGaveta` |
 | Operação | Ocorrências | `/painel/ocorrencias` | `pintarOcorrencias`, `pintarRecorrentes` |
+| Análise | Desempenho | `/painel/desempenho` | `pintarDesempenho` |
 | Análise | Indicadores | `/painel/indicadores` | `src/app/diretor.ts` inteiro |
 | Análise | Mapa | `/painel/mapa` | `renderMapa` |
 | Análise | Relatórios | `/painel/relatorios` | exportações CSV/PDF existentes |
@@ -166,7 +173,7 @@ navegador para absorver o entalhe.
 | Cadastros | Códigos de rota | `/painel/rotas` | `pintarCadastros` |
 | Sistema | Sincronização | `/painel/sincronizacao` | `pintarFila`, `pintarDispositivos` |
 
-**Nenhum item de menu é funcionalidade nova.** Todos os doze têm código escrito hoje. Esta
+**Nenhum item de menu é funcionalidade nova.** Todos os treze têm código escrito hoje. Esta
 fatia muda onde eles moram, como se navega até eles e como se parecem. É o que a torna
 executável sem risco para bipagem, sincronização e offline.
 
@@ -310,11 +317,17 @@ A ciência prévia continua na tela antes de entrar, que é o que o CLAUDE.md §
 já usa.
 
 `pageHeader` · `secao` · `tabela` · `kpis` · `alerta` · `badge` · `status` · `vazio` ·
-`esqueleto` · `filtros` · `botao` · `campo` · `selecao`
+`filtros` · `botao` · `campo` · `selecao`
+
+`esqueleto` (skeleton) e `Modal` ficam **fora desta fatia**, por motivos diferentes. O
+painel lê do IndexedDB, que responde em milissegundos: um esqueleto que pisca é pior que a
+tela aparecendo pronta. E `Modal` já existe e funciona nas três caixas do operador, que
+estão no caminho crítico da bipagem — o que esta fatia não toca (§9). Os dois entram na
+fatia 2, se as telas de lá pedirem.
 
 **Classes com ciclo de vida**, para o que tem comportamento:
 
-`Lateral` · `BarraInferior` · `Folha` (bottom sheet) · `Modal` · `Toast`
+`Lateral` · `BarraInferior` · `Folha` (bottom sheet) · `Toast`
 
 `tabela()` recebe a mesma chamada nos dois tamanhos e decide sozinha: tabela densa no desktop,
 linhas empilhadas no celular. É isso que impede a divergência entre as duas telas de nascer de
