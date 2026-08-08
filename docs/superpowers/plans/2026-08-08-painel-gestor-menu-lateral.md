@@ -44,6 +44,8 @@ Hoje `boot()` e o `submit` do login em `operador.ts` mandam todo mundo para a te
 - Modify: `src/app/operador.ts:145-219`
 - Modify: `src/app/gestor.ts:119-141`
 - Modify: `index.html:52-77` (cabeçalho da tela de transportadora), `index.html:80-92` (topo da bipagem)
+- Modify: `gestor.html:22` (id no link "Abrir bipagem")
+- Modify: `src/styles/app.css`
 - Test: `tests/login-sandro.mjs`
 
 - [ ] **Step 1: Escrever os testes que falham**
@@ -189,6 +191,12 @@ Em `index.html`, dentro de `<div class="bip-topo-acoes">` (linha 87-91), acresce
 
 ```html
         <button id="btn-painel-bip" class="chip-btn" hidden>Painel</button>
+```
+
+Em `gestor.html`, o link "Abrir bipagem" do cabeçalho (linha 22) ganha o id que o teste procura — o mesmo id que o shell vai usar na Task 6, para o teste continuar valendo depois:
+
+```html
+    <a class="btn btn-fantasma" id="btn-bipar" href="index.html">Abrir bipagem</a>
 ```
 
 Em `src/app/operador.ts`, no objeto `el` (linha 73), trocar `linkPainel` por:
