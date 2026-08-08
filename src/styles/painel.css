@@ -228,3 +228,28 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
   .p-topo { padding: 10px 12px; flex-wrap: wrap; }
   .p-topo .p-titulo-painel { border-left: 0; padding-left: 0; }
 }
+
+/* bloco de exceções: o painel não obriga o gestor a caçar problema */
+.p-atencao {
+  border: 2px solid var(--div);
+  background: rgba(220, 38, 38, .10);
+  border-radius: var(--raio);
+  padding: 14px 18px;
+  margin-bottom: 18px;
+}
+.p-atencao h3 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--div);
+}
+.p-atencao ul { margin: 0; padding-left: 18px; line-height: 1.8; }
+.p-atencao a { color: var(--texto); text-decoration: underline; text-underline-offset: 3px; }
+
+.chip-ok { background: rgba(22, 163, 74, .18); color: var(--ok); }
+.chip-alerta { background: rgba(220, 38, 38, .18); color: var(--div); }
+.chip-atencao { background: rgba(217, 119, 6, .18); color: var(--dup); }
+
+.p-acao-inline { display: inline-flex; gap: 6px; align-items: center; }
+.p-acao-inline select { min-width: 150px; min-height: 32px; font-size: 12px; padding: 4px 8px; }

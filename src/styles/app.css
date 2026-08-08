@@ -376,3 +376,22 @@
 @media (min-height: 780px) {
   #camera-area { flex-basis: 38vh; }
 }
+
+/* resumo do encerramento: pendência é o que decide se a carga pode sair */
+.enc-pendencias {
+  display: block;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(220, 38, 38, .12);
+  border: 1px solid var(--div);
+  line-height: 1.5;
+}
+.enc-ok {
+  display: block;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(22, 163, 74, .12);
+  border: 1px solid var(--ok);
+}

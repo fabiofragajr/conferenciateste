@@ -48,6 +48,7 @@
       <section class="p-secao">
         <h2>1. Tem algo errado agora?</h2>
 
+        <div id="atencao"></div>
         <div id="faixa-divergencia"></div>
 
         <div class="p-grade p-grade-2">
@@ -91,6 +92,15 @@
             <button id="btn-oc-csv" class="btn btn-secundario">Exportar CSV</button>
           </div>
           <div id="oc-lista" class="p-oc-lista"></div>
+        </div>
+
+        <div class="p-cartao" style="margin-top:16px">
+          <h3>Rotas lidas que ninguém cadastrou</h3>
+          <p class="p-vazio" style="padding-top:0">
+            O operador não decide a rota. Cada código aqui é uma caixa que ficou
+            parada esperando você dizer de quem ela é.
+          </p>
+          <div id="nao-mapeados"></div>
         </div>
 
         <div class="p-cartao" style="margin-top:16px">
@@ -182,19 +192,41 @@
           </div>
 
           <div class="p-cartao">
-            <h3>Grupos de rota</h3>
+            <h3>Transportadoras</h3>
             <p class="p-vazio" style="padding-top:0">
-              A comparação usa só o prefixo alfabético: cadastrando <code>FNOR</code>,
-              as leituras <code>FNOR 100</code> e <code>FNOR 15</code> entram no grupo.
+              É o que o operador escolhe antes de bipar. Cada código de rota
+              pertence a uma transportadora — e a uma só.
             </p>
-            <form id="form-grupo" class="p-filtros">
-              <div class="p-campo"><label for="g-nome">Nome do grupo</label><input id="g-nome" type="text" placeholder="Carga Norte" required /></div>
-              <div class="p-campo"><label for="g-rotas">Rotas (separadas por vírgula)</label><input id="g-rotas" type="text" placeholder="FNOR, FSUL" required /></div>
-              <div class="p-campo"><label for="g-transp">Transportadora <em>opcional</em></label><input id="g-transp" type="text" /></div>
+            <form id="form-transportadora" class="p-filtros">
+              <div class="p-campo"><label for="t-nome">Nome</label><input id="t-nome" type="text" placeholder="Transportadora Alfa" required /></div>
+              <div class="p-campo"><label for="t-cnpj">CNPJ <em>opcional</em></label><input id="t-cnpj" type="text" /></div>
+              <div class="p-campo"><label for="t-resp">Responsável <em>opcional</em></label><input id="t-resp" type="text" /></div>
+              <div class="p-campo"><label for="t-tel">Telefone <em>opcional</em></label><input id="t-tel" type="text" /></div>
               <button class="btn btn-primario" type="submit">Cadastrar</button>
             </form>
-            <p id="g-msg" class="erro" hidden></p>
-            <div id="lista-grupos" class="p-tab-wrap"></div>
+            <p id="t-msg" class="erro" hidden></p>
+            <div id="lista-transportadoras" class="p-tab-wrap"></div>
+          </div>
+
+          <div class="p-cartao">
+            <h3>Códigos de rota</h3>
+            <p class="p-vazio" style="padding-top:0">
+              Cadastre só o prefixo alfabético da etiqueta: com <code>FNOR</code>,
+              as leituras <code>FNOR 100</code> e <code>FNOR 15</code> casam com esta rota.
+              O mesmo código não pode existir em duas transportadoras.
+            </p>
+            <form id="form-rota" class="p-filtros">
+              <div class="p-campo"><label for="r-codigo">Código</label><input id="r-codigo" type="text" placeholder="FNOR" required /></div>
+              <div class="p-campo"><label for="r-nome">Nome da rota</label><input id="r-nome" type="text" placeholder="Mairiporã / Terra Preta" required /></div>
+              <div class="p-campo">
+                <label for="r-transportadora">Transportadora</label>
+                <select id="r-transportadora" required></select>
+              </div>
+              <div class="p-campo"><label for="r-descricao">Descrição <em>opcional</em></label><input id="r-descricao" type="text" /></div>
+              <button class="btn btn-primario" type="submit">Cadastrar</button>
+            </form>
+            <p id="r-msg" class="erro" hidden></p>
+            <div id="lista-rotas" class="p-tab-wrap"></div>
           </div>
         </div>
       </section>
@@ -225,6 +257,15 @@
           <div class="p-cartao">
             <h3>Fila local</h3>
             <div id="fila-status"></div>
+          </div>
+
+          <div class="p-cartao">
+            <h3>Aparelhos em operação</h3>
+            <p class="p-vazio" style="padding-top:0">
+              Aparelho com leitura pendente significa que o número desta tela
+              ainda não está completo.
+            </p>
+            <div id="dispositivos" class="p-tab-wrap"></div>
           </div>
         </div>
       </section>

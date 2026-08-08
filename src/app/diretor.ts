@@ -229,7 +229,7 @@ function pintarConcentracao(): void {
   const porTransp = new Map<string, { total: number; graves: number; conferencias: Set<string> }>();
   for (const o of r.ocorrencias) {
     const s = porSessao.get(o.sessaoId);
-    const chave = s?.transportadora || s?.grupoNome || 'Sem identificação';
+    const chave = s?.transportadoraNome || 'Sem identificação';
     const a = porTransp.get(chave) ?? { total: 0, graves: 0, conferencias: new Set<string>() };
     a.total++;
     if (o.grave) a.graves++;
@@ -287,7 +287,7 @@ function pintarGraves(): void {
   alvo.innerHTML = graves.length
     ? graves.map((o) => {
         const s = r.sessoes.find((x) => x.id === o.sessaoId);
-        const onde = s?.transportadora || s?.grupoNome || '';
+        const onde = s?.transportadoraNome ?? '';
         return cardOcorrencia(o, `<div class="rel-oc-local">${esc(onde)}</div>`);
       }).join('')
     : '<p class="p-vazio">Nenhuma ocorrência registrada no mês.</p>';
@@ -353,7 +353,7 @@ async function exportarPDFPeriodo(): Promise<void> {
     const s = r.sessoes.find((x) => x.id === o.sessaoId);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(...DIV);
-    doc.text(`${MOMENTO_ROTULO[o.momento]} — ${s?.transportadora || s?.grupoNome || ''} — ${dataHora(o.timestamp)}`, 14, y);
+    doc.text(`${MOMENTO_ROTULO[o.momento]} — ${s?.transportadoraNome ?? ''} — ${dataHora(o.timestamp)}`, 14, y);
     doc.setTextColor(0, 0, 0);
     doc.setFont('helvetica', 'normal');
     y += 4.4;

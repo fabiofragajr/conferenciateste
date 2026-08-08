@@ -5,7 +5,7 @@
 // `funcao` é texto descritivo para o relatório — nunca libera nem bloqueia nada.
 // A única regra de acesso do sistema é `gestor: true` (abre os painéis).
 
-import type { GrupoRota, Usuario } from '../types.js';
+import type { Rota, Transportadora, Usuario } from '../types.js';
 import * as db from './db.js';
 import { novoSync } from './db.js';
 
@@ -117,10 +117,26 @@ export async function atualizarUsuario(
   return novo;
 }
 
-export async function entrar(login: string, senha: string): Promise<{ ok: true; usuario: Usuario } | { ok: false; erro: string }> {
+export async function entrar(
+  login: string,
+  senha: string
+): Promise<{ ok: true; usuario: Usuario; primeiroAcesso?: boolean } | { ok: false; erro: string }> {
   const u = await buscarPorLogin(login);
   if (!u) return { ok: false, erro: 'Login ou senha incorretos.' };
   if (!u.ativo) return { ok: false, erro: 'Usuário inativo. Procure o gestor.' };
+
+  // Usuário que desceu do servidor chega sem senha: o hash nunca trafega.
+  // A primeira senha digitada neste aparelho passa a ser a senha dele aqui.
+  if (!u.senhaHash) {
+    if (senha.length < 4) {
+      return { ok: false, erro: 'Primeiro acesso neste aparelho: escolha uma senha com 4 ou mais caracteres.' };
+    }
+    const comSenha = { ...u, senhaHash: await gerarSenhaHash(senha) };
+    await db.salvar('usuarios', comSenha);
+    localStorage.setItem(CHAVE_SESSAO, u.id);
+    return { ok: true, usuario: comSenha, primeiroAcesso: true };
+  }
+
   if (!(await conferirSenha(senha, u.senhaHash))) return { ok: false, erro: 'Login ou senha incorretos.' };
   localStorage.setItem(CHAVE_SESSAO, u.id);
   return { ok: true, usuario: u };
@@ -172,12 +188,30 @@ export async function garantirSeed(): Promise<{ criou: boolean }> {
       });
     }
 
-    const grupos = await db.todos('grupos');
-    if (grupos.length === 0) {
-      const modelo = (nome: string, rotas: string[]): GrupoRota => ({
-        ...novoSync(), nome, rotas, transportadora: '', ativo: true
+    // Uma transportadora de exemplo com as duas rotas conhecidas, para o app
+    // não abrir num beco sem saída antes do primeiro cadastro do gestor.
+    const transportadoras = await db.todos('transportadoras');
+    if (transportadoras.length === 0) {
+      const transportadora: Transportadora = {
+        ...novoSync(),
+        nome: 'LOGDIS',
+        cnpj: '',
+        responsavel: '',
+        telefone: '',
+        email: '',
+        ativo: true
+      };
+      await db.salvar('transportadoras', transportadora);
+
+      const rota = (codigo: string, nome: string): Rota => ({
+        ...novoSync(),
+        codigo,
+        nome,
+        transportadoraId: transportadora.id,
+        descricao: '',
+        ativo: true
       });
-      await db.salvarVarios('grupos', [modelo('Carga Norte', ['FNOR']), modelo('Carga Sul', ['FSUL'])]);
+      await db.salvarVarios('rotas', [rota('FNOR', 'Carga Norte'), rota('FSUL', 'Carga Sul')]);
     }
   });
 

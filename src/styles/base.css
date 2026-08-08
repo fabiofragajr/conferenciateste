@@ -22,6 +22,7 @@
   /* ------------------------------------------------------- operação --- */
   --ok: #16a34a;
   --div: #dc2626;
+  --mapa: #ea580c;
   --dup: #d97706;
   --inv: #6b7280;
 
@@ -47,6 +48,7 @@
    pequeno). Sem isso, "duplicado" branco sobre âmbar some sob luz de galpão. */
 .st-ok  { --cor-status: var(--ok);  --tinta-status: var(--texto); }
 .st-div { --cor-status: var(--div); --tinta-status: #fff; }
+.st-mapa { --cor-status: var(--mapa); --tinta-status: #fff; }
 .st-dup { --cor-status: var(--dup); --tinta-status: var(--texto); }
 .st-inv { --cor-status: var(--inv); --tinta-status: #fff; }
 

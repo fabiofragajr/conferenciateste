@@ -20,7 +20,8 @@ await p.goto(`${BASE}/index.html`);
 await p.fill('#in-login', 'operador');
 await p.fill('#in-senha', 'operador');
 await p.click('#form-login button[type=submit]');
-await p.waitForSelector('#view-grupo:not([hidden])');
+// Com uma transportadora só, o app pula a escolha e já abre a câmera.
+await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])');
 
 await passo('service worker registrado (precache do PWA)', async () => {
   await p.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 });
@@ -29,16 +30,18 @@ await passo('service worker registrado (precache do PWA)', async () => {
 await passo('app abre sem rede nenhuma', async () => {
   await ctx.setOffline(true);
   await p.reload({ waitUntil: 'domcontentloaded' });
-  await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])', { timeout: 8000 });
 });
 
 await passo('bipagem completa offline', async () => {
-  await p.click('.grupo-btn >> nth=0');
+  if (await p.isVisible('#view-grupo')) await p.click('.grupo-btn >> nth=0');
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
   for (let i = 1; i <= 25; i++) {
     await p.click('#btn-manual');
     await p.fill('#man-codigo', `EMB${String(i).padStart(10, '0')}`);
-    await p.fill('#man-rota', i % 10 === 0 ? 'FSUL 9' : 'FNOR 100');
+    // FSUL é da outra transportadora do seed? Não: aqui o que interessa é o
+    // volume da fila, então tudo entra pela rota cadastrada da transportadora.
+    await p.fill('#man-rota', 'FNOR 100');
     await p.fill('#man-pedido', `86945${String(i % 5).padStart(3, '0')}`);
     await p.fill('#man-volume', '0001/0002');
     await p.click('#man-confirmar');
@@ -46,15 +49,18 @@ await passo('bipagem completa offline', async () => {
   await p.waitForTimeout(600);
   const total = Number(await p.textContent('#c-total'));
   if (total !== 25) throw new Error(`esperava 25 leituras, veio ${total}`);
-  const div = Number(await p.textContent('#c-div'));
-  if (div !== 2) throw new Error(`esperava 2 divergentes, veio ${div}`);
+  const separar = Number(await p.textContent('#c-div'));
+  if (separar !== 0) throw new Error(`esperava nenhuma caixa para separar, veio ${separar}`);
 });
 
 await passo('fila local acumula tudo como pendente', async () => {
-  const chip = (await p.textContent('#chip-sync')).trim();
-  if (!/\d+ (na fila|no aparelho)/.test(chip)) throw new Error(`chip de sync: ${chip}`);
-  const pendentes = Number(chip.match(/\d+/)[0]);
-  if (pendentes < 26) throw new Error(`fila deveria ter ao menos 26 registros, tem ${pendentes}`);
+  // A recontagem tem folga proposital de 1,5 s para não custar uma contagem no
+  // IndexedDB por leitura; o teste espera esse tempo, não instantaneidade.
+  await p.waitForFunction(() => {
+    const texto = document.querySelector('#chip-sync')?.textContent ?? '';
+    const n = Number(texto.match(/\d+/)?.[0] ?? 0);
+    return /na fila|no aparelho/.test(texto) && n >= 26;
+  }, null, { timeout: 8000 });
 });
 
 await passo('recarregar no meio da conferência retoma a sessão aberta', async () => {

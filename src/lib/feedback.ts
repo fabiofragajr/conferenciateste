@@ -23,6 +23,18 @@ const PERFIL: Record<StatusLeitura, Perfil> = {
       { freq: 300, dur: 0.22, atraso: 0.44 }
     ]
   },
+  DESTINO_NAO_MAPEADO: {
+    // Nem verde nem vermelho: o sistema não sabe de quem é a caixa. O padrão
+    // sobe-desce-sobe é diferente dos outros três de propósito — dá para
+    // reconhecer de longe, sem olhar a tela.
+    cor: 'rgba(234, 88, 12, 0.86)',
+    vibra: [60, 60, 200],
+    tons: [
+      { freq: 520, dur: 0.12, atraso: 0 },
+      { freq: 340, dur: 0.12, atraso: 0.16 },
+      { freq: 760, dur: 0.18, atraso: 0.32 }
+    ]
+  },
   DUPLICADO: {
     cor: 'rgba(232, 163, 61, 0.86)',
     vibra: [90, 70, 90],

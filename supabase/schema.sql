@@ -21,37 +21,73 @@ create table if not exists public.usuarios (
   recebido_em    timestamptz not null default now()
 );
 
--- ---------------------------------------------------------- grupos de rota ---
--- `rotas` guarda os prefixos alfabéticos ('FNOR'); a leitura 'FNOR 100' casa
--- com o prefixo, o sufixo numérico é sequência de carga.
-create table if not exists public.grupos_rota (
+-- -------------------------------------------------------- transportadoras ---
+-- Transportadora terceira que recebe a carga. É o que o operador escolhe antes
+-- de bipar.
+create table if not exists public.transportadoras (
   id             uuid primary key,
   nome           text not null,
-  rotas          text[] not null default '{}',
-  transportadora text,
+  cnpj           text,
+  responsavel    text,
+  telefone       text,
+  email          text,
   ativo          boolean not null default true,
   atualizado_em  timestamptz not null default now(),
   recebido_em    timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------------ rotas ---
+-- `codigo` guarda o prefixo alfabético da etiqueta ('FNOR'); a leitura
+-- 'FNOR 100' casa com ele, o sufixo numérico é sequência de carga.
+--
+-- O UNIQUE em `codigo` é regra de negócio, não detalhe técnico: é ele que
+-- permite descobrir a transportadora dona do volume só a partir da etiqueta.
+-- Se o mesmo código existisse em duas transportadoras, a conferência não teria
+-- resposta.
+create table if not exists public.rotas (
+  id                uuid primary key,
+  codigo            text not null unique,
+  nome              text not null,
+  transportadora_id uuid not null references public.transportadoras(id),
+  descricao         text,
+  ativo             boolean not null default true,
+  atualizado_em     timestamptz not null default now(),
+  recebido_em       timestamptz not null default now()
+);
+
+-- ---------------------------------------------------------- dispositivos ---
+-- Aparelhos que operam. Serve para o gestor saber se o número do painel está
+-- completo ou se ainda há leitura presa num celular sem sinal.
+create table if not exists public.dispositivos (
+  id             uuid primary key,
+  apelido        text,
+  ultima_sync    timestamptz,
+  pendentes      integer not null default 0,
+  ultimo_usuario text,
+  atualizado_em  timestamptz not null default now()
 );
 
 -- --------------------------------------------------------------- sessões ----
 -- grupo_nome/rotas/usuario_nome são cópias congeladas: o relatório de ontem não
 -- pode mudar porque alguém renomeou um grupo hoje.
 create table if not exists public.sessoes (
-  id             uuid primary key,
-  grupo_rota_id  uuid references public.grupos_rota(id),
-  usuario_id     uuid references public.usuarios(id),
-  inicio         timestamptz not null,
-  fim            timestamptz,
-  status         text not null check (status in ('ABERTA', 'ENCERRADA')),
-  grupo_nome     text not null,
-  rotas          text[] not null default '{}',
-  transportadora text,
-  usuario_nome   text not null,
-  geo_inicio     jsonb,
-  geo_fim        jsonb,
-  atualizado_em  timestamptz not null default now(),
-  recebido_em    timestamptz not null default now()
+  id                      uuid primary key,
+  transportadora_id       uuid references public.transportadoras(id),
+  usuario_id              uuid references public.usuarios(id),
+  inicio                  timestamptz not null,
+  fim                     timestamptz,
+  status                  text not null check (status in ('ABERTA', 'ENCERRADA')),
+  transportadora_nome     text not null,
+  rotas                   text[] not null default '{}',
+  usuario_nome            text not null,
+  geo_inicio              jsonb,
+  geo_fim                 jsonb,
+  -- Liberação da carga: quem autorizou a saída e se havia pendência na hora.
+  liberada_em             timestamptz,
+  liberada_por            text,
+  liberada_com_pendencias boolean not null default false,
+  atualizado_em           timestamptz not null default now(),
+  recebido_em             timestamptz not null default now()
 );
 
 -- --------------------------------------------------------------- leituras ---
@@ -62,15 +98,21 @@ create table if not exists public.leituras (
   codigo_volume   text,
   rota            text,
   rota_prefixo    text,
+  rota_id         uuid references public.rotas(id),
+  -- Dona do código lido. É o que explica a divergência: 'esta caixa é da Beta'.
+  transportadora_dona_id   uuid references public.transportadoras(id),
+  transportadora_dona_nome text,
   volume          text,
   volume_atual    integer,
   volume_total    integer,
   pedido          text,
-  status          text not null check (status in ('OK', 'ROTA_DIVERGENTE', 'DUPLICADO', 'INVALIDO')),
+  status          text not null check (status in
+                    ('OK', 'ROTA_DIVERGENTE', 'DESTINO_NAO_MAPEADO', 'DUPLICADO', 'INVALIDO')),
   lido_em         timestamptz not null,
   raw_data        text not null,
   origem          text not null default 'CAMERA' check (origem in ('CAMERA', 'MANUAL')),
   motivo_invalido text,
+  dispositivo_id  uuid,
   lat             double precision,
   lng             double precision,
   precisao_metros integer,
@@ -114,6 +156,13 @@ create index if not exists idx_ocorr_momento     on public.ocorrencias (momento,
 create index if not exists idx_ocorr_grave       on public.ocorrencias (registrado_em desc) where grave;
 create index if not exists idx_sessoes_inicio    on public.sessoes (inicio desc);
 create index if not exists idx_sessoes_abertas   on public.sessoes (status) where status = 'ABERTA';
+create index if not exists idx_sessoes_liberar   on public.sessoes (fim desc) where liberada_em is null;
+create index if not exists idx_rotas_transp      on public.rotas (transportadora_id);
+-- A descida incremental filtra por atualizado_em: sem índice ela varre a tabela
+-- a cada abertura do app.
+create index if not exists idx_transp_atualizado on public.transportadoras (atualizado_em);
+create index if not exists idx_rotas_atualizado  on public.rotas (atualizado_em);
+create index if not exists idx_usuarios_atualizado on public.usuarios (atualizado_em);
 
 -- Busca em texto livre da ocorrência: o gestor precisa achar "doca fechada"
 -- sem depender de alguém ter marcado a etiqueta certa.
@@ -123,21 +172,24 @@ create index if not exists idx_ocorr_texto
 -- ------------------------------------------------------------------- RLS ----
 -- ATENÇÃO: as políticas abaixo são o mínimo para o app do galpão funcionar com
 -- a chave anônima (que fica no aparelho e é, na prática, pública).
--- O aparelho precisa ESCREVER; ele não precisa LER os dados de volta, porque a
--- fonte da verdade é local. Por isso: insert/update liberados, select fechado
--- (exceto grupos_rota, usado pelo teste de conexão do painel).
+-- O aparelho ESCREVE tudo o que a operação produz e LÊ apenas o cadastro que
+-- precisa para validar offline (transportadoras, rotas, usuários sem senha).
+-- Leitura, ocorrência e sessão ficam fechadas para `anon`.
 -- Antes de produção, troque isto por autenticação Supabase de verdade e
 -- políticas por usuário.
-alter table public.usuarios    enable row level security;
-alter table public.grupos_rota enable row level security;
-alter table public.sessoes     enable row level security;
-alter table public.leituras    enable row level security;
-alter table public.ocorrencias enable row level security;
+alter table public.usuarios        enable row level security;
+alter table public.transportadoras enable row level security;
+alter table public.rotas           enable row level security;
+alter table public.dispositivos    enable row level security;
+alter table public.sessoes         enable row level security;
+alter table public.leituras        enable row level security;
+alter table public.ocorrencias     enable row level security;
 
 do $$
 declare t text;
 begin
-  foreach t in array array['usuarios', 'grupos_rota', 'sessoes', 'leituras', 'ocorrencias'] loop
+  foreach t in array array['usuarios', 'transportadoras', 'rotas', 'dispositivos',
+                           'sessoes', 'leituras', 'ocorrencias'] loop
     execute format('drop policy if exists app_insert on public.%I', t);
     execute format('drop policy if exists app_update on public.%I', t);
     execute format($f$create policy app_insert on public.%I for insert to anon, authenticated with check (true)$f$, t);
@@ -147,9 +199,21 @@ begin
   end loop;
 end $$;
 
--- teste de conexão do painel do gestor
-drop policy if exists app_select_anon on public.grupos_rota;
-create policy app_select_anon on public.grupos_rota for select to anon using (true);
+-- O aparelho precisa LER o cadastro para validar offline: transportadoras,
+-- rotas e a lista de aparelhos descem para o celular. Leitura, ocorrência e
+-- sessão continuam fechadas para `anon` — o aparelho só escreve essas.
+--
+-- `usuarios` desce sem senha: a coluna de hash não existe nesta tabela, a
+-- autenticação é local e a senha é definida no primeiro acesso de cada
+-- aparelho.
+do $$
+declare t text;
+begin
+  foreach t in array array['transportadoras', 'rotas', 'usuarios', 'dispositivos'] loop
+    execute format('drop policy if exists app_select_anon on public.%I', t);
+    execute format($f$create policy app_select_anon on public.%I for select to anon using (true)$f$, t);
+  end loop;
+end $$;
 
 -- --------------------------------------------------------------- storage ----
 -- Bucket privado para as fotos das ocorrências (evidência de avaria).
@@ -182,10 +246,10 @@ select
   l.codigo_volume,
   l.rota            as rota_lida,
   l.pedido,
-  s.grupo_nome      as carga,
+  s.transportadora_nome as transportadora_conferida,
+  l.transportadora_dona_nome as transportadora_dona,
   s.rotas           as rotas_da_carga,
   s.usuario_nome    as conferente,
-  s.transportadora,
   l.lat, l.lng, l.precisao_metros, l.geo_status
 from public.leituras l
 join public.sessoes s on s.id = l.sessao_id
@@ -204,3 +268,29 @@ from public.leituras l
 where l.status <> 'INVALIDO' and l.pedido is not null and l.volume_total is not null
 group by l.pedido
 having count(distinct l.volume_atual) < max(l.volume_total);
+
+-- Códigos que apareceram na doca e ninguém cadastrou. É a fila de decisão do
+-- gestor: enquanto o código não tiver dono, a caixa fica parada.
+create or replace view public.vw_rotas_nao_cadastradas as
+select
+  l.rota_prefixo            as codigo,
+  count(*)                  as volumes,
+  min(l.lido_em)            as primeira_leitura,
+  max(l.lido_em)            as ultima_leitura,
+  array_agg(distinct s.transportadora_nome) as apareceu_conferindo
+from public.leituras l
+join public.sessoes s on s.id = l.sessao_id
+where l.status = 'DESTINO_NAO_MAPEADO' and l.rota_prefixo is not null
+  and not exists (select 1 from public.rotas r where r.codigo = l.rota_prefixo)
+group by l.rota_prefixo;
+
+-- Cargas encerradas que ninguém liberou ainda.
+create or replace view public.vw_cargas_aguardando_liberacao as
+select
+  s.id, s.inicio, s.fim, s.transportadora_nome, s.usuario_nome,
+  count(l.id) filter (where l.status = 'ROTA_DIVERGENTE')     as divergencias,
+  count(l.id) filter (where l.status = 'DESTINO_NAO_MAPEADO') as nao_mapeados
+from public.sessoes s
+left join public.leituras l on l.sessao_id = s.id
+where s.status = 'ENCERRADA' and s.liberada_em is null
+group by s.id;

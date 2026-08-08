@@ -6,13 +6,17 @@ import '../styles/base.css';
 import '../styles/painel.css';
 import '../styles/relatorio.css';
 
-import type { GrupoRota, Leitura, Momento, Ocorrencia, Sessao, StatusLeitura, Usuario } from '../types.js';
+import type {
+  Dispositivo, Leitura, Momento, Ocorrencia, Rota, Sessao, StatusLeitura, Transportadora, Usuario
+} from '../types.js';
 import * as db from '../lib/db.js';
 import { novoSync } from '../lib/db.js';
 import * as auth from '../lib/auth.js';
 import * as sync from '../lib/sync.js';
 import { salvarConfig, obterConfig, testarConexao } from '../lib/supabase.js';
-import { ETIQUETAS, etiquetaTexto, pedidosIncompletos, prefixoRota } from '../lib/model.js';
+import {
+  ETIQUETAS, etiquetaTexto, pedidosIncompletos, pendenciasDaCarga, prefixoRota
+} from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
@@ -27,7 +31,8 @@ import {
 
 interface Base {
   usuarios: Usuario[];
-  grupos: GrupoRota[];
+  transportadoras: Transportadora[];
+  rotas: Rota[];
   sessoes: Sessao[];
   leituras: Leitura[];
   ocorrencias: Ocorrencia[];
@@ -37,15 +42,16 @@ interface Base {
 
 let usuario: Usuario | null = null;
 let base: Base = {
-  usuarios: [], grupos: [], sessoes: [], leituras: [], ocorrencias: [],
+  usuarios: [], transportadoras: [], rotas: [], sessoes: [], leituras: [], ocorrencias: [],
   porSessao: new Map(), ocPorSessao: new Map()
 };
+let dispositivos: Dispositivo[] = [];
 let relatorioAberto: DadosRelatorio | null = null;
 
 async function carregar(): Promise<void> {
-  const [usuarios, grupos, sessoes, leituras, ocorrencias] = await Promise.all([
-    db.todos('usuarios'), db.todos('grupos'), db.todos('sessoes'),
-    db.todos('leituras'), db.todos('ocorrencias')
+  const [usuarios, transportadoras, rotas, sessoes, leituras, ocorrencias] = await Promise.all([
+    db.todos('usuarios'), db.todos('transportadoras'), db.todos('rotas'),
+    db.todos('sessoes'), db.todos('leituras'), db.todos('ocorrencias')
   ]);
 
   const porSessao = new Map<string, Leitura[]>();
@@ -65,7 +71,8 @@ async function carregar(): Promise<void> {
 
   base = {
     usuarios,
-    grupos,
+    transportadoras: transportadoras.sort((a, b) => a.nome.localeCompare(b.nome)),
+    rotas: rotas.sort((a, b) => a.codigo.localeCompare(b.codigo)),
     sessoes: sessoes.sort((a, b) => b.inicio.localeCompare(a.inicio)),
     leituras,
     ocorrencias: ocorrencias.sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
@@ -176,6 +183,8 @@ async function iniciarPainel(): Promise<void> {
 
 async function recarregarTudo(): Promise<void> {
   await carregar();
+  dispositivos = await sync.listarDispositivos();
+  pintarDispositivos();
   preencherSelects();
   pintarAgora();
   pintarHistorico();
@@ -195,6 +204,8 @@ function pintarAgora(): void {
   const leiturasHoje = base.leituras.filter((l) => dentro(l.timestamp, inicio, fim));
   const divergentes = leiturasHoje.filter((l) => l.status === 'ROTA_DIVERGENTE');
 
+  pintarAtencao(leiturasHoje);
+
   // A divergência vem antes de tudo, sem filtro, sem clique.
   $('#faixa-divergencia').innerHTML = divergentes.length
     ? `<div class="p-faixa-alerta">
@@ -209,7 +220,7 @@ function pintarAgora(): void {
              const s = base.sessoes.find((x) => x.id === l.sessaoId);
              return [
                `<code>${esc(l.codigoVolume ?? '—')}</code>`, esc(l.rota ?? '—'), esc(l.pedido ?? '—'),
-               esc(s?.usuarioNome ?? '—'), esc(s ? `${s.grupoNome} (${s.rotas.join(', ')})` : '—'),
+               esc(s?.usuarioNome ?? '—'), esc(s ? `${s.transportadoraNome} (${s.rotas.join(', ')})` : '—'),
                dataHora(l.timestamp)
              ];
            })
@@ -224,7 +235,7 @@ function pintarAgora(): void {
       const ls = base.porSessao.get(s.id) ?? [];
       const div = ls.filter((l) => l.status === 'ROTA_DIVERGENTE').length;
       return [
-        esc(s.usuarioNome), esc(s.grupoNome), esc(s.rotas.join(', ')),
+        esc(s.usuarioNome), esc(s.transportadoraNome), esc(s.rotas.join(', ')),
         `<span class="p-num-col">${ls.length}</span>`,
         div ? `<b style="color:var(--div)">${div}</b>` : '0',
         duracao(s.inicio)
@@ -242,8 +253,123 @@ function pintarAgora(): void {
     'Nenhum pedido incompleto hoje.'
   );
 
+  pintarNaoMapeados(leiturasHoje);
   pintarOcorrencias();
   pintarRecorrentes();
+}
+
+/**
+ * A primeira tela responde uma pergunta só: existe alguma carga que precisa da
+ * minha atenção agora? Sem isso o gestor tem que caçar o problema pelo painel.
+ */
+function pintarAtencao(leiturasHoje: Leitura[]): void {
+  const itens: { texto: string; alvo?: string }[] = [];
+
+  const divergentes = leiturasHoje.filter((l) => l.status === 'ROTA_DIVERGENTE').length;
+  if (divergentes) itens.push({ texto: `${divergentes} volume(s) de outra transportadora`, alvo: '#faixa-divergencia' });
+
+  const naoMapeados = new Set(
+    leiturasHoje.filter((l) => l.status === 'DESTINO_NAO_MAPEADO').map((l) => l.rotaPrefixo ?? '?')
+  );
+  if (naoMapeados.size) {
+    itens.push({ texto: `${naoMapeados.size} código(s) de rota sem cadastro`, alvo: '#nao-mapeados' });
+  }
+
+  const incompletos = pedidosIncompletos(leiturasHoje).length;
+  if (incompletos) itens.push({ texto: `${incompletos} pedido(s) com volume faltando`, alvo: '#incompletos-hoje' });
+
+  const aguardando = base.sessoes.filter((s) => s.status === 'ENCERRADA' && !s.liberadaEm
+    && dentro(s.inicio, limitesDoDia().inicio, limitesDoDia().fim)).length;
+  if (aguardando) itens.push({ texto: `${aguardando} carga(s) aguardando liberação`, alvo: '#tabela-sessoes' });
+
+  const paradas = dispositivos.filter((d) => d.pendentes > 0);
+  if (paradas.length) {
+    const total = paradas.reduce((n, d) => n + d.pendentes, 0);
+    itens.push({ texto: `${total} leitura(s) ainda num aparelho sem sincronizar`, alvo: '#dispositivos' });
+  }
+
+  $('#atencao').innerHTML = itens.length
+    ? `<div class="p-atencao">
+         <h3>Precisa de atenção</h3>
+         <ul>${itens.map((i) => `<li><a href="${i.alvo ?? '#'}">${esc(i.texto)}</a></li>`).join('')}</ul>
+       </div>`
+    : '<div class="p-faixa-ok">Operação normal: nenhuma pendência hoje.</div>';
+}
+
+/**
+ * Códigos que apareceram na doca e ninguém cadastrou. O operador não decide a
+ * rota — a decisão é daqui, e em um clique.
+ */
+function pintarNaoMapeados(leiturasHoje: Leitura[]): void {
+  const porCodigo = new Map<string, { codigo: string; volumes: number; ultima: string; transportadoras: Set<string> }>();
+
+  for (const l of base.leituras) {
+    if (l.status !== 'DESTINO_NAO_MAPEADO' || !l.rotaPrefixo) continue;
+    const atual = porCodigo.get(l.rotaPrefixo)
+      ?? { codigo: l.rotaPrefixo, volumes: 0, ultima: l.timestamp, transportadoras: new Set<string>() };
+    atual.volumes++;
+    if (l.timestamp > atual.ultima) atual.ultima = l.timestamp;
+    const s = base.sessoes.find((x) => x.id === l.sessaoId);
+    if (s) atual.transportadoras.add(s.transportadoraNome);
+    porCodigo.set(l.rotaPrefixo, atual);
+  }
+
+  // Já cadastrado depois da leitura? Some da lista: o problema foi resolvido.
+  const cadastrados = new Set(base.rotas.map((r) => r.codigo));
+  const pendentes = [...porCodigo.values()]
+    .filter((c) => !cadastrados.has(c.codigo))
+    .sort((a, b) => b.volumes - a.volumes);
+
+  const opcoes = base.transportadoras.filter((t) => t.ativo)
+    .map((t) => `<option value="${esc(t.id)}">${esc(t.nome)}</option>`).join('');
+
+  $('#nao-mapeados').innerHTML = pendentes.length
+    ? tabela(
+        ['Código', 'Volumes', 'Apareceu conferindo', 'Última leitura', 'Cadastrar como rota de'],
+        pendentes.map((c) => [
+          `<code>${esc(c.codigo)}</code>`,
+          `<span class="p-num-col">${c.volumes}</span>`,
+          esc([...c.transportadoras].join(', ') || '—'),
+          dataHora(c.ultima),
+          `<span class="p-acao-inline">
+             <select data-mapear="${esc(c.codigo)}">${opcoes}</select>
+             <button class="btn btn-primario" data-cadastrar="${esc(c.codigo)}"
+                     style="min-height:32px;font-size:12px">Cadastrar</button>
+           </span>`
+        ])
+      )
+    : '<p class="p-vazio">Nenhum código de rota pendente de cadastro.</p>';
+
+  $('#nao-mapeados').querySelectorAll<HTMLButtonElement>('button[data-cadastrar]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const codigo = btn.dataset.cadastrar as string;
+      const select = $<HTMLSelectElement>(`select[data-mapear="${codigo}"]`);
+      const r = await cadastrarRota({ codigo, nome: codigo, transportadoraId: select.value });
+      if (!r.ok) {
+        alert(r.erro);
+        return;
+      }
+      await recarregarTudo();
+    });
+  });
+
+  void leiturasHoje;
+}
+
+/** Aparelho com fila pendente significa que o número desta tela está incompleto. */
+function pintarDispositivos(): void {
+  $('#dispositivos').innerHTML = tabela(
+    ['Aparelho', 'Última pessoa', 'Última sincronização', 'Pendentes'],
+    dispositivos.map((d) => [
+      esc(d.apelido.slice(0, 48)),
+      esc(d.ultimoUsuario || '—'),
+      d.ultimaSync ? dataHora(d.ultimaSync) : 'nunca',
+      d.pendentes > 0
+        ? `<b style="color:var(--dup)">${d.pendentes}</b>`
+        : '0'
+    ]),
+    'Nenhum aparelho sincronizou ainda — ou o Supabase não está configurado.'
+  );
 }
 
 /* ------------------------------------------------------- ocorrências ----- */
@@ -275,7 +401,7 @@ function pintarOcorrencias(): void {
   alvo.innerHTML = lista.length
     ? lista.map((o) => {
         const s = base.sessoes.find((x) => x.id === o.sessaoId);
-        const quem = s ? `${s.usuarioNome} • ${s.grupoNome}` : '';
+        const quem = s ? `${s.usuarioNome} • ${s.transportadoraNome}` : '';
         return cardOcorrencia(o, `<div class="rel-oc-local">${esc(quem)}</div>`);
       }).join('')
     : '<p class="p-vazio">Nenhuma ocorrência no filtro atual.</p>';
@@ -295,7 +421,7 @@ function pintarRecorrentes(): void {
   for (const o of base.ocorrencias) {
     if (o.timestamp < desde || o.momento !== 'TRANSPORTADORA') continue;
     const s = base.sessoes.find((x) => x.id === o.sessaoId);
-    const chave = s?.transportadora || s?.grupoNome || 'Sem identificação';
+    const chave = s?.transportadoraNome || 'Sem identificação';
     const atual = contagem.get(chave) ?? { total: 0, graves: 0, etiquetas: new Map<string, number>() };
     atual.total++;
     if (o.grave) atual.graves++;
@@ -346,21 +472,23 @@ function pintarHistorico(): void {
   const sessoes = sessoesFiltradas();
 
   $('#tabela-sessoes').innerHTML = tabela(
-    ['Início', 'Pessoa', 'Carga', 'Rotas', 'Duração', 'Volumes', 'OK', 'Outra rota', 'Dupl.', 'Inv.', 'Ocorr.', 'Status', ''],
+    ['Início', 'Pessoa', 'Transportadora', 'Rotas', 'Duração', 'Volumes', 'OK', 'Outra rota', 'Não mapeado', 'Dupl.', 'Inv.', 'Ocorr.', 'Carga', ''],
     sessoes.map((s) => {
       const ls = base.porSessao.get(s.id) ?? [];
       const conta = (st: StatusLeitura): number => ls.filter((l) => l.status === st).length;
       const div = conta('ROTA_DIVERGENTE');
       const ocs = base.ocPorSessao.get(s.id) ?? [];
       const graves = ocs.filter((o) => o.grave).length;
+      const naoMapeado = conta('DESTINO_NAO_MAPEADO');
       return [
-        dataHora(s.inicio), esc(s.usuarioNome), esc(s.grupoNome), esc(s.rotas.join(', ')),
+        dataHora(s.inicio), esc(s.usuarioNome), esc(s.transportadoraNome), esc(s.rotas.join(', ')),
         duracao(s.inicio, s.fim), `<span class="p-num-col">${ls.length}</span>`,
         String(conta('OK')),
         div ? `<b style="color:var(--div)">${div}</b>` : '0',
+        naoMapeado ? `<b style="color:var(--mapa, #ea580c)">${naoMapeado}</b>` : '0',
         String(conta('DUPLICADO')), String(conta('INVALIDO')),
         ocs.length ? `${ocs.length}${graves ? ` <b style="color:var(--div)">(${graves} graves)</b>` : ''}` : '0',
-        s.status === 'ABERTA' ? '<span class="chip">aberta</span>' : 'encerrada',
+        estadoDaCarga(s, ls),
         `<button class="btn btn-secundario" data-sessao="${esc(s.id)}" style="min-height:32px;font-size:12px">Detalhe</button>`
       ];
     }),
@@ -371,7 +499,58 @@ function pintarHistorico(): void {
     btn.addEventListener('click', () => void abrirGaveta(btn.dataset.sessao as string));
   });
 
+  $('#tabela-sessoes').querySelectorAll<HTMLButtonElement>('button[data-liberar]').forEach((btn) => {
+    btn.addEventListener('click', () => void liberarCarga(btn.dataset.liberar as string));
+  });
+
   pintarDesempenho(sessoes);
+}
+
+/**
+ * Estado da carga: conferindo, com pendência, pronta ou liberada.
+ * Liberar é ação do gestor — o sistema avisa, mas não decide sozinho parar
+ * um caminhão.
+ */
+function estadoDaCarga(s: Sessao, leituras: Leitura[]): string {
+  if (s.status === 'ABERTA') return '<span class="chip">em conferência</span>';
+
+  if (s.liberadaEm) {
+    return s.liberadaComPendencias
+      ? `<span class="chip chip-atencao" title="Liberada mesmo com pendência">liberada com ressalva</span>`
+      : '<span class="chip chip-ok">liberada</span>';
+  }
+
+  const pendencias = pendenciasDaCarga(leituras);
+  const rotulo = pendencias.length
+    ? `<span class="chip chip-alerta" title="${esc(pendencias.map((p) => p.descricao).join(' • '))}">${pendencias.length} pendência(s)</span>`
+    : '<span class="chip chip-ok">sem pendência</span>';
+
+  return `${rotulo}
+    <button class="btn btn-fantasma" data-liberar="${esc(s.id)}"
+            style="min-height:28px;font-size:11px;margin-left:6px">Liberar</button>`;
+}
+
+async function liberarCarga(sessaoId: string): Promise<void> {
+  const sessao = base.sessoes.find((s) => s.id === sessaoId);
+  if (!sessao || !usuario) return;
+
+  const pendencias = pendenciasDaCarga(base.porSessao.get(sessaoId) ?? []);
+  if (pendencias.length) {
+    const lista = pendencias.map((p) => `• ${p.descricao}`).join('\n');
+    const segue = confirm(
+      `Esta carga tem pendência:\n\n${lista}\n\n`
+      + 'Liberar assim mesmo? A liberação fica registrada como "com ressalva".'
+    );
+    if (!segue) return;
+  }
+
+  await db.salvar('sessoes', {
+    ...sessao,
+    liberadaEm: new Date().toISOString(),
+    liberadaPor: usuario.nome,
+    liberadaComPendencias: pendencias.length > 0
+  });
+  await recarregarTudo();
 }
 
 $('#btn-filtrar').addEventListener('click', pintarHistorico);
@@ -386,13 +565,13 @@ $('#btn-csv-periodo').addEventListener('click', () => {
       const s = base.sessoes.find((x) => x.id === l.sessaoId);
       const ocs = (base.ocPorSessao.get(l.sessaoId) ?? []).filter((o) => o.leituraId === l.id);
       return [
-        s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.grupoNome ?? '', (s?.rotas ?? []).join('|'),
+        s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '', (s?.rotas ?? []).join('|'),
         l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
         l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
         ocs.map((o) => o.texto).join(' | '), l.rawData
       ];
     });
-  const cab = ['sessao', 'inicio_sessao', 'conferente', 'grupo_rota', 'rotas', 'codigo_volume', 'rota',
+  const cab = ['sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas', 'codigo_volume', 'rota',
     'pedido', 'volume', 'status', 'origem', 'horario', 'lat', 'lng', 'precisao_m', 'geo_status',
     'ocorrencias', 'raw_qr'];
   baixarArquivo(paraCSV(cab, linhas), 'conferencias_periodo.csv', 'text/csv;charset=utf-8');
@@ -461,7 +640,7 @@ const gaveta = $('#gaveta');
 async function abrirGaveta(sessaoId: string): Promise<void> {
   relatorioAberto = await montarRelatorio(sessaoId);
   $('#gaveta-titulo').textContent =
-    `${relatorioAberto.sessao.grupoNome} — ${relatorioAberto.sessao.usuarioNome}`;
+    `${relatorioAberto.sessao.transportadoraNome} — ${relatorioAberto.sessao.usuarioNome}`;
   $('#gaveta-mapa').innerHTML = renderMapa(relatorioAberto.leituras);
   const conteudo = $('#gaveta-conteudo');
   conteudo.innerHTML = renderizarHTML(relatorioAberto);
@@ -489,9 +668,17 @@ function preencherSelects(): void {
   };
 
   manter(pessoa, base.usuarios.map((u) => [u.id, u.nome]), 'Todas');
-  const rotas = [...new Set(base.grupos.flatMap((g) => g.rotas.map(prefixoRota)))].sort();
-  manter(rota, rotas.map((r) => [r, r]), 'Todas');
+  manter(rota, base.rotas.map((r) => [r.codigo, `${r.codigo} — ${r.nome}`]), 'Todas');
   manter(etiqueta, ETIQUETAS.map((e) => [e.id, e.texto]), 'Todas');
+
+  // O select do cadastro de rota não é filtro: sem "Todas".
+  const selTransp = $<HTMLSelectElement>('#r-transportadora');
+  const escolhida = selTransp.value;
+  selTransp.innerHTML = base.transportadoras
+    .filter((t) => t.ativo)
+    .map((t) => `<option value="${esc(t.id)}">${esc(t.nome)}</option>`)
+    .join('');
+  selTransp.value = escolhida;
 }
 
 function pintarCadastros(): void {
@@ -516,25 +703,87 @@ function pintarCadastros(): void {
     });
   });
 
-  $('#lista-grupos').innerHTML = tabela(
-    ['Grupo', 'Rotas (prefixos)', 'Transportadora', 'Situação', ''],
-    base.grupos.map((g) => [
-      esc(g.nome), g.rotas.map((r) => `<code>${esc(r)}</code>`).join(' '), esc(g.transportadora || '—'),
-      g.ativo ? 'ativo' : '<span style="color:var(--texto-2)">inativo</span>',
-      `<button class="btn btn-fantasma" data-grupo="${esc(g.id)}" style="min-height:32px;font-size:12px">
-         ${g.ativo ? 'Desativar' : 'Reativar'}</button>`
-    ]),
-    'Nenhum grupo cadastrado.'
+  const nomeTransp = (id: string): string =>
+    base.transportadoras.find((t) => t.id === id)?.nome ?? 'transportadora removida';
+
+  $('#lista-transportadoras').innerHTML = tabela(
+    ['Transportadora', 'Rotas', 'Responsável', 'Situação', ''],
+    base.transportadoras.map((t) => {
+      const rotas = base.rotas.filter((r) => r.transportadoraId === t.id && r.ativo);
+      return [
+        esc(t.nome),
+        rotas.length ? rotas.map((r) => `<code>${esc(r.codigo)}</code>`).join(' ') : '<span class="p-vazio">sem rota</span>',
+        esc(t.responsavel || '—'),
+        t.ativo ? 'ativa' : '<span style="color:var(--texto-2)">inativa</span>',
+        `<button class="btn btn-fantasma" data-transp="${esc(t.id)}" style="min-height:32px;font-size:12px">
+           ${t.ativo ? 'Desativar' : 'Reativar'}</button>`
+      ];
+    }),
+    'Nenhuma transportadora cadastrada. Cadastre a primeira para o operador ter o que escolher.'
   );
 
-  $('#lista-grupos').querySelectorAll<HTMLButtonElement>('button[data-grupo]').forEach((btn) => {
+  $('#lista-transportadoras').querySelectorAll<HTMLButtonElement>('button[data-transp]').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const g = base.grupos.find((x) => x.id === btn.dataset.grupo);
-      if (!g) return;
-      await db.salvar('grupos', { ...g, ativo: !g.ativo });
+      const t = base.transportadoras.find((x) => x.id === btn.dataset.transp);
+      if (!t) return;
+      await db.salvar('transportadoras', { ...t, ativo: !t.ativo });
       await recarregarTudo();
     });
   });
+
+  $('#lista-rotas').innerHTML = tabela(
+    ['Código', 'Rota', 'Transportadora', 'Situação', ''],
+    base.rotas.map((r) => [
+      `<code>${esc(r.codigo)}</code>`,
+      esc(r.nome),
+      esc(nomeTransp(r.transportadoraId)),
+      r.ativo ? 'ativa' : '<span style="color:var(--texto-2)">inativa</span>',
+      `<button class="btn btn-fantasma" data-rota="${esc(r.id)}" style="min-height:32px;font-size:12px">
+         ${r.ativo ? 'Desativar' : 'Reativar'}</button>`
+    ]),
+    'Nenhum código de rota cadastrado. Sem isso, toda leitura cai como rota não cadastrada.'
+  );
+
+  $('#lista-rotas').querySelectorAll<HTMLButtonElement>('button[data-rota]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const r = base.rotas.find((x) => x.id === btn.dataset.rota);
+      if (!r) return;
+      await db.salvar('rotas', { ...r, ativo: !r.ativo });
+      await recarregarTudo();
+    });
+  });
+}
+
+/** O código é único no sistema: é isso que permite achar o dono pela etiqueta. */
+async function donoDoCodigo(codigo: string, ignorarId?: string): Promise<Rota | null> {
+  const existente = await db.umPorIndice('rotas', 'codigo', codigo);
+  if (!existente || existente.id === ignorarId) return null;
+  return existente;
+}
+
+/** Cadastra um código de rota, recusando duplicidade com mensagem que explica. */
+async function cadastrarRota(dados: {
+  codigo: string; nome: string; transportadoraId: string; descricao?: string;
+}): Promise<{ ok: true } | { ok: false; erro: string }> {
+  const codigo = prefixoRota(dados.codigo);
+  if (!codigo) return { ok: false, erro: 'O código precisa começar com letras (ex.: FNOR).' };
+  if (!dados.transportadoraId) return { ok: false, erro: 'Escolha a transportadora dona do código.' };
+
+  const conflito = await donoDoCodigo(codigo);
+  if (conflito) {
+    const dona = base.transportadoras.find((t) => t.id === conflito.transportadoraId)?.nome ?? 'outra transportadora';
+    return { ok: false, erro: `O código ${codigo} já pertence à ${dona}. Um código de rota é de uma transportadora só.` };
+  }
+
+  await db.salvar('rotas', {
+    ...novoSync(),
+    codigo,
+    nome: dados.nome.trim() || codigo,
+    transportadoraId: dados.transportadoraId,
+    descricao: (dados.descricao ?? '').trim(),
+    ativo: true
+  });
+  return { ok: true };
 }
 
 $<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
@@ -559,28 +808,49 @@ $<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
   }
 });
 
-$<HTMLFormElement>('#form-grupo').addEventListener('submit', async (ev) => {
+$<HTMLFormElement>('#form-transportadora').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const msg = $('#g-msg');
-  const nome = $<HTMLInputElement>('#g-nome').value.trim();
-  const rotas = $<HTMLInputElement>('#g-rotas').value.split(',')
-    .map((r) => prefixoRota(r)).filter(Boolean);
-
-  if (!nome || !rotas.length) {
-    msg.textContent = 'Informe o nome e ao menos uma rota (ex.: FNOR).';
+  const msg = $('#t-msg');
+  const nome = $<HTMLInputElement>('#t-nome').value.trim();
+  if (!nome) {
+    msg.textContent = 'Informe o nome da transportadora.';
     msg.hidden = false;
     return;
   }
 
-  const grupo: GrupoRota = {
+  await db.salvar('transportadoras', {
     ...novoSync(),
     nome,
-    rotas: [...new Set(rotas)],
-    transportadora: $<HTMLInputElement>('#g-transp').value.trim(),
+    cnpj: $<HTMLInputElement>('#t-cnpj').value.trim(),
+    responsavel: $<HTMLInputElement>('#t-resp').value.trim(),
+    telefone: $<HTMLInputElement>('#t-tel').value.trim(),
+    email: '',
     ativo: true
-  };
-  await db.salvar('grupos', grupo);
-  $<HTMLFormElement>('#form-grupo').reset();
+  });
+
+  $<HTMLFormElement>('#form-transportadora').reset();
+  msg.hidden = true;
+  await recarregarTudo();
+});
+
+$<HTMLFormElement>('#form-rota').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const msg = $('#r-msg');
+
+  const r = await cadastrarRota({
+    codigo: $<HTMLInputElement>('#r-codigo').value,
+    nome: $<HTMLInputElement>('#r-nome').value,
+    transportadoraId: $<HTMLSelectElement>('#r-transportadora').value,
+    descricao: $<HTMLInputElement>('#r-descricao').value
+  });
+
+  if (!r.ok) {
+    msg.textContent = r.erro;
+    msg.hidden = false;
+    return;
+  }
+
+  $<HTMLFormElement>('#form-rota').reset();
   msg.hidden = true;
   await recarregarTudo();
 });

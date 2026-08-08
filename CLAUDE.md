@@ -38,6 +38,8 @@ EMB0008314147;FNOR 100;0001/0002;86945574
 - **Sempre** fazer parse defensivo: `split(';')` e validar que retornou 4 posições. Se não, marcar a leitura como `INVALIDO`, **nunca** descartar silenciosamente.
 - Normalizar antes de comparar: `trim()` + `toUpperCase()`. Nunca comparar strings cruas do leitor.
 - **Regra de comparação de rota (definida):** comparar **apenas o prefixo alfabético**, ignorando o sufixo numérico. O cadastro guarda `FNOR`; a leitura `FNOR 100`, `FNOR 200` ou `FNOR 15` casa com ele. Extrair as letras iniciais dos dois lados (`/^[A-Z]+/`) e comparar. Nunca usar `includes()` cru sobre a string inteira — `FNOR` não pode casar com uma rota `XFNORY` de outro operador.
+- **O prefixo é a chave do cadastro.** O código lido é procurado na tabela de rotas, que diz qual transportadora é dona dele. A comparação final é entre a **transportadora dona do código** e a **transportadora que o operador escolheu** — não entre listas de strings.
+- **Código sem cadastro não é divergência.** Se ninguém cadastrou o prefixo lido, o sistema não sabe de quem é a caixa: a leitura vira `DESTINO_NAO_MAPEADO` e a decisão sobe para o gestor. Fingir que sabe é pior do que dizer que não sabe.
 - Nunca assumir que todo QR lido pela câmera é uma etiqueta válida. Códigos de terceiros vão aparecer.
 
 ---
@@ -71,12 +73,22 @@ A única distinção que o sistema faz é uma: **acessa o painel do gestor ou n�
 ```
 Usuario        { id, nome, login, senhaHash, gestor: boolean,
                  funcao, telefone, placa, ativo }             // funcao: texto livre, descritivo
-GrupoRota      { id, nome, rotas: ["FNOR", "FSUL"], ativo }
-Sessao         { id, grupoRotaId, usuarioId, inicio, fim, status }
-Leitura        { id, sessaoId, codigoVolume, rota, volume, pedido,
-                 status, timestamp, rawData,
+Transportadora { id, nome, cnpj, responsavel, telefone, email, ativo }
+Rota           { id, codigo, nome, transportadoraId, descricao, ativo }
+Sessao         { id, transportadoraId, usuarioId, inicio, fim, status,
+                 transportadoraNome, rotas, usuarioNome,      // cópias congeladas
+                 geoInicio, geoFim,
+                 liberadaEm, liberadaPor, liberadaComPendencias }
+Leitura        { id, sessaoId, codigoVolume, rota, rotaPrefixo, rotaId,
+                 transportadoraDonaId, transportadoraDonaNome,
+                 volume, pedido, status, timestamp, rawData, origem,
+                 dispositivoId,
                  lat, lng, precisaoMetros, geoStatus }        // rawData = string bruta do QR
 ```
+
+**`Rota.codigo` é único no sistema inteiro.** Se `FNOR` pertence à Transportadora Alfa, nenhuma outra pode cadastrá-lo. Não é detalhe de banco: é essa unicidade que permite descobrir o dono do volume só a partir da etiqueta. Sem ela, a conferência não tem resposta.
+
+Os campos `transportadoraNome`, `rotas` e `usuarioNome` da sessão são **cópias congeladas** do cadastro no momento da conferência. Renomear uma transportadora hoje não pode mudar o relatório de ontem.
 
 `funcao`, `telefone` e `placa` são **opcionais**. Cadastro mínimo para alguém começar a bipar: nome, login e senha. Não travar o cadastro exigindo documento ou placa — o ajudante que entrou hoje precisa conseguir bipar hoje.
 
@@ -89,7 +101,8 @@ Toda leitura carrega `usuarioId` via `sessaoId`. O gestor sempre consegue respon
 | Status | Cor | Significado |
 |---|---|---|
 | `OK` | Verde | Rota pertence ao grupo selecionado |
-| `ROTA_DIVERGENTE` | Vermelho | Volume de outra rota — **não pode embarcar** |
+| `ROTA_DIVERGENTE` | Vermelho | Volume de outra transportadora — **não pode embarcar**. A tela diz de quem é a caixa |
+| `DESTINO_NAO_MAPEADO` | Laranja | Código de rota que ninguém cadastrou — separar e avisar o gestor |
 | `DUPLICADO` | Âmbar | `codigoVolume` já bipado nesta sessão |
 | `INVALIDO` | Cinza | QR não segue o formato de 4 campos |
 
@@ -98,14 +111,14 @@ Toda leitura carrega `usuarioId` via `sessaoId`. O gestor sempre consegue respon
 ## 5. Fluxo da aplicação
 
 ```
-Login → Escolher grupo de rota → Bipar volumes → Encerrar → Relatório
-                                       ↑______|
+Login → Escolher transportadora → Bipar volumes → Encerrar → Relatório
+                                        ↑______|
 ```
 
 **Duas telas até a câmera abrir. Esse é o teto.** Cada passo a mais é um passo feito de pé, com caixa na mão.
 
 1. **Login** — simples, local. Sem OAuth, sem backend externo nesta versão. Manter a sessão logada no aparelho; ninguém digita senha toda manhã.
-2. **Grupo de rota** — escolhe um grupo já cadastrado (ex.: "Carga Norte" contendo FNOR e FSUL). Botões grandes, não `<select>`. Se ele só tem um grupo atribuído, pular a tela e já abrir a câmera.
+2. **Transportadora** — escolhe a transportadora terceira que está carregando agora. Botões grandes, não `<select>`. Se só existe uma cadastrada, pular a tela e já abrir a câmera. Trocar de transportadora com conferência aberta exige encerrar antes — misturar bipagem de duas transportadoras invalida a conferência.
 3. **Bipagem** — leitura contínua pela câmera, com feedback **imediato**:
    - Cor de tela cheia (verde/vermelho/âmbar) + som + vibração (`navigator.vibrate`)
    - Contadores ao vivo: total, OK, divergentes, duplicados
@@ -113,7 +126,8 @@ Login → Escolher grupo de rota → Bipar volumes → Encerrar → Relatório
    - Permitir **entrada manual** do código como fallback (QR danificado, luz ruim)
    - **Sem confirmação por leitura.** Bipou, mostrou, próximo. Diálogo a cada caixa mata o ritmo.
    - **Registrar ocorrência** no volume lido — ver seção 6
-4. **Encerrar sessão** — trava novas leituras e libera o relatório. Confirmar apenas aqui, porque é irreversível.
+4. **Encerrar sessão** — trava novas leituras e libera o relatório. Confirmar apenas aqui, porque é irreversível. A confirmação mostra as **pendências da carga** (divergência, rota não cadastrada, pedido incompleto) antes de encerrar.
+5. **Liberação da carga** — ação do **gestor**, no painel, depois de encerrada. O sistema avisa as pendências e registra se a liberação saiu com ressalva; ele não decide sozinho parar um caminhão.
 
 ---
 

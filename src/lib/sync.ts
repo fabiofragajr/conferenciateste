@@ -6,7 +6,7 @@
 // interrompido a qualquer momento sem perder nada.
 
 import type {
-  EstadoSync, GrupoRota, Leitura, Ocorrencia, Sessao, Usuario
+  Dispositivo, EstadoSync, Leitura, Ocorrencia, Rota, Sessao, Transportadora, Usuario
 } from '../types.js';
 import * as db from './db.js';
 import { agora } from './util.js';
@@ -18,11 +18,14 @@ const MAX_TENTATIVAS = 8;
 
 export const TABELAS: Record<db.NomeStore, string> = {
   usuarios: 'usuarios',
-  grupos: 'grupos_rota',
+  transportadoras: 'transportadoras',
+  rotas: 'rotas',
   sessoes: 'sessoes',
   leituras: 'leituras',
   ocorrencias: 'ocorrencias'
 };
+
+const CHAVE_ULTIMA_DESCIDA = 'sync.ultimaDescida';
 
 let estado: EstadoSync = {
   pendentes: 0,
@@ -30,8 +33,15 @@ let estado: EstadoSync = {
   configurado: false,
   enviando: false,
   ultimoEnvio: null,
-  ultimoErro: null
+  ultimaDescida: null,
+  ultimoErro: null,
+  usuarioAtual: ''
 };
+
+/** Quem está usando o aparelho — vai junto no registro do dispositivo. */
+export function definirUsuarioAtual(nome: string): void {
+  estado.usuarioAtual = nome;
+}
 
 const ouvintes = new Set<(e: EstadoSync) => void>();
 let timerAuto: number | undefined;
@@ -91,28 +101,42 @@ const linhaUsuario = (u: Usuario): Record<string, unknown> => ({
   atualizado_em: u.atualizadoEm
 });
 
-const linhaGrupo = (g: GrupoRota): Record<string, unknown> => ({
-  id: g.id,
-  nome: g.nome,
-  rotas: g.rotas,
-  transportadora: g.transportadora || null,
-  ativo: g.ativo,
-  atualizado_em: g.atualizadoEm
+const linhaTransportadora = (t: Transportadora): Record<string, unknown> => ({
+  id: t.id,
+  nome: t.nome,
+  cnpj: t.cnpj || null,
+  responsavel: t.responsavel || null,
+  telefone: t.telefone || null,
+  email: t.email || null,
+  ativo: t.ativo,
+  atualizado_em: t.atualizadoEm
+});
+
+const linhaRota = (r: Rota): Record<string, unknown> => ({
+  id: r.id,
+  codigo: r.codigo,
+  nome: r.nome,
+  transportadora_id: r.transportadoraId,
+  descricao: r.descricao || null,
+  ativo: r.ativo,
+  atualizado_em: r.atualizadoEm
 });
 
 const linhaSessao = (s: Sessao): Record<string, unknown> => ({
   id: s.id,
-  grupo_rota_id: s.grupoRotaId,
+  transportadora_id: s.transportadoraId,
   usuario_id: s.usuarioId,
   inicio: s.inicio,
   fim: s.fim,
   status: s.status,
-  grupo_nome: s.grupoNome,
+  transportadora_nome: s.transportadoraNome,
   rotas: s.rotas,
-  transportadora: s.transportadora || null,
   usuario_nome: s.usuarioNome,
   geo_inicio: s.geoInicio,
   geo_fim: s.geoFim,
+  liberada_em: s.liberadaEm,
+  liberada_por: s.liberadaPor,
+  liberada_com_pendencias: s.liberadaComPendencias,
   atualizado_em: s.atualizadoEm
 });
 
@@ -122,6 +146,9 @@ const linhaLeitura = (l: Leitura): Record<string, unknown> => ({
   codigo_volume: l.codigoVolume,
   rota: l.rota,
   rota_prefixo: l.rotaPrefixo,
+  rota_id: l.rotaId,
+  transportadora_dona_id: l.transportadoraDonaId,
+  transportadora_dona_nome: l.transportadoraDonaNome,
   volume: l.volume,
   volume_atual: l.volumeAtual,
   volume_total: l.volumeTotal,
@@ -131,6 +158,7 @@ const linhaLeitura = (l: Leitura): Record<string, unknown> => ({
   raw_data: l.rawData,
   origem: l.origem,
   motivo_invalido: l.motivoInvalido,
+  dispositivo_id: l.dispositivoId,
   lat: l.lat,
   lng: l.lng,
   precisao_metros: l.precisaoMetros,
@@ -183,6 +211,154 @@ async function subirFotos(o: Ocorrencia): Promise<string[]> {
   return caminhos;
 }
 
+/* ---------------------------------------------------------- descida ------ */
+// O aparelho precisa RECEBER o cadastro, não só enviar leitura. Sem isto, a
+// transportadora que o gestor cadastrou no desktop nunca chega ao celular da
+// doca — e a validação local não teria contra o que comparar.
+
+interface LinhaTransportadora {
+  id: string; nome: string; cnpj: string | null; responsavel: string | null;
+  telefone: string | null; email: string | null; ativo: boolean; atualizado_em: string;
+}
+interface LinhaRota {
+  id: string; codigo: string; nome: string; transportadora_id: string;
+  descricao: string | null; ativo: boolean; atualizado_em: string;
+}
+interface LinhaUsuario {
+  id: string; nome: string; login: string; gestor: boolean; funcao: string | null;
+  telefone: string | null; placa: string | null; ativo: boolean; atualizado_em: string;
+}
+
+const daLinhaTransportadora = (l: LinhaTransportadora): Transportadora => ({
+  id: l.id,
+  nome: l.nome,
+  cnpj: l.cnpj ?? '',
+  responsavel: l.responsavel ?? '',
+  telefone: l.telefone ?? '',
+  email: l.email ?? '',
+  ativo: l.ativo,
+  sync: 'ENVIADO',
+  syncTentativas: 0,
+  syncErro: null,
+  atualizadoEm: l.atualizado_em
+});
+
+const daLinhaRota = (l: LinhaRota): Rota => ({
+  id: l.id,
+  codigo: l.codigo,
+  nome: l.nome,
+  transportadoraId: l.transportadora_id,
+  descricao: l.descricao ?? '',
+  ativo: l.ativo,
+  sync: 'ENVIADO',
+  syncTentativas: 0,
+  syncErro: null,
+  atualizadoEm: l.atualizado_em
+});
+
+/**
+ * Baixa o cadastro alterado desde a última descida.
+ *
+ * A senha NUNCA desce (nem sobe): o hash fica só no aparelho onde a pessoa o
+ * definiu. Um usuário criado pelo gestor chega aqui sem senha e a define no
+ * primeiro acesso deste aparelho — ver `auth.entrar`.
+ */
+async function baixarCadastro(): Promise<{ baixados: number; erro: string | null }> {
+  const cliente = await obterCliente();
+  if (!cliente) return { baixados: 0, erro: 'Supabase não configurado.' };
+
+  const desde = await db.configGet<string>(CHAVE_ULTIMA_DESCIDA, '1970-01-01T00:00:00.000Z');
+  const marcoNovo = agora();
+  let baixados = 0;
+
+  const transp = await cliente.from(TABELAS.transportadoras).select('*').gt('atualizado_em', desde);
+  if (transp.error) return { baixados, erro: `transportadoras: ${transp.error.message}` };
+  const listaTransp = (transp.data ?? []) as LinhaTransportadora[];
+  await db.salvarDoServidor('transportadoras', listaTransp.map(daLinhaTransportadora));
+  baixados += listaTransp.length;
+
+  const rotas = await cliente.from(TABELAS.rotas).select('*').gt('atualizado_em', desde);
+  if (rotas.error) return { baixados, erro: `rotas: ${rotas.error.message}` };
+  const listaRotas = (rotas.data ?? []) as LinhaRota[];
+  await db.salvarDoServidor('rotas', listaRotas.map(daLinhaRota));
+  baixados += listaRotas.length;
+
+  const usuarios = await cliente.from(TABELAS.usuarios).select('*').gt('atualizado_em', desde);
+  if (usuarios.error) return { baixados, erro: `usuarios: ${usuarios.error.message}` };
+  baixados += await aplicarUsuarios((usuarios.data ?? []) as LinhaUsuario[]);
+
+  await db.configSet(CHAVE_ULTIMA_DESCIDA, marcoNovo);
+  return { baixados, erro: null };
+}
+
+/** Atualiza o cadastro do usuário preservando a senha local, que nunca trafega. */
+async function aplicarUsuarios(linhas: LinhaUsuario[]): Promise<number> {
+  const novos: Usuario[] = [];
+  for (const l of linhas) {
+    const local = await db.obter('usuarios', l.id);
+    novos.push({
+      id: l.id,
+      nome: l.nome,
+      login: l.login,
+      // '' = ainda sem senha neste aparelho; definida no primeiro acesso.
+      senhaHash: local?.senhaHash ?? '',
+      gestor: l.gestor,
+      funcao: l.funcao ?? '',
+      telefone: l.telefone ?? '',
+      placa: l.placa ?? '',
+      ativo: l.ativo,
+      sync: 'ENVIADO',
+      syncTentativas: 0,
+      syncErro: null,
+      atualizadoEm: l.atualizado_em
+    });
+  }
+  await db.salvarDoServidor('usuarios', novos);
+  return novos.length;
+}
+
+/* ----------------------------------------------------- dispositivos ------ */
+
+/**
+ * Registra este aparelho no servidor. O gestor precisa saber se o número do
+ * painel está completo ou se ainda há leitura presa num celular sem sinal.
+ */
+async function registrarDispositivo(pendentesAgora: number, usuarioNome: string): Promise<void> {
+  const cliente = await obterCliente();
+  if (!cliente) return;
+  await cliente.from('dispositivos').upsert([{
+    id: db.dispositivoId(),
+    apelido: navigator.userAgent.slice(0, 120),
+    ultima_sync: agora(),
+    pendentes: pendentesAgora,
+    ultimo_usuario: usuarioNome || null,
+    atualizado_em: agora()
+  }], { onConflict: 'id' });
+}
+
+/** Lista de aparelhos para o painel do gestor. */
+export async function listarDispositivos(): Promise<Dispositivo[]> {
+  const cliente = await obterCliente();
+  if (!cliente) return [];
+  const { data, error } = await cliente
+    .from('dispositivos')
+    .select('*')
+    .order('ultima_sync', { ascending: false })
+    .limit(50);
+  if (error || !data) return [];
+  return (data as {
+    id: string; apelido: string | null; ultima_sync: string | null;
+    pendentes: number | null; ultimo_usuario: string | null; atualizado_em: string;
+  }[]).map((d) => ({
+    id: d.id,
+    apelido: d.apelido ?? 'aparelho',
+    ultimaSync: d.ultima_sync,
+    pendentes: d.pendentes ?? 0,
+    ultimoUsuario: d.ultimo_usuario ?? '',
+    atualizadoEm: d.atualizado_em
+  }));
+}
+
 /* ------------------------------------------------------------ envio ------ */
 
 async function enviarStore(store: db.NomeStore): Promise<{ enviados: number; erro: string | null }> {
@@ -210,8 +386,10 @@ async function enviarStore(store: db.NomeStore): Promise<{ enviados: number; err
       }
     } else if (store === 'usuarios') {
       linhas = (lote as Usuario[]).map(linhaUsuario);
-    } else if (store === 'grupos') {
-      linhas = (lote as GrupoRota[]).map(linhaGrupo);
+    } else if (store === 'transportadoras') {
+      linhas = (lote as Transportadora[]).map(linhaTransportadora);
+    } else if (store === 'rotas') {
+      linhas = (lote as Rota[]).map(linhaRota);
     } else if (store === 'sessoes') {
       linhas = (lote as Sessao[]).map(linhaSessao);
     } else {
@@ -270,6 +448,8 @@ export async function sincronizar(): Promise<EstadoSync> {
       return estadoSync();
     }
 
+    // Sobe primeiro o que foi feito aqui, depois desce o que mudou lá: assim
+    // uma alteração de cadastro nunca sobrescreve leitura que ainda não subiu.
     let erro: string | null = null;
     let enviados = 0;
     for (const store of db.STORES_SYNC) {
@@ -278,8 +458,18 @@ export async function sincronizar(): Promise<EstadoSync> {
       if (r.erro) { erro = r.erro; break; }
     }
 
+    if (!erro) {
+      const descida = await baixarCadastro();
+      if (descida.erro) erro = descida.erro;
+      else estado.ultimaDescida = agora();
+    }
+
     estado.ultimoErro = erro;
     if (!erro && enviados > 0) estado.ultimoEnvio = agora();
+
+    if (!erro) {
+      await registrarDispositivo(await db.contarPendentes(), estado.usuarioAtual);
+    }
     return estadoSync();
   } catch (e) {
     estado.ultimoErro = e instanceof Error ? e.message : 'Falha inesperada na sincronização.';

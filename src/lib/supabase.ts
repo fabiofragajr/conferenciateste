@@ -72,7 +72,7 @@ export async function obterCliente(): Promise<SupabaseClient | null> {
 export async function testarConexao(): Promise<{ ok: boolean; mensagem: string }> {
   const c = await obterCliente();
   if (!c) return { ok: false, mensagem: 'Informe a URL e a chave anônima do projeto.' };
-  const { error } = await c.from('grupos_rota').select('id').limit(1);
+  const { error } = await c.from('transportadoras').select('id').limit(1);
   if (error) return { ok: false, mensagem: error.message };
   return { ok: true, mensagem: 'Conexão com o Supabase funcionando.' };
 }

@@ -57,8 +57,9 @@ await p.goto(`${BASE}/index.html`);
 await p.fill('#in-login', 'operador');
 await p.fill('#in-senha', 'operador');
 await p.click('#form-login button[type=submit]');
-await p.waitForSelector('#view-grupo:not([hidden])');
-await p.click('.grupo-btn >> nth=0');
+// Com uma transportadora só, o app pula a escolha e já abre a câmera.
+await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])');
+if (await p.isVisible('#view-grupo')) await p.click('.grupo-btn >> nth=0');
 await p.waitForSelector('#view-bipagem:not([hidden])');
 
 for (const [cod, rota] of [['EMB0008314147', 'FNOR 100'], ['EMB0008399999', 'FSUL 200']]) {

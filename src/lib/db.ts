@@ -6,62 +6,150 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type {
-  GrupoRota, Leitura, Ocorrencia, Sessao, Sincronizavel, StatusSync, Usuario
+  Leitura, Ocorrencia, Rota, Sessao, Sincronizavel, StatusSync, Transportadora, Usuario
 } from '../types.js';
 import { agora, uid } from './util.js';
 
 const DB_NOME = 'logdis';
-const DB_VERSAO = 1;
+const DB_VERSAO = 2;
 
 interface LogDisDB extends DBSchema {
   usuarios: { key: string; value: Usuario; indexes: { login: string; sync: string } };
-  grupos: { key: string; value: GrupoRota; indexes: { sync: string } };
+  transportadoras: { key: string; value: Transportadora; indexes: { sync: string } };
+  rotas: { key: string; value: Rota; indexes: { codigo: string; transportadoraId: string; sync: string } };
   sessoes: { key: string; value: Sessao; indexes: { usuarioId: string; status: string; inicio: string; sync: string } };
   leituras: { key: string; value: Leitura; indexes: { sessaoId: string; timestamp: string; sync: string } };
   ocorrencias: { key: string; value: Ocorrencia; indexes: { sessaoId: string; leituraId: string; timestamp: string; sync: string } };
   config: { key: string; value: { chave: string; valor: unknown } };
 }
 
-export type NomeStore = 'usuarios' | 'grupos' | 'sessoes' | 'leituras' | 'ocorrencias';
+export type NomeStore = 'usuarios' | 'transportadoras' | 'rotas' | 'sessoes' | 'leituras' | 'ocorrencias';
 
 /** Ordem de envio: respeita a dependência entre as tabelas no Supabase. */
-export const STORES_SYNC: NomeStore[] = ['usuarios', 'grupos', 'sessoes', 'leituras', 'ocorrencias'];
+export const STORES_SYNC: NomeStore[] =
+  ['usuarios', 'transportadoras', 'rotas', 'sessoes', 'leituras', 'ocorrencias'];
+
+/** Formato v1: o grupo carregava a lista de rotas e o nome solto da transportadora. */
+interface GrupoRotaV1 extends Sincronizavel {
+  id: string;
+  nome: string;
+  rotas: string[];
+  transportadora: string;
+  ativo: boolean;
+}
 
 let _db: Promise<IDBPDatabase<LogDisDB>> | null = null;
 
 export function db(): Promise<IDBPDatabase<LogDisDB>> {
   if (!_db) {
     _db = openDB<LogDisDB>(DB_NOME, DB_VERSAO, {
-      upgrade(banco) {
-        const usuarios = banco.createObjectStore('usuarios', { keyPath: 'id' });
-        usuarios.createIndex('login', 'login', { unique: true });
-        usuarios.createIndex('sync', 'sync');
+      async upgrade(banco, versaoAnterior, _versaoNova, tx) {
+        if (versaoAnterior < 1) {
+          const usuarios = banco.createObjectStore('usuarios', { keyPath: 'id' });
+          usuarios.createIndex('login', 'login', { unique: true });
+          usuarios.createIndex('sync', 'sync');
 
-        const grupos = banco.createObjectStore('grupos', { keyPath: 'id' });
-        grupos.createIndex('sync', 'sync');
+          const sessoes = banco.createObjectStore('sessoes', { keyPath: 'id' });
+          sessoes.createIndex('usuarioId', 'usuarioId');
+          sessoes.createIndex('status', 'status');
+          sessoes.createIndex('inicio', 'inicio');
+          sessoes.createIndex('sync', 'sync');
 
-        const sessoes = banco.createObjectStore('sessoes', { keyPath: 'id' });
-        sessoes.createIndex('usuarioId', 'usuarioId');
-        sessoes.createIndex('status', 'status');
-        sessoes.createIndex('inicio', 'inicio');
-        sessoes.createIndex('sync', 'sync');
+          const leituras = banco.createObjectStore('leituras', { keyPath: 'id' });
+          leituras.createIndex('sessaoId', 'sessaoId');
+          leituras.createIndex('timestamp', 'timestamp');
+          leituras.createIndex('sync', 'sync');
 
-        const leituras = banco.createObjectStore('leituras', { keyPath: 'id' });
-        leituras.createIndex('sessaoId', 'sessaoId');
-        leituras.createIndex('timestamp', 'timestamp');
-        leituras.createIndex('sync', 'sync');
+          const ocorrencias = banco.createObjectStore('ocorrencias', { keyPath: 'id' });
+          ocorrencias.createIndex('sessaoId', 'sessaoId');
+          ocorrencias.createIndex('leituraId', 'leituraId');
+          ocorrencias.createIndex('timestamp', 'timestamp');
+          ocorrencias.createIndex('sync', 'sync');
 
-        const ocorrencias = banco.createObjectStore('ocorrencias', { keyPath: 'id' });
-        ocorrencias.createIndex('sessaoId', 'sessaoId');
-        ocorrencias.createIndex('leituraId', 'leituraId');
-        ocorrencias.createIndex('timestamp', 'timestamp');
-        ocorrencias.createIndex('sync', 'sync');
+          banco.createObjectStore('config', { keyPath: 'chave' });
+        }
 
-        banco.createObjectStore('config', { keyPath: 'chave' });
+        if (versaoAnterior < 2) {
+          const transportadoras = banco.createObjectStore('transportadoras', { keyPath: 'id' });
+          transportadoras.createIndex('sync', 'sync');
+
+          const rotas = banco.createObjectStore('rotas', { keyPath: 'id' });
+          // Único no sistema inteiro: é essa restrição que permite descobrir o
+          // dono do volume só a partir da etiqueta.
+          rotas.createIndex('codigo', 'codigo', { unique: true });
+          rotas.createIndex('transportadoraId', 'transportadoraId');
+          rotas.createIndex('sync', 'sync');
+
+          await migrarGruposParaTransportadoras(banco, tx);
+        }
       }
     });
   }
   return _db;
+}
+
+type TxUpgrade = {
+  objectStore(nome: string): {
+    getAll(): Promise<unknown[]>;
+    put(valor: unknown): Promise<unknown>;
+  };
+};
+
+/**
+ * Migração v1 -> v2: cada grupo de rota vira uma transportadora, e cada prefixo
+ * do grupo vira um código de rota dela. As sessões antigas guardavam o id do
+ * grupo, que agora é o id da transportadora — o histórico continua de pé.
+ *
+ * Código repetido em grupos diferentes fica com o primeiro: o índice é único, e
+ * cadastro ambíguo era justamente o problema que a v2 veio resolver.
+ */
+async function migrarGruposParaTransportadoras(
+  banco: IDBPDatabase<LogDisDB>,
+  tx: unknown
+): Promise<void> {
+  if (!banco.objectStoreNames.contains('grupos' as never)) return;
+
+  const transacao = tx as TxUpgrade;
+  const grupos = (await transacao.objectStore('grupos').getAll()) as GrupoRotaV1[];
+  const lojaTransp = transacao.objectStore('transportadoras');
+  const lojaRotas = transacao.objectStore('rotas');
+  const usados = new Set<string>();
+
+  for (const g of grupos) {
+    await lojaTransp.put({
+      id: g.id,
+      nome: g.transportadora?.trim() || g.nome,
+      cnpj: '',
+      responsavel: '',
+      telefone: '',
+      email: '',
+      ativo: g.ativo,
+      sync: 'PENDENTE',
+      syncTentativas: 0,
+      syncErro: null,
+      atualizadoEm: agora()
+    } satisfies Transportadora);
+
+    for (const codigo of g.rotas ?? []) {
+      const limpo = String(codigo).trim().toUpperCase();
+      if (!limpo || usados.has(limpo)) continue;
+      usados.add(limpo);
+      await lojaRotas.put({
+        id: uid(),
+        codigo: limpo,
+        nome: g.nome,
+        transportadoraId: g.id,
+        descricao: '',
+        ativo: g.ativo,
+        sync: 'PENDENTE',
+        syncTentativas: 0,
+        syncErro: null,
+        atualizadoEm: agora()
+      } satisfies Rota);
+    }
+  }
+
+  banco.deleteObjectStore('grupos' as never);
 }
 
 /** Campos de sincronização de um registro recém-criado. */
@@ -70,7 +158,7 @@ export function novoSync(): Sincronizavel & { id: string } {
 }
 
 type ValorDe<S extends NomeStore> = LogDisDB[S]['value'];
-type ValorQualquer = Usuario | GrupoRota | Sessao | Leitura | Ocorrencia;
+type ValorQualquer = Usuario | Transportadora | Rota | Sessao | Leitura | Ocorrencia;
 
 /**
  * Grava e marca como pendente de envio. Toda escrita passa por aqui — é o que
@@ -82,12 +170,28 @@ export async function salvar<S extends NomeStore>(store: S, obj: ValorDe<S>): Pr
   return registro as ValorDe<S>;
 }
 
-/** Grava vários numa transação só — usado na importação de cadastro. */
+/** Grava vários numa transação só. */
 export async function salvarVarios<S extends NomeStore>(store: S, objs: ValorDe<S>[]): Promise<void> {
   const banco = await db();
   const tx = banco.transaction(store, 'readwrite');
   const marcados = objs.map((o) => ({ ...o, sync: 'PENDENTE' as StatusSync, atualizadoEm: agora() }));
   await Promise.all([...marcados.map((o) => tx.store.put(o as ValorDe<S>)), tx.done]);
+}
+
+/**
+ * Grava o que desceu do servidor SEM reenfileirar: o registro já está lá.
+ * Sem isso, cada sincronização de descida devolveria tudo para a fila de subida.
+ */
+export async function salvarDoServidor<S extends NomeStore>(store: S, objs: ValorDe<S>[]): Promise<void> {
+  if (!objs.length) return;
+  const banco = await db();
+  const tx = banco.transaction(store, 'readwrite');
+  await Promise.all([
+    ...objs.map((o) => tx.store.put({
+      ...o, sync: 'ENVIADO' as StatusSync, syncErro: null, syncTentativas: 0
+    } as ValorDe<S>)),
+    tx.done
+  ]);
 }
 
 export async function obter<S extends NomeStore>(store: S, id: string): Promise<ValorDe<S> | undefined> {
@@ -104,6 +208,7 @@ export async function todos<S extends NomeStore>(store: S): Promise<ValorDe<S>[]
  */
 interface AcessoPorIndice {
   getAllFromIndex(store: string, indice: string, chave?: IDBValidKey, limite?: number): Promise<unknown[]>;
+  getFromIndex(store: string, indice: string, chave: IDBValidKey): Promise<unknown>;
   countFromIndex(store: string, indice: string, chave?: IDBValidKey): Promise<number>;
 }
 
@@ -112,6 +217,11 @@ const comIndice = async (): Promise<AcessoPorIndice> => (await db()) as unknown 
 export async function porIndice<S extends NomeStore>(store: S, indice: string, valor: string): Promise<ValorDe<S>[]> {
   const banco = await comIndice();
   return (await banco.getAllFromIndex(store, indice, valor)) as ValorDe<S>[];
+}
+
+export async function umPorIndice<S extends NomeStore>(store: S, indice: string, valor: string): Promise<ValorDe<S> | undefined> {
+  const banco = await comIndice();
+  return (await banco.getFromIndex(store, indice, valor)) as ValorDe<S> | undefined;
 }
 
 export async function remover(store: NomeStore, id: string): Promise<void> {
@@ -185,4 +295,17 @@ export async function configGet<T>(chave: string, padrao: T): Promise<T> {
 
 export async function configSet(chave: string, valor: unknown): Promise<void> {
   await (await db()).put('config', { chave, valor });
+}
+
+/**
+ * Identificador deste aparelho. Não identifica pessoa: serve para o gestor
+ * saber de qual celular ainda faltam leituras chegando.
+ */
+export function dispositivoId(): string {
+  let id = localStorage.getItem('logdis.dispositivo');
+  if (!id) {
+    id = uid();
+    localStorage.setItem('logdis.dispositivo', id);
+  }
+  return id;
 }

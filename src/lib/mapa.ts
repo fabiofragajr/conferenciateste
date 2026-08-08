@@ -12,6 +12,7 @@ import { esc, hora } from './util.js';
 const FORMA: Record<StatusLeitura, string> = {
   OK: 'círculo',
   ROTA_DIVERGENTE: 'triângulo',
+  DESTINO_NAO_MAPEADO: 'triângulo invertido',
   DUPLICADO: 'quadrado',
   INVALIDO: 'losango'
 };
@@ -35,6 +36,8 @@ function marca(status: StatusLeitura, x: number, y: number, impreciso: boolean):
       return `<circle cx="${x}" cy="${y}" r="${r}" ${pintura} />`;
     case 'ROTA_DIVERGENTE':
       return `<polygon points="${x},${y - r - 1} ${x + r + 1},${y + r} ${x - r - 1},${y + r}" ${pintura} />`;
+    case 'DESTINO_NAO_MAPEADO':
+      return `<polygon points="${x},${y + r + 1} ${x + r + 1},${y - r} ${x - r - 1},${y - r}" ${pintura} />`;
     case 'DUPLICADO':
       return `<rect x="${x - r}" y="${y - r}" width="${r * 2}" height="${r * 2}" rx="1" ${pintura} />`;
     default:

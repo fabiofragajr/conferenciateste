@@ -3,8 +3,8 @@
 
 import type { jsPDF } from 'jspdf';
 import type {
-  GrupoRota, Leitura, Momento, Ocorrencia, PedidoIncompleto,
-  ResumoLeituras, Sessao, Usuario
+  Leitura, Momento, Ocorrencia, PedidoIncompleto,
+  ResumoLeituras, Sessao, Transportadora, Usuario
 } from '../types.js';
 import * as db from './db.js';
 import {
@@ -16,7 +16,7 @@ import { baixarArquivo, dataHora, duracao, esc, hora, minutosEntre, paraCSV } fr
 export interface DadosRelatorio {
   sessao: Sessao;
   usuario: Usuario | undefined;
-  grupo: GrupoRota | undefined;
+  transportadora: Transportadora | undefined;
   leituras: Leitura[];
   ocorrencias: Ocorrencia[];
   resumo: ResumoLeituras;
@@ -30,9 +30,9 @@ export async function montarRelatorio(sessaoId: string): Promise<DadosRelatorio>
   const sessao = await db.obter('sessoes', sessaoId);
   if (!sessao) throw new Error('Sessão não encontrada.');
 
-  const [usuario, grupo, leiturasRaw, ocorrenciasRaw] = await Promise.all([
+  const [usuario, transportadora, leiturasRaw, ocorrenciasRaw] = await Promise.all([
     db.obter('usuarios', sessao.usuarioId),
-    db.obter('grupos', sessao.grupoRotaId),
+    db.obter('transportadoras', sessao.transportadoraId),
     db.porIndice('leituras', 'sessaoId', sessaoId),
     db.porIndice('ocorrencias', 'sessaoId', sessaoId)
   ]);
@@ -53,7 +53,7 @@ export async function montarRelatorio(sessaoId: string): Promise<DadosRelatorio>
   return {
     sessao,
     usuario,
-    grupo,
+    transportadora,
     leituras,
     ocorrencias,
     resumo: resumir(leituras),
@@ -102,7 +102,7 @@ export function cardOcorrencia(o: Ocorrencia, extra = ''): string {
 }
 
 export function renderizarHTML(r: DadosRelatorio): string {
-  const { sessao, usuario, grupo, leituras, ocorrencias, resumo, incompletos, divergentes, porLeitura, ritmo } = r;
+  const { sessao, usuario, leituras, ocorrencias, resumo, incompletos, divergentes, porLeitura, ritmo } = r;
 
   const alerta = divergentes.length
     ? `<div class="rel-alerta">
@@ -157,7 +157,7 @@ export function renderizarHTML(r: DadosRelatorio): string {
         <div><dt>Fim</dt><dd>${sessao.fim ? dataHora(sessao.fim) : 'em aberto'}</dd></div>
         <div><dt>Duração</dt><dd>${duracao(sessao.inicio, sessao.fim)}</dd></div>
         <div><dt>Conferente</dt><dd>${esc(identificacao(sessao, usuario))}</dd></div>
-        <div><dt>Grupo de rota</dt><dd>${esc(grupo?.nome ?? sessao.grupoNome)}</dd></div>
+        <div><dt>Transportadora</dt><dd>${esc(sessao.transportadoraNome)}</dd></div>
         <div><dt>Rotas</dt><dd>${esc(sessao.rotas.join(', '))}</dd></div>
       </dl>
     </header>
@@ -168,6 +168,7 @@ export function renderizarHTML(r: DadosRelatorio): string {
       ${cartao('Total bipado', resumo.total)}
       ${cartao('Liberados', resumo.ok, 'st-ok')}
       ${cartao('Outra rota', resumo.divergentes, 'st-div')}
+      ${cartao('Rota não cadastrada', resumo.naoMapeados, 'st-mapa')}
       ${cartao('Duplicados', resumo.duplicados, 'st-dup')}
       ${cartao('Inválidos', resumo.invalidos, 'st-inv')}
       ${cartao('Pedidos distintos', resumo.qtdPedidos)}
@@ -214,13 +215,13 @@ export function hidratarFotos(container: HTMLElement, ocorrencias: Ocorrencia[])
 export function exportarCSV(r: DadosRelatorio): void {
   const { sessao, usuario, leituras, porLeitura } = r;
   const cabecalho = [
-    'sessao', 'inicio_sessao', 'conferente', 'funcao', 'placa', 'grupo_rota', 'rotas_grupo',
+    'sessao', 'inicio_sessao', 'conferente', 'funcao', 'placa', 'transportadora', 'rotas',
     'codigo_volume', 'rota', 'pedido', 'volume', 'status', 'origem', 'horario',
     'lat', 'lng', 'precisao_m', 'geo_status', 'ocorrencias', 'raw_qr'
   ];
   const linhas = leituras.map((l) => [
     sessao.id, sessao.inicio, sessao.usuarioNome, usuario?.funcao ?? '', usuario?.placa ?? '',
-    sessao.grupoNome, sessao.rotas.join('|'),
+    sessao.transportadoraNome, sessao.rotas.join('|'),
     l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
     l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
     (porLeitura.get(l.id) ?? []).map((o) => o.texto).join(' | '),
@@ -272,7 +273,7 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
       ['Fim', sessao.fim ? dataHora(sessao.fim) : 'em aberto'],
       ['Duração', duracao(sessao.inicio, sessao.fim)],
       ['Conferente', identificacao(sessao, usuario)],
-      ['Grupo de rota', sessao.grupoNome],
+      ['Transportadora', sessao.transportadoraNome],
       ['Rotas', sessao.rotas.join(', ')]
     ],
     theme: 'plain',
@@ -304,8 +305,9 @@ export async function exportarPDF(r: DadosRelatorio): Promise<void> {
 
   autoTable(doc, {
     startY: y,
-    head: [['Total', 'Liberados', 'Outra rota', 'Duplicados', 'Inválidos', 'Pedidos', 'Vol/min']],
-    body: [[resumo.total, resumo.ok, resumo.divergentes, resumo.duplicados, resumo.invalidos, resumo.qtdPedidos, ritmo]],
+    head: [['Total', 'Liberados', 'Outra rota', 'Não mapeado', 'Duplicados', 'Inválidos', 'Pedidos', 'Vol/min']],
+    body: [[resumo.total, resumo.ok, resumo.divergentes, resumo.naoMapeados,
+      resumo.duplicados, resumo.invalidos, resumo.qtdPedidos, ritmo]],
     styles: { fontSize: 9, halign: 'center' },
     headStyles: { fillColor: FOREST }
   });

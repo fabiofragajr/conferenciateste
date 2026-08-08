@@ -21,17 +21,64 @@ const passo = async (nome, fn) => {
   catch (e) { console.log('FALHA -', nome, '\n     ', e.message); process.exitCode = 1; }
 };
 
+// Preparação: o cadastro é do gestor, e é ele que dá sentido à divergência.
+// FSUL passa a ser de outra transportadora — é isso que o operador vai
+// descobrir ao bipar uma caixa dela na carga errada.
+await p.goto(`${BASE}/gestor.html`);
+await passo('preparar cadastro (gestor)', async () => {
+  await p.waitForSelector('#bloqueio:not([hidden])', { timeout: 8000 });
+  await p.fill('#in-login', 'gestor');
+  await p.fill('#in-senha', 'gestor');
+  await p.click('#form-login button[type=submit]');
+  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+
+  await p.fill('#t-nome', 'Transportadora Sul');
+  await p.click('#form-transportadora button[type=submit]');
+  await p.waitForTimeout(400);
+
+  const opcoes = await p.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
+  const sul = opcoes.find(([, t]) => t === 'Transportadora Sul');
+  if (!sul) throw new Error('transportadora não entrou no select');
+
+  // FSUL nasceu do seed na transportadora LOGDIS: desativa e recadastra na Sul.
+  await p.evaluate(async () => {
+    const req = indexedDB.open('logdis');
+    const banco = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    const tx = banco.transaction('rotas', 'readwrite');
+    const todas = await new Promise((ok) => {
+      const r = tx.objectStore('rotas').getAll();
+      r.onsuccess = () => ok(r.result);
+    });
+    for (const rota of todas) {
+      if (rota.codigo === 'FSUL') tx.objectStore('rotas').delete(rota.id);
+    }
+  });
+  await p.waitForTimeout(200);
+
+  await p.selectOption('#r-transportadora', sul[0]);
+  await p.fill('#r-codigo', 'FSUL');
+  await p.fill('#r-nome', 'Carga Sul');
+  await p.click('#form-rota button[type=submit]');
+  await p.waitForTimeout(400);
+  if (!/Transportadora Sul/.test(await p.innerHTML('#lista-rotas'))) {
+    throw new Error('FSUL não ficou com a Transportadora Sul');
+  }
+});
+
 await p.goto(`${BASE}/index.html`);
 
 await passo('login do operador', async () => {
+  await p.click('#btn-sair').catch(() => {});
+  await p.waitForTimeout(200);
   await p.fill('#in-login', 'operador');
   await p.fill('#in-senha', 'operador');
   await p.click('#form-login button[type=submit]');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 5000 });
 });
 
-await passo('escolher grupo abre a bipagem', async () => {
-  await p.click('.grupo-btn >> nth=0');
+await passo('escolher transportadora abre a bipagem', async () => {
+  // Com uma transportadora só o app pula a pergunta e já abre a câmera.
+  if (await p.isVisible('#view-grupo')) await p.click('.grupo-btn >> nth=0');
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 5000 });
 });
 
@@ -59,11 +106,28 @@ await passo('mesmo volume de novo é duplicado', async () => {
   if ((await p.textContent('#c-dup')).trim() !== '1') throw new Error('contador duplicado errado');
 });
 
-await passo('rota de fora do grupo é divergente', async () => {
+await passo('rota de outra transportadora é divergente', async () => {
+  // FSUL foi cadastrada para outra transportadora no bloco de preparação.
   await manual('EMB0008399999', 'FSUL 200');
   const st = (await p.textContent('#banner-status')).trim();
   if (st !== 'Volume de outra rota') throw new Error(`banner: ${st}`);
-  if ((await p.textContent('#c-div')).trim() !== '1') throw new Error('contador divergente errado');
+  const detalhe = (await p.textContent('#banner-codigo')).trim();
+  if (!/Transportadora Sul/.test(detalhe)) {
+    throw new Error(`a divergência precisa dizer de quem é a caixa: ${detalhe}`);
+  }
+});
+
+await passo('rota sem cadastro não vira divergência', async () => {
+  await manual('EMB0008377777', 'RDESC 9');
+  const st = (await p.textContent('#banner-status')).trim();
+  if (st !== 'Rota não cadastrada') throw new Error(`banner: ${st}`);
+  const detalhe = (await p.textContent('#banner-codigo')).trim();
+  if (!/avise o gestor/.test(detalhe)) throw new Error(`sem instrução do que fazer: ${detalhe}`);
+});
+
+await passo('divergência diz de quem é a caixa', async () => {
+  const detalhe = await p.evaluate(() => document.querySelector('#lista-leituras .leitura .leitura-meta')?.textContent ?? '');
+  if (!detalhe.trim()) throw new Error('lista de leituras vazia');
 });
 
 await passo('câmera abre sem aviso de erro por cima', async () => {
@@ -151,12 +215,42 @@ await passo('detalhe da sessão abre com mapa', async () => {
   await g.screenshot({ path: 'tests/saida/tela-gestor.png', fullPage: true });
 });
 
-await passo('cadastro de grupo de rota', async () => {
-  await g.fill('#g-nome', 'Carga Leste');
-  await g.fill('#g-rotas', 'FLES, FNOR');
-  await g.click('#form-grupo button[type=submit]');
+await passo('cadastro de transportadora e código de rota', async () => {
+  await g.fill('#t-nome', 'Transportadora Beta');
+  await g.click('#form-transportadora button[type=submit]');
   await g.waitForTimeout(400);
-  if (!/Carga Leste/.test(await g.innerHTML('#lista-grupos'))) throw new Error('grupo não cadastrado');
+  if (!/Transportadora Beta/.test(await g.innerHTML('#lista-transportadoras'))) {
+    throw new Error('transportadora não cadastrada');
+  }
+
+  const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
+  const beta = opcoes.find(([, t]) => t === 'Transportadora Beta');
+  await g.selectOption('#r-transportadora', beta[0]);
+  await g.fill('#r-codigo', 'FLES');
+  await g.fill('#r-nome', 'Carga Leste');
+  await g.click('#form-rota button[type=submit]');
+  await g.waitForTimeout(400);
+  if (!/FLES/.test(await g.innerHTML('#lista-rotas'))) throw new Error('rota não cadastrada');
+});
+
+await passo('código de rota não pode ter dois donos', async () => {
+  const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
+  const beta = opcoes.find(([, t]) => t === 'Transportadora Beta');
+  await g.selectOption('#r-transportadora', beta[0]);
+  await g.fill('#r-codigo', 'FNOR');
+  await g.fill('#r-nome', 'Tentativa duplicada');
+  await g.click('#form-rota button[type=submit]');
+  await g.waitForTimeout(300);
+  const msg = await g.textContent('#r-msg');
+  if (!/já pertence/.test(msg ?? '')) throw new Error(`esperava recusa por duplicidade, veio: ${msg}`);
+});
+
+await passo('rota lida sem cadastro vira fila de decisão do gestor', async () => {
+  const html = await g.innerHTML('#nao-mapeados');
+  if (!/RDESC/.test(html)) throw new Error('código não cadastrado não apareceu para o gestor');
+  if (!/Precisa de atenção/.test(await g.innerHTML('#atencao'))) {
+    throw new Error('bloco de atenção não destacou a pendência');
+  }
 });
 
 // ---- painel do diretor

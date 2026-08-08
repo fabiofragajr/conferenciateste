@@ -7,12 +7,13 @@
 
 import type {
   Classificacao, EtiquetaOcorrencia, EtiquetaParseada, Leitura,
-  Momento, PedidoIncompleto, ResumoLeituras, StatusLeitura
+  Momento, PedidoIncompleto, ResumoLeituras, Rota, StatusLeitura
 } from '../types.js';
 
 export const STATUS = {
   OK: 'OK',
   ROTA_DIVERGENTE: 'ROTA_DIVERGENTE',
+  DESTINO_NAO_MAPEADO: 'DESTINO_NAO_MAPEADO',
   DUPLICADO: 'DUPLICADO',
   INVALIDO: 'INVALIDO'
 } as const satisfies Record<string, StatusLeitura>;
@@ -23,6 +24,9 @@ export const STATUS_INFO: Record<StatusLeitura, { rotulo: string; curto: string;
   // aqui, o operador vê um vermelho e o gestor vê outro.
   OK: { rotulo: 'Volume liberado', curto: 'OK', cor: '#16a34a', classe: 'st-ok' },
   ROTA_DIVERGENTE: { rotulo: 'Volume de outra rota', curto: 'Divergente', cor: '#dc2626', classe: 'st-div' },
+  // Código que ninguém cadastrou. Não é divergência — o sistema simplesmente
+  // não sabe de quem é a caixa, e quem decide isso é o gestor, não a doca.
+  DESTINO_NAO_MAPEADO: { rotulo: 'Rota não cadastrada', curto: 'Não mapeado', cor: '#ea580c', classe: 'st-mapa' },
   DUPLICADO: { rotulo: 'Já bipado nesta conferência', curto: 'Duplicado', cor: '#d97706', classe: 'st-dup' },
   INVALIDO: { rotulo: 'Etiqueta não reconhecida', curto: 'Inválido', cor: '#6b7280', classe: 'st-inv' }
 };
@@ -122,19 +126,48 @@ export function parseEtiqueta(raw: unknown): EtiquetaParseada {
   };
 }
 
+/** Tudo que a classificação precisa saber, já em memória — nada de rede aqui. */
+export interface ContextoConferencia {
+  /** Transportadora escolhida pelo operador ao abrir a conferência. */
+  transportadoraId: string;
+  /** Cadastro de rotas indexado pelo código (prefixo alfabético). */
+  rotasPorCodigo: Map<string, Rota>;
+  /** codigoVolume já lido nesta conferência -> primeira leitura. */
+  jaBipados: Map<string, PrimeiraLeitura>;
+}
+
+export interface PrimeiraLeitura {
+  timestamp: string;
+  usuarioNome: string;
+}
+
 /**
- * Classifica a leitura. A ordem é proposital:
- *   INVALIDO -> ROTA_DIVERGENTE -> DUPLICADO -> OK
- * Divergência vem antes de duplicado porque rebipar um volume de outra rota
- * tem que voltar vermelho, não âmbar. Divergência nunca fica escondida.
+ * Classifica a leitura consultando só o que está na memória do aparelho.
+ *
+ * A ordem é proposital:
+ *   INVALIDO -> DESTINO_NAO_MAPEADO -> ROTA_DIVERGENTE -> DUPLICADO -> OK
+ *
+ * Divergência vem antes de duplicado porque rebipar um volume de outra
+ * transportadora tem que voltar vermelho, não âmbar — divergência nunca fica
+ * escondida. E código sem cadastro não pode virar divergência: o sistema não
+ * sabe de quem é a caixa, e fingir que sabe é pior do que dizer que não sabe.
  */
-export function classificar(raw: unknown, rotasDoGrupo: string[], jaBipados: Set<string>): Classificacao {
+export function classificar(raw: unknown, ctx: ContextoConferencia): Classificacao {
   const dados = parseEtiqueta(raw);
 
   if (!dados.valido) return { status: STATUS.INVALIDO, dados };
-  if (!rotaPertence(dados.rota, rotasDoGrupo)) return { status: STATUS.ROTA_DIVERGENTE, dados };
-  if (jaBipados.has(dados.codigoVolume as string)) return { status: STATUS.DUPLICADO, dados };
-  return { status: STATUS.OK, dados };
+
+  const rota = ctx.rotasPorCodigo.get(dados.rotaPrefixo as string);
+  if (!rota) return { status: STATUS.DESTINO_NAO_MAPEADO, dados };
+
+  if (rota.transportadoraId !== ctx.transportadoraId) {
+    return { status: STATUS.ROTA_DIVERGENTE, dados, rota };
+  }
+
+  const primeira = ctx.jaBipados.get(dados.codigoVolume as string);
+  if (primeira) return { status: STATUS.DUPLICADO, dados, rota, primeira };
+
+  return { status: STATUS.OK, dados, rota };
 }
 
 /**
@@ -173,16 +206,55 @@ export function resumir(leituras: Leitura[]): ResumoLeituras {
   const pedidos = new Set<string>();
   let ok = 0;
   let divergentes = 0;
+  let naoMapeados = 0;
   let duplicados = 0;
   let invalidos = 0;
 
   for (const l of leituras) {
     if (l.status === STATUS.OK) ok++;
     else if (l.status === STATUS.ROTA_DIVERGENTE) divergentes++;
+    else if (l.status === STATUS.DESTINO_NAO_MAPEADO) naoMapeados++;
     else if (l.status === STATUS.DUPLICADO) duplicados++;
     else invalidos++;
     if (l.pedido) pedidos.add(l.pedido);
   }
 
-  return { total: leituras.length, ok, divergentes, duplicados, invalidos, qtdPedidos: pedidos.size };
+  return {
+    total: leituras.length,
+    ok, divergentes, naoMapeados, duplicados, invalidos,
+    qtdPedidos: pedidos.size
+  };
+}
+
+/**
+ * O que impede a carga de sair. É a mesma conta na tela do operador, no
+ * relatório e no painel — uma regra só, para os três não discordarem.
+ */
+export function pendenciasDaCarga(leituras: Leitura[]): import('../types.js').Pendencia[] {
+  const resumo = resumir(leituras);
+  const incompletos = pedidosIncompletos(leituras);
+  const pendencias: import('../types.js').Pendencia[] = [];
+
+  if (resumo.divergentes > 0) {
+    pendencias.push({
+      tipo: 'DIVERGENCIA',
+      quantidade: resumo.divergentes,
+      descricao: `${resumo.divergentes} volume(s) de outra transportadora`
+    });
+  }
+  if (resumo.naoMapeados > 0) {
+    pendencias.push({
+      tipo: 'DESTINO_NAO_MAPEADO',
+      quantidade: resumo.naoMapeados,
+      descricao: `${resumo.naoMapeados} volume(s) com rota não cadastrada`
+    });
+  }
+  if (incompletos.length > 0) {
+    pendencias.push({
+      tipo: 'PEDIDO_INCOMPLETO',
+      quantidade: incompletos.length,
+      descricao: `${incompletos.length} pedido(s) com volume faltando`
+    });
+  }
+  return pendencias;
 }
