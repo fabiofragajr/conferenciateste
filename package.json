@@ -7,7 +7,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node --experimental-strip-types tests/model.test.ts && node tests/decode.test.mjs",
+    "test": "npm run typecheck && node --experimental-strip-types tests/model.test.ts && node --experimental-strip-types tests/router.test.ts && node tests/decode.test.mjs",
     "test:e2e": "vite build && node tests/e2e.test.mjs && node tests/e2e-offline.test.mjs && node tests/sync-fila.test.mjs && node tests/pdf.test.mjs && node tests/login-sandro.mjs && node tests/painel-shell.test.mjs",
     "test:base": "node tests/base-real.test.mjs"
   },
