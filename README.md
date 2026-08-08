@@ -156,7 +156,14 @@ nada no Supabase.
 
 ### Configurar o Supabase
 
-1. Rode `supabase/schema.sql` no SQL Editor do projeto.
+1. Projeto novo: rode `supabase/schema.sql` no SQL Editor.
+   Projeto que já rodou o schema antigo (com a tabela `grupos_rota`): rode
+   `supabase/migracao-v1-para-v2.sql`. Ela roda inteira numa transação, é
+   idempotente (rodar duas vezes não faz nada na segunda) e preserva o
+   histórico — o id do grupo vira o id da transportadora, os mesmos UUIDs que o
+   aparelho usa ao migrar o IndexedDB. As leituras antigas mantêm o status com
+   que foram classificadas na doca: reescrever isso seria apagar o que
+   aconteceu.
 2. Informe URL e chave anônima — de duas formas:
    - build: copie `.env.example` para `.env` e preencha `VITE_SUPABASE_URL`,
      `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_BUCKET`;
