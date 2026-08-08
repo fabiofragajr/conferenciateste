@@ -89,6 +89,8 @@ Leitura        { id, sessaoId, codigoVolume, rota, rotaPrefixo, rotaId,
 
 **`Rota.codigo` é único no sistema inteiro.** Se `FNOR` pertence à Transportadora Alfa, nenhuma outra pode cadastrá-lo. Não é detalhe de banco: é essa unicidade que permite descobrir o dono do volume só a partir da etiqueta. Sem ela, a conferência não tem resposta.
 
+**`Transportadora.nome` também é único**, e o cadastro precisa recusar repetido em vez de deixar passar. Duas "LOGDIS" na lista não são um incômodo estético: o operador escolhe uma das duas na doca sem ter como saber qual delas tem o código de rota, e a carga certa vira `DESTINO_NAO_MAPEADO` por causa da escolha. Comparar por nome normalizado (`trim()` + `toUpperCase()`), senão `Logdis` e `LOGDIS ` passam pela checagem.
+
 Os campos `transportadoraNome`, `rotas` e `usuarioNome` da sessão são **cópias congeladas** do cadastro no momento da conferência. Renomear uma transportadora hoje não pode mudar o relatório de ontem.
 
 `funcao`, `telefone` e `placa` são **opcionais**. Cadastro mínimo para alguém começar a bipar: **nome e login**. Não travar o cadastro exigindo documento, placa, e-mail ou confirmação — o ajudante que entrou hoje precisa conseguir bipar hoje.
@@ -140,6 +142,8 @@ Login → Escolher transportadora → Bipar volumes → Encerrar → Relatório
 ```
 
 **Duas telas até a câmera abrir. Esse é o teto.** Cada passo a mais é um passo feito de pé, com caixa na mão.
+
+**Cada um começa onde trabalha.** Quem tem `gestor: true` entra no painel; quem não tem entra na bipagem. Conferência aberta ganha das duas regras — ninguém é tirado do meio de uma carga, e voltar ao painel com sessão aberta não encerra nada: a sessão fica `ABERTA` e é retomada. O gestor também bipa, então ele tem um botão **Painel** grande no topo da bipagem, não um link de rodapé. E ninguém apanha da tela errada: usuário sem acesso ao painel que chegar nele vai para a bipagem, em vez de tomar "acesso negado" sem saída.
 
 1. **Login** — simples, local. Sem OAuth, sem backend externo nesta versão. Manter a sessão logada no aparelho; ninguém digita senha toda manhã.
 2. **Transportadora** — escolhe a transportadora terceira que está carregando agora. Botões grandes, não `<select>`. Se só existe uma cadastrada, pular a tela e já abrir a câmera. Trocar de transportadora com conferência aberta exige encerrar antes — misturar bipagem de duas transportadoras invalida a conferência.
@@ -283,10 +287,13 @@ O painel responde a três perguntas, nesta ordem de importância:
 
 ### Diretrizes de UI do painel
 
-- É uma tela de **desktop**, ao contrário do resto do app. Aproveite a largura: tabela densa, filtros persistentes, sem card gigante com um número só.
-- Divergência nunca fica escondida atrás de um filtro. Se houve divergência no período, ela aparece antes de qualquer métrica agregada.
+- **Desktop-first, mas abre no celular.** Aqui o gestor senta, tem teclado e tempo: aproveite a largura com tabela densa, filtros persistentes, sem card gigante com um número só. Abaixo de **1024 px** a mesma tela precisa funcionar — o gestor confere pelo celular no meio da doca. Nesse tamanho, as tabelas de operação (conferências, ocorrências) viram cartões empilhados; as de cadastro podem manter rolagem lateral, porque são consulta e não urgência.
+- **O painel tem menu lateral.** É o oposto do app de bipagem, e de propósito: aqui há muita coisa e a pessoa tem tempo de escolher. Lateral fixa no desktop, gaveta no celular, agrupada por Operação / Análise / Cadastros / Sistema.
+- **Divergência nunca fica escondida — nem atrás de filtro, nem atrás de item de menu.** Com menu, isso exige duas travas: badge com a contagem no item que leva a ela, visível de qualquer seção, e faixa de alerta fixa acima do conteúdo de **todas** as seções enquanto houver divergência no dia. Sem divergência, a faixa some: alarme que toca sempre deixa de ser alarme.
+- **O painel é onde se parametriza tudo.** Pessoas, transportadoras, códigos de rota e conexão com o Supabase. Se o gestor precisa pedir para alguém mexer no banco, o painel está incompleto.
+- Trocar a transportadora dona de um código de rota vale **da próxima bipagem em diante**. Leitura e sessão já gravadas carregam cópia congelada do dono — relatório de ontem não muda. A tela precisa dizer isso.
 - Exportação do período inteiro em CSV, além do PDF por sessão.
-- Nada de "engajamento" ou ranking de pessoas. A tela é operacional: mostra o que aconteceu e onde está o problema.
+- Nada de "engajamento" ou ranking de pessoas. A tela é operacional: mostra o que aconteceu e onde está o problema. Ritmo de bipagem entra como diagnóstico de gargalo, ao lado da taxa de divergência — nunca como placar.
 
 ---
 
@@ -335,7 +342,7 @@ Regras que valem para todo o app de bipagem:
 
 - **Uma decisão por tela.** Nunca duas perguntas juntas.
 - **Zero digitação** no caminho normal. Teclado só no login e na entrada manual de código.
-- **Nada de menu, aba, engrenagem ou tela de configuração** no app de bipagem. Cadastro é coisa do gestor.
+- **Nada de menu, aba, engrenagem ou tela de configuração no app de bipagem.** Cadastro e parametrização são coisa do gestor, e o lugar deles é o painel — que tem menu lateral justamente porque é a tela oposta a esta.
 - Alvos de toque grandes (mín. 56 px), texto grande, contraste alto. Legível a um braço de distância.
 - O status da leitura tem que ser entendido **sem ler**: cor, som e vibração diferentes por status. Alguém de longe deve saber se deu problema.
 - Erro nunca é beco sem saída. Sempre há saída óbvia: bipar de novo, digitar o código, seguir.
