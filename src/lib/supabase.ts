@@ -21,16 +21,22 @@ let cliente: SupabaseClient | null = null;
 let clienteDe = '';
 
 /**
- * Configuração do build (.env) com sobreposição gravada no aparelho — assim o
- * gestor aponta para outro projeto sem precisar recompilar o app.
+ * Configuração do build (.env), ou a do aparelho quando existe — assim o gestor
+ * aponta para outro projeto sem precisar recompilar o app.
+ *
+ * O que foi gravado aqui MANDA, inclusive em branco. Antes, campo vazio caía de
+ * volta no .env: não havia como desligar a sincronização de um aparelho, e
+ * apagar a URL na tela não fazia nada. Aparelho sem projeto guarda tudo local,
+ * que é o comportamento offline normal.
  */
 export async function obterConfig(): Promise<ConfigSupabase> {
   if (cache) return cache;
   const salva = await db.configGet<Partial<ConfigSupabase> | null>(CHAVE_CONFIG, null);
+  const origem = salva ?? doAmbiente;
   cache = {
-    url: (salva?.url || doAmbiente.url).trim(),
-    anonKey: (salva?.anonKey || doAmbiente.anonKey).trim(),
-    bucket: (salva?.bucket || doAmbiente.bucket).trim() || 'ocorrencias'
+    url: (origem.url ?? '').trim(),
+    anonKey: (origem.anonKey ?? '').trim(),
+    bucket: (origem.bucket ?? '').trim() || 'ocorrencias'
   };
   return cache;
 }

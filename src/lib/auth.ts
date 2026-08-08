@@ -5,11 +5,17 @@
 // `funcao` é texto descritivo para o relatório — nunca libera nem bloqueia nada.
 // A única regra de acesso do sistema é `gestor: true` (abre os painéis).
 
-import type { Rota, Transportadora, Usuario } from '../types.js';
+import type { Usuario } from '../types.js';
 import * as db from './db.js';
 import { novoSync } from './db.js';
 
 const CHAVE_SESSAO = 'logdis.usuarioLogado';
+
+/**
+ * O hash viaja junto com o cadastro, então precisa custar caro para quebrar.
+ * PBKDF2 com iteração alta é o que o WebCrypto oferece sem dependência externa.
+ */
+const ITERACOES = 210_000;
 
 const paraHex = (buf: ArrayBuffer): string =>
   Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -25,7 +31,24 @@ function hashSimples(txt: string): string {
   return `f${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
 }
 
-async function digerir(salt: string, senha: string): Promise<string> {
+async function pbkdf2(salt: string, senha: string, iteracoes: number): Promise<string | null> {
+  if (!crypto?.subtle) return null;
+  try {
+    const material = await crypto.subtle.importKey(
+      'raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveBits']
+    );
+    const bits = await crypto.subtle.deriveBits(
+      { name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: iteracoes, hash: 'SHA-256' },
+      material, 256
+    );
+    return paraHex(bits);
+  } catch {
+    return null;
+  }
+}
+
+/** Formato legado (v1): SHA-256 simples de `salt:senha`. Só para conferir. */
+async function digerirLegado(salt: string, senha: string): Promise<string> {
   const txt = `${salt}:${senha}`;
   if (crypto?.subtle) {
     try {
@@ -37,16 +60,40 @@ async function digerir(salt: string, senha: string): Promise<string> {
   return hashSimples(txt);
 }
 
-export async function gerarSenhaHash(senha: string): Promise<string> {
-  const salt = crypto.randomUUID().slice(0, 8);
-  return `${salt}$${await digerir(salt, senha)}`;
+function novoSalt(): string {
+  if (crypto?.randomUUID) return crypto.randomUUID().slice(0, 8);
+  return Math.random().toString(36).slice(2, 10);
 }
 
-export async function conferirSenha(senha: string, senhaHash: string): Promise<boolean> {
-  const [salt, esperado] = String(senhaHash ?? '').split('$');
-  if (!salt || !esperado) return false;
-  return (await digerir(salt, senha)) === esperado;
+export async function gerarSenhaHash(senha: string): Promise<string> {
+  const salt = novoSalt();
+  const derivado = await pbkdf2(salt, senha, ITERACOES);
+  if (derivado) return `${salt}$pbkdf2$${ITERACOES}$${derivado}`;
+  return `${salt}$simples$${hashSimples(`${salt}:${senha}`)}`;
 }
+
+/**
+ * Confere nos três formatos já emitidos. O legado continua valendo para não
+ * trancar ninguém para fora num aparelho que já tinha senha gravada.
+ */
+export async function conferirSenha(senha: string, senhaHash: string): Promise<boolean> {
+  const partes = String(senhaHash ?? '').split('$');
+
+  if (partes.length === 4 && partes[1] === 'pbkdf2') {
+    const iteracoes = Number(partes[2]);
+    if (!Number.isFinite(iteracoes) || iteracoes <= 0) return false;
+    return (await pbkdf2(partes[0], senha, iteracoes)) === partes[3];
+  }
+  if (partes.length === 3 && partes[1] === 'simples') {
+    return hashSimples(`${partes[0]}:${senha}`) === partes[2];
+  }
+  if (partes.length === 2 && partes[0] && partes[1]) {
+    return (await digerirLegado(partes[0], senha)) === partes[1];
+  }
+  return false;
+}
+
+const formatoLegado = (senhaHash: string): boolean => String(senhaHash ?? '').split('$').length === 2;
 
 export const normalizarLogin = (login: string): string => String(login ?? '').trim().toLowerCase();
 
@@ -66,18 +113,28 @@ export interface DadosUsuario {
   ativo?: boolean;
 }
 
-/** Cadastro mínimo para alguém começar a bipar hoje: nome, login e senha. */
+export const SENHA_MINIMA = 4;
+
+/**
+ * Cadastro mínimo para alguém começar a bipar hoje: nome e login.
+ *
+ * A senha é opcional de propósito. O gestor cadastra o ajudante que entrou hoje
+ * sem precisar inventar senha por ele: quem entra sem senha define a dela na
+ * primeira entrada, no próprio aparelho.
+ */
 export async function criarUsuario(dados: DadosUsuario): Promise<Usuario> {
   if (!dados.nome?.trim()) throw new Error('Informe o nome.');
   if (!dados.login?.trim()) throw new Error('Informe o login.');
-  if (!dados.senha) throw new Error('Informe a senha.');
+  if (dados.senha && dados.senha.length < SENHA_MINIMA) {
+    throw new Error(`A senha precisa ter ${SENHA_MINIMA} ou mais caracteres.`);
+  }
   if (await buscarPorLogin(dados.login)) throw new Error('Já existe um usuário com este login.');
 
   const usuario: Usuario = {
     ...novoSync(),
     nome: dados.nome.trim(),
     login: normalizarLogin(dados.login),
-    senhaHash: await gerarSenhaHash(dados.senha),
+    senhaHash: dados.senha ? await gerarSenhaHash(dados.senha) : '',
     gestor: dados.gestor === true,
     funcao: (dados.funcao ?? '').trim(),
     telefone: (dados.telefone ?? '').trim(),
@@ -95,6 +152,9 @@ export async function atualizarUsuario(
 ): Promise<Usuario> {
   const atual = await db.obter('usuarios', id);
   if (!atual) throw new Error('Usuário não encontrado.');
+  if (novaSenha && novaSenha.length < SENHA_MINIMA) {
+    throw new Error(`A senha precisa ter ${SENHA_MINIMA} ou mais caracteres.`);
+  }
 
   let login = atual.login;
   if (campos.login && normalizarLogin(campos.login) !== atual.login) {
@@ -117,6 +177,19 @@ export async function atualizarUsuario(
   return novo;
 }
 
+/**
+ * Libera o login para a pessoa escolher outra senha na próxima entrada.
+ * É o caminho do "esqueci a senha": o gestor não precisa inventar uma senha
+ * nova nem descobrir a antiga, e ninguém fica parado na doca esperando.
+ */
+export async function redefinirSenha(id: string): Promise<Usuario> {
+  const atual = await db.obter('usuarios', id);
+  if (!atual) throw new Error('Usuário não encontrado.');
+  const novo: Usuario = { ...atual, senhaHash: '' };
+  await db.salvar('usuarios', novo);
+  return novo;
+}
+
 export async function entrar(
   login: string,
   senha: string
@@ -125,11 +198,14 @@ export async function entrar(
   if (!u) return { ok: false, erro: 'Login ou senha incorretos.' };
   if (!u.ativo) return { ok: false, erro: 'Usuário inativo. Procure o gestor.' };
 
-  // Usuário que desceu do servidor chega sem senha: o hash nunca trafega.
-  // A primeira senha digitada neste aparelho passa a ser a senha dele aqui.
+  // Cadastrado pelo gestor sem senha, ou senha redefinida por ele: a primeira
+  // senha digitada passa a ser a senha da pessoa, e sobe junto com o cadastro.
   if (!u.senhaHash) {
-    if (senha.length < 4) {
-      return { ok: false, erro: 'Primeiro acesso neste aparelho: escolha uma senha com 4 ou mais caracteres.' };
+    if (senha.length < SENHA_MINIMA) {
+      return {
+        ok: false,
+        erro: `Primeiro acesso: escolha uma senha com ${SENHA_MINIMA} ou mais caracteres.`
+      };
     }
     const comSenha = { ...u, senhaHash: await gerarSenhaHash(senha) };
     await db.salvar('usuarios', comSenha);
@@ -138,8 +214,17 @@ export async function entrar(
   }
 
   if (!(await conferirSenha(senha, u.senhaHash))) return { ok: false, erro: 'Login ou senha incorretos.' };
-  localStorage.setItem(CHAVE_SESSAO, u.id);
-  return { ok: true, usuario: u };
+
+  // Senha certa num hash do formato antigo: regrava no formato forte agora que
+  // o hash acompanha o cadastro. A pessoa não percebe nada.
+  let usuario = u;
+  if (formatoLegado(u.senhaHash)) {
+    usuario = { ...u, senhaHash: await gerarSenhaHash(senha) };
+    await db.salvar('usuarios', usuario);
+  }
+
+  localStorage.setItem(CHAVE_SESSAO, usuario.id);
+  return { ok: true, usuario };
 }
 
 export function sair(): void {
@@ -159,71 +244,17 @@ export async function usuarioLogado(): Promise<Usuario | null> {
 }
 
 /**
- * Provisionamento local. Cada bloco é marcado com a própria chave, então um
- * bloco novo também roda nos aparelhos que já abriram o app antes dele existir
- * — o seed antigo, com chave única, nunca mais rodava depois da primeira vez.
+ * O aparelho já conhece alguém?
  *
- * O flag é gravado mesmo quando o bloco não cria nada: quem apagou o usuário
- * de propósito não vai vê-lo voltar no próximo boot.
+ * NÃO existe cadastro de exemplo. Pessoas, transportadoras e códigos de rota
+ * vêm da base — o gestor cadastra uma vez, no painel, e o cadastro desce para
+ * os aparelhos. Inventar um `gestor/gestor` local só criava conta de mentira em
+ * todo celular, duplicava o cadastro no servidor e travava a fila de envio.
+ *
+ * Sem cadastro e sem rede, a tela de login diz isso em vez de recusar a senha:
+ * o aparelho não tem contra o que conferir, e fingir "senha incorreta" manda a
+ * pessoa procurar um erro que não existe.
  */
-async function umaVez(chave: string, passo: () => Promise<void>): Promise<boolean> {
-  if (await db.configGet(chave, false)) return false;
-  await passo();
-  await db.configSet(chave, true);
-  return true;
-}
-
-/** Primeira execução: cria o gestor padrão e grupos de exemplo. */
-export async function garantirSeed(): Promise<{ criou: boolean }> {
-  const criou = await umaVez('seed.v1', async () => {
-    const usuarios = await db.todos('usuarios');
-    if (usuarios.length === 0) {
-      await criarUsuario({
-        nome: 'Gestor de Transporte', login: 'gestor', senha: 'gestor',
-        gestor: true, funcao: 'Gestor de transporte'
-      });
-      await criarUsuario({
-        nome: 'Operador', login: 'operador', senha: 'operador',
-        gestor: false, funcao: 'Conferente'
-      });
-    }
-
-    // Uma transportadora de exemplo com as duas rotas conhecidas, para o app
-    // não abrir num beco sem saída antes do primeiro cadastro do gestor.
-    const transportadoras = await db.todos('transportadoras');
-    if (transportadoras.length === 0) {
-      const transportadora: Transportadora = {
-        ...novoSync(),
-        nome: 'LOGDIS',
-        cnpj: '',
-        responsavel: '',
-        telefone: '',
-        email: '',
-        ativo: true
-      };
-      await db.salvar('transportadoras', transportadora);
-
-      const rota = (codigo: string, nome: string): Rota => ({
-        ...novoSync(),
-        codigo,
-        nome,
-        transportadoraId: transportadora.id,
-        descricao: '',
-        ativo: true
-      });
-      await db.salvarVarios('rotas', [rota('FNOR', 'Carga Norte'), rota('FSUL', 'Carga Sul')]);
-    }
-  });
-
-  // Gestor nominal da operação. A senha aqui é a de primeiro acesso: ela fica
-  // em texto no repositório, então precisa ser trocada no painel.
-  await umaVez('seed.gestor-sandro', async () => {
-    if (await buscarPorLogin('sandro')) return;
-    await criarUsuario({
-      nome: 'Sandro', login: 'sandro', senha: 'Lodis@123',
-      gestor: true, funcao: 'Gestor de transporte'
-    });
-  });
-
-  return { criou };
+export async function temCadastro(): Promise<boolean> {
+  return (await db.todos('usuarios')).length > 0;
 }

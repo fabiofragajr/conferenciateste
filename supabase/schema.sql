@@ -6,12 +6,24 @@
 -- Por isso todas as chaves primárias são geradas no cliente (uuid v4).
 
 -- ---------------------------------------------------------------- pessoas ---
--- A senha NUNCA sai do aparelho: a autenticação da v1 é local. Aqui ficam só os
--- dados que o relatório precisa mostrar.
+-- Não existe cadastro de exemplo no app: pessoas nascem aqui (ou no painel do
+-- gestor) e descem para os aparelhos. Um projeto novo precisa de pelo menos um
+-- gestor — ver o bloco no fim deste arquivo.
+--
+-- `senha_hash`: PBKDF2-SHA256, 210.000 iterações, salt por usuário. O hash
+-- ACOMPANHA o cadastro, e isso é uma troca consciente. Sem ele, a senha que o
+-- gestor define no desktop não valeria no celular da doca, e qualquer pessoa
+-- poderia reivindicar um login num aparelho novo só digitando uma senha
+-- qualquer — o aparelho não teria contra o que conferir.
+-- Em compensação, a chave anônima está dentro do app e é pública na prática:
+-- quem a tiver consegue LER esta coluna. É proteção contra uso indevido casual,
+-- não contra um atacante. Antes de produção, troque por autenticação Supabase
+-- de verdade (ver a nota de RLS mais abaixo).
 create table if not exists public.usuarios (
   id             uuid primary key,
   nome           text not null,
-  login          text not null,
+  login          text not null unique,
+  senha_hash     text,
   gestor         boolean not null default false,
   funcao         text,           -- descritivo; não é regra de acesso
   telefone       text,
@@ -24,9 +36,11 @@ create table if not exists public.usuarios (
 -- -------------------------------------------------------- transportadoras ---
 -- Transportadora terceira que recebe a carga. É o que o operador escolhe antes
 -- de bipar.
+-- `nome` é único: duas transportadoras com o mesmo nome viram dois botões
+-- idênticos na tela do operador, e ele não tem como escolher certo.
 create table if not exists public.transportadoras (
   id             uuid primary key,
-  nome           text not null,
+  nome           text not null unique,
   cnpj           text,
   responsavel    text,
   telefone       text,
@@ -283,6 +297,17 @@ join public.sessoes s on s.id = l.sessao_id
 where l.status = 'DESTINO_NAO_MAPEADO' and l.rota_prefixo is not null
   and not exists (select 1 from public.rotas r where r.codigo = l.rota_prefixo)
 group by l.rota_prefixo;
+
+-- ------------------------------------------------------- primeiro gestor ----
+-- Sem isto, um projeto novo não tem ninguém para entrar no painel: o app não
+-- inventa mais usuário nenhum. Entra SEM senha de propósito — ela é escolhida
+-- na primeira entrada e passa a valer em qualquer aparelho, e assim nenhuma
+-- senha em texto fica guardada aqui.
+--
+-- Troque nome e login pelos da pessoa de verdade antes de rodar.
+insert into public.usuarios (id, nome, login, gestor, funcao, ativo, atualizado_em)
+select gen_random_uuid(), 'Sandro', 'sandro', true, 'Gestor de transporte', true, now()
+where not exists (select 1 from public.usuarios where gestor);
 
 -- Cargas encerradas que ninguém liberou ainda.
 create or replace view public.vw_cargas_aguardando_liberacao as

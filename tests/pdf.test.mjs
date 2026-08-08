@@ -10,6 +10,7 @@ import { stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
+import { prepararAparelho, entrar as fazerLogin } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -42,22 +43,18 @@ const ctx = await navegador.newContext({
   acceptDownloads: true
 });
 const p = await ctx.newPage();
-// 401 do Supabase é ruído de ambiente: a exportação é 100% local.
+// A exportação é 100% local e o aparelho de teste roda sem projeto configurado,
+// então qualquer erro de rede aqui é defeito de verdade, não ruído de ambiente.
+// Por isso a escuta só começa depois da preparação, que corta a produção na mão.
 const vigiar = (pagina, quem) => {
   pagina.on('pageerror', (e) => erros.push(`[pageerror ${quem}] ${e.message}`));
   pagina.on('console', (m) => {
-    if (m.type() === 'error' && !/401|Failed to load resource/.test(m.text())) {
-      erros.push(`[console ${quem}] ${m.text()}`);
-    }
+    if (m.type() === 'error') erros.push(`[console ${quem}] ${m.text()}`);
   });
 };
+await prepararAparelho(p, BASE, 'index.html');
 vigiar(p, 'operador');
-
-await p.goto(`${BASE}/index.html`);
-await p.fill('#in-login', 'operador');
-await p.fill('#in-senha', 'operador');
-await p.click('#form-login button[type=submit]');
-// Com uma transportadora só, o app pula a escolha e já abre a câmera.
+await fazerLogin(p, 'ana');
 await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])');
 if (await p.isVisible('#view-grupo')) await p.click('.grupo-btn >> nth=0');
 await p.waitForSelector('#view-bipagem:not([hidden])');
@@ -85,11 +82,9 @@ await baixar(p, () => p.click('#btn-pdf'), 'sessao');
 // ---- diretor: PDF do período
 const ctx2 = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: 'pt-BR', acceptDownloads: true });
 const d = await ctx2.newPage();
+await prepararAparelho(d, BASE, 'diretor.html');
 vigiar(d, 'diretor');
-await d.goto(`${BASE}/diretor.html`);
-await d.fill('#in-login', 'gestor');
-await d.fill('#in-senha', 'gestor');
-await d.click('#form-login button[type=submit]');
+await fazerLogin(d, 'sandro');
 await d.waitForSelector('#conteudo:not([hidden])');
 await baixar(d, () => d.click('#btn-pdf'), 'diretor');
 

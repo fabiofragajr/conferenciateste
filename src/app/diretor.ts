@@ -428,7 +428,7 @@ async function abrir(nome: string): Promise<void> {
 }
 
 async function boot(): Promise<void> {
-  await auth.garantirSeed();
+  await sync.garantirCadastroLocal();
   sync.iniciarAuto();
   const u = await auth.usuarioLogado();
   if (!u?.gestor) {

@@ -36,7 +36,15 @@ export interface Usuario extends Sincronizavel {
   id: string;
   nome: string;
   login: string;
-  /** Nunca sai do aparelho: o hash não é enviado ao Supabase. */
+  /**
+   * Hash PBKDF2 da senha, no formato `salt$pbkdf2$iteracoes$hex`.
+   * Vazio = ainda sem senha; a pessoa define na primeira entrada.
+   *
+   * O hash ACOMPANHA o cadastro (sobe e desce). Sem isso a senha definida pelo
+   * gestor no desktop não valeria no celular da doca, e qualquer um poderia
+   * reivindicar um login num aparelho novo só digitando uma senha qualquer.
+   * Ver a nota de segurança em `supabase/schema.sql`.
+   */
   senhaHash: string;
   gestor: boolean;
   /** Texto livre e descritivo. Não é regra de acesso. */

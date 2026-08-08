@@ -73,7 +73,8 @@ A única distinção que o sistema faz é uma: **acessa o painel do gestor ou n�
 ```
 Usuario        { id, nome, login, senhaHash, gestor: boolean,
                  funcao, telefone, placa, ativo }             // funcao: texto livre, descritivo
-Transportadora { id, nome, cnpj, responsavel, telefone, email, ativo }
+                                                              // senhaHash vazio = escolhe na 1ª entrada
+Transportadora { id, nome, cnpj, responsavel, telefone, email, ativo }  // nome único
 Rota           { id, codigo, nome, transportadoraId, descricao, ativo }
 Sessao         { id, transportadoraId, usuarioId, inicio, fim, status,
                  transportadoraNome, rotas, usuarioNome,      // cópias congeladas
@@ -90,7 +91,30 @@ Leitura        { id, sessaoId, codigoVolume, rota, rotaPrefixo, rotaId,
 
 Os campos `transportadoraNome`, `rotas` e `usuarioNome` da sessão são **cópias congeladas** do cadastro no momento da conferência. Renomear uma transportadora hoje não pode mudar o relatório de ontem.
 
-`funcao`, `telefone` e `placa` são **opcionais**. Cadastro mínimo para alguém começar a bipar: nome, login e senha. Não travar o cadastro exigindo documento ou placa — o ajudante que entrou hoje precisa conseguir bipar hoje.
+`funcao`, `telefone` e `placa` são **opcionais**. Cadastro mínimo para alguém começar a bipar: **nome e login**. Não travar o cadastro exigindo documento, placa, e-mail ou confirmação — o ajudante que entrou hoje precisa conseguir bipar hoje.
+
+**A senha também é opcional no cadastro**, e esse é o caminho normal: o gestor não precisa inventar senha pelos outros. Quem é cadastrado sem senha escolhe a dela na primeira entrada. No painel, **Redefinir senha** devolve essa escolha para a pessoa — é o "esqueci a senha", sem ninguém descobrir a antiga.
+
+### Não existe cadastro de exemplo
+
+O app **não cria** usuário, transportadora nem rota. Nunca. Tudo vem da base: o gestor cadastra uma vez e o cadastro desce para os aparelhos.
+
+Isso não é preferência de estilo. Semear cadastro no cliente gerava um id novo por aparelho, e `rotas.codigo` é único no servidor: do segundo celular em diante o envio batia em 409 para sempre. Como a fila parava na primeira tabela que falhava, e `rotas` vem antes de `leituras`, **nenhuma conferência daquele aparelho chegava ao servidor**. Ao mesmo tempo, a base acumulava uma cópia da mesma pessoa e da mesma transportadora por aparelho.
+
+Consequências que precisam ser respeitadas:
+
+- Aparelho sem cadastro **avisa** ("ainda não recebeu o cadastro; conecte-se uma vez"), em vez de recusar a senha certa. Ele não tem contra o que conferir — fingir "senha incorreta" manda a pessoa procurar um erro que não existe.
+- O primeiro gestor de um projeto novo nasce no `supabase/schema.sql`, sem senha.
+- Falha ao enviar uma tabela **nunca** pode impedir o envio das outras. A leitura é o dado que não pode se perder; cadastro emperrado não prende caixa bipada.
+
+### A senha acompanha o cadastro
+
+`senhaHash` é PBKDF2-SHA256 (210.000 iterações, salt por usuário) e **sobe e desce junto com o usuário** — antes ele ficava só no aparelho. Trocou-se um problema pelo outro conscientemente:
+
+- Sem viajar, a senha definida pelo gestor no desktop não valeria no celular da doca; e, sem cadastro de exemplo, qualquer um reivindicaria um login num aparelho novo digitando uma senha qualquer.
+- Viajando, quem tem a chave anônima consegue **ler** a coluna. É proteção contra uso indevido casual, não contra um atacante.
+
+O caminho definitivo continua sendo autenticação Supabase de verdade, com políticas por usuário. Até lá, não trate `senha_hash` como segredo forte.
 
 Toda leitura carrega `usuarioId` via `sessaoId`. O gestor sempre consegue responder "quem bipou esta caixa" sem depender de como a pessoa foi classificada no cadastro.
 

@@ -143,7 +143,7 @@ $('#btn-sair').addEventListener('click', () => {
 /* ---------------------------------------------------------------- boot --- */
 
 async function boot(): Promise<void> {
-  await auth.garantirSeed();
+  await sync.garantirCadastroLocal();
   sync.iniciarAuto();
 
   sync.aoMudarSync((estado) => {
@@ -682,14 +682,22 @@ function preencherSelects(): void {
 }
 
 function pintarCadastros(): void {
+  const acao = (attr: string, id: string, texto: string): string =>
+    `<button class="btn btn-fantasma" ${attr}="${esc(id)}"
+       style="min-height:32px;font-size:12px">${texto}</button>`;
+
   $('#lista-usuarios').innerHTML = tabela(
-    ['Nome', 'Login', 'Função', 'Placa', 'Painel', 'Situação', ''],
+    ['Nome', 'Login', 'Função', 'Placa', 'Painel', 'Senha', 'Situação', ''],
     base.usuarios.map((u) => [
       esc(u.nome), `<code>${esc(u.login)}</code>`, esc(u.funcao || '—'), esc(u.placa || '—'),
       u.gestor ? 'sim' : 'não',
+      u.senhaHash
+        ? 'definida'
+        : '<span style="color:var(--texto-2)">escolhe na 1ª entrada</span>',
       u.ativo ? 'ativo' : '<span style="color:var(--texto-2)">inativo</span>',
-      `<button class="btn btn-fantasma" data-usuario="${esc(u.id)}" style="min-height:32px;font-size:12px">
-         ${u.ativo ? 'Desativar' : 'Reativar'}</button>`
+      acao('data-editar', u.id, 'Editar')
+        + ' ' + acao('data-senha', u.id, 'Redefinir senha')
+        + ' ' + acao('data-usuario', u.id, u.ativo ? 'Desativar' : 'Reativar')
     ]),
     'Nenhuma pessoa cadastrada.'
   );
@@ -698,8 +706,30 @@ function pintarCadastros(): void {
     btn.addEventListener('click', async () => {
       const u = base.usuarios.find((x) => x.id === btn.dataset.usuario);
       if (!u) return;
+      // Desativar a si mesmo tranca o painel sem ninguém do outro lado.
+      if (u.id === usuario?.id && u.ativo) {
+        avisoUsuario('Você não pode desativar o próprio acesso.', true);
+        return;
+      }
       await auth.atualizarUsuario(u.id, { ativo: !u.ativo });
       await recarregarTudo();
+    });
+  });
+
+  $('#lista-usuarios').querySelectorAll<HTMLButtonElement>('button[data-editar]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const u = base.usuarios.find((x) => x.id === btn.dataset.editar);
+      if (u) entrarEmEdicao(u);
+    });
+  });
+
+  $('#lista-usuarios').querySelectorAll<HTMLButtonElement>('button[data-senha]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const u = base.usuarios.find((x) => x.id === btn.dataset.senha);
+      if (!u) return;
+      await auth.redefinirSenha(u.id);
+      await recarregarTudo();
+      avisoUsuario(`Senha de ${u.nome} liberada. Na próxima entrada, ela escolhe a nova senha no aparelho dela.`);
     });
   });
 
@@ -786,25 +816,83 @@ async function cadastrarRota(dados: {
   return { ok: true };
 }
 
+/* ------------------------------------------------------------ acessos --- */
+// Um formulário só, dois modos: em branco cadastra, carregado edita. Duas telas
+// para a mesma coisa é o que faz o gestor errar de campo.
+
+/** id em edição; vazio = cadastrando alguém novo. */
+let editando = '';
+
+function avisoUsuario(texto: string, erro = false): void {
+  const msg = $('#u-msg');
+  const ok = $('#u-ok');
+  msg.hidden = !erro;
+  ok.hidden = erro;
+  (erro ? msg : ok).textContent = texto;
+}
+
+function limparFormUsuario(): void {
+  editando = '';
+  $<HTMLFormElement>('#form-usuario').reset();
+  $('#u-titulo').textContent = 'Acessos';
+  $('#u-salvar').textContent = 'Cadastrar';
+  $('#u-cancelar').hidden = true;
+  $<HTMLInputElement>('#u-senha').placeholder = 'a pessoa escolhe na 1ª entrada';
+}
+
+function entrarEmEdicao(u: Usuario): void {
+  editando = u.id;
+  $<HTMLInputElement>('#u-nome').value = u.nome;
+  $<HTMLInputElement>('#u-login').value = u.login;
+  $<HTMLInputElement>('#u-senha').value = '';
+  $<HTMLInputElement>('#u-senha').placeholder = 'em branco = não mexe na senha';
+  $<HTMLInputElement>('#u-funcao').value = u.funcao;
+  $<HTMLInputElement>('#u-placa').value = u.placa;
+  $<HTMLInputElement>('#u-telefone').value = u.telefone;
+  $<HTMLSelectElement>('#u-gestor').value = u.gestor ? 'sim' : 'nao';
+  $('#u-titulo').textContent = `Acessos — editando ${u.nome}`;
+  $('#u-salvar').textContent = 'Salvar';
+  $('#u-cancelar').hidden = false;
+  $('#u-msg').hidden = true;
+  $('#u-ok').hidden = true;
+  $<HTMLInputElement>('#u-nome').focus();
+}
+
+$('#u-cancelar').addEventListener('click', () => limparFormUsuario());
+
 $<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const msg = $('#u-msg');
+
+  const campos = {
+    nome: $<HTMLInputElement>('#u-nome').value,
+    login: $<HTMLInputElement>('#u-login').value,
+    funcao: $<HTMLInputElement>('#u-funcao').value,
+    placa: $<HTMLInputElement>('#u-placa').value,
+    telefone: $<HTMLInputElement>('#u-telefone').value,
+    gestor: $<HTMLSelectElement>('#u-gestor').value === 'sim'
+  };
+  const senha = $<HTMLInputElement>('#u-senha').value;
+
   try {
-    await auth.criarUsuario({
-      nome: $<HTMLInputElement>('#u-nome').value,
-      login: $<HTMLInputElement>('#u-login').value,
-      senha: $<HTMLInputElement>('#u-senha').value,
-      funcao: $<HTMLInputElement>('#u-funcao').value,
-      placa: $<HTMLInputElement>('#u-placa').value,
-      telefone: $<HTMLInputElement>('#u-telefone').value,
-      gestor: $<HTMLSelectElement>('#u-gestor').value === 'sim'
-    });
-    $<HTMLFormElement>('#form-usuario').reset();
-    msg.hidden = true;
-    await recarregarTudo();
+    if (editando) {
+      // Tirar o próprio acesso ao painel deixa o gestor do lado de fora.
+      if (editando === usuario?.id && !campos.gestor) {
+        throw new Error('Você não pode tirar o próprio acesso ao painel.');
+      }
+      const salvo = await auth.atualizarUsuario(editando, campos, senha || undefined);
+      limparFormUsuario();
+      await recarregarTudo();
+      avisoUsuario(`${salvo.nome} atualizado.`);
+    } else {
+      const novo = await auth.criarUsuario({ ...campos, senha: senha || undefined });
+      limparFormUsuario();
+      await recarregarTudo();
+      avisoUsuario(senha
+        ? `${novo.nome} cadastrado. Passe a senha para a pessoa; ela já pode entrar.`
+        : `${novo.nome} cadastrado. Na primeira entrada, ela escolhe a própria senha.`);
+    }
   } catch (e) {
-    msg.textContent = e instanceof Error ? e.message : 'Não foi possível cadastrar.';
-    msg.hidden = false;
+    avisoUsuario(e instanceof Error ? e.message : 'Não foi possível salvar.', true);
   }
 });
 
