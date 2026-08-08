@@ -1,0 +1,321 @@
+/* app.css — telas do operador. De pé, com pressa, caixa na mão, luva e luz ruim. */
+
+.app { overflow: hidden; height: 100%; }
+
+.view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding-top: env(safe-area-inset-top);
+}
+.view[hidden] { display: none; }
+
+#flash-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 140ms ease;
+  background: transparent;
+}
+
+/* ------------------------------------------------------------- login --- */
+.login-box {
+  margin: auto;
+  width: 100%;
+  max-width: 460px;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+}
+.marca { font-size: 34px; letter-spacing: -.5px; }
+.marca span { color: var(--acento); }
+.marca-sub { margin: 0 0 22px; color: var(--texto-2); }
+#form-login .btn { margin-top: 22px; }
+
+.aviso-lgpd {
+  margin-top: 26px;
+  padding: 14px;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--fundo-2);
+  font-size: 13.5px;
+  color: var(--texto-2);
+  line-height: 1.45;
+}
+.aviso-lgpd strong { color: var(--texto); display: block; margin-bottom: 6px; }
+.aviso-lgpd p { margin: 0; }
+.dica { margin-top: 16px; font-size: 13px; color: var(--texto-2); text-align: center; }
+
+/* ------------------------------------------------------ grupos de rota -- */
+.topo {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 8px;
+}
+.topo-titulo { margin: 0; font-size: 24px; font-weight: 700; }
+.topo-sub { margin: 4px 0 0; color: var(--texto-2); font-size: 15px; }
+
+.grupos { display: flex; flex-direction: column; gap: 14px; padding: 12px 18px 24px; }
+.grupo-btn {
+  width: 100%;
+  min-height: 96px;
+  border-radius: 18px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-2);
+  color: var(--texto);
+  text-align: left;
+  padding: 16px 18px;
+  cursor: pointer;
+}
+.grupo-btn b { display: block; font-size: 24px; margin-bottom: 6px; }
+.grupo-btn span { color: var(--texto-2); font-size: 16px; }
+.grupo-btn:active { background: var(--fundo-3); }
+
+.vazio { padding: 24px 18px; color: var(--texto-2); }
+.vazio-sub { font-size: 14px; }
+.rodape-links {
+  margin-top: auto;
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.rodape-links a { color: var(--texto-2); font-size: 15px; }
+
+/* ----------------------------------------------------------- bipagem --- */
+#view-bipagem { overflow: hidden; }
+
+.bip-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--fundo-2);
+  border-bottom: 1px solid var(--borda);
+}
+.bip-carga strong { display: block; font-size: 17px; }
+.bip-carga span { color: var(--texto-2); font-size: 13px; }
+.bip-topo-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.chip-geo.geo-ok { background: rgba(18,161,80,.22); color: #7ff0b0; }
+.chip-geo.geo-impreciso { background: rgba(232,163,61,.22); color: #ffd79a; }
+.chip-geo.geo-ruim { background: rgba(138,143,152,.22); color: #cfd5e0; }
+.chip-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-3);
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 600;
+}
+.chip-btn[aria-pressed="true"] { background: #f2c94c; color: #201800; border-color: #f2c94c; }
+
+#camera-area {
+  position: relative;
+  flex: 0 0 32vh;
+  min-height: 190px;
+  background: #000;
+  overflow: hidden;
+}
+#video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mira {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 62%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 3px solid rgba(255,255,255,.75);
+  border-radius: 18px;
+  box-shadow: 0 0 0 2000px rgba(0,0,0,.28);
+  pointer-events: none;
+}
+/* [hidden] não vence um display explícito — sem esta regra o aviso de erro
+   fica por cima do vídeo mesmo com a câmera funcionando. */
+.camera-erro[hidden] { display: none; }
+.camera-erro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 18px;
+  background: rgba(11,18,32,.94);
+  font-size: 16px;
+  line-height: 1.4;
+}
+.camera-erro .btn { margin-top: 14px; }
+
+.banner {
+  padding: 14px 16px;
+  background: var(--cor-status, var(--fundo-3));
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 76px;
+  justify-content: center;
+  transition: background-color 120ms ease;
+}
+.banner.st-neutro { --cor-status: var(--fundo-3); }
+#banner-status { font-size: 24px; font-weight: 800; line-height: 1.1; }
+#banner-codigo { font-size: 15px; opacity: .92; font-family: ui-monospace, Menlo, monospace; }
+.banner.st-dup { color: #241700; }
+.banner.st-inv { color: #0b1220; }
+
+.contadores {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--borda);
+  border-bottom: 1px solid var(--borda);
+}
+.cont { background: var(--fundo-2); padding: 8px 4px; text-align: center; }
+.cont b { display: block; font-size: 22px; color: var(--cor-status, var(--texto)); }
+.cont small { font-size: 11px; color: var(--texto-2); }
+
+.leituras {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 12px 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.leitura {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--fundo-2);
+  border-left: 6px solid var(--cor-status, var(--inv));
+  margin-bottom: 8px;
+}
+.leitura-dados { flex: 1; min-width: 0; }
+.leitura-cod {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.leitura-meta { font-size: 13px; color: var(--texto-2); }
+.leitura-meta b { color: var(--cor-status); }
+.btn-oc {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-3);
+  color: var(--texto);
+  font-size: 14px;
+  font-weight: 600;
+}
+/* marcador de ocorrência: informação diferente do status da rota, por isso
+   forma e cor próprias — não pode se confundir com verde/vermelho/âmbar */
+.leitura.tem-oc { box-shadow: inset 0 0 0 2px var(--oc); }
+.selo-oc {
+  background: var(--oc);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 7px;
+  border-radius: 6px;
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.barra-inferior {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  background: var(--fundo-2);
+  border-top: 1px solid var(--borda);
+}
+.barra-inferior .btn { flex: 1; font-size: 15px; padding: 0 8px; text-align: center; }
+
+/* --------------------------------------------------------- ocorrência --- */
+.momento-toggle { display: flex; gap: 8px; margin: 12px 0 4px; }
+.momento-toggle .mom {
+  flex: 1;
+  min-height: 52px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-3);
+  color: var(--texto-2);
+  font-size: 16px;
+  font-weight: 600;
+}
+.momento-toggle .mom[aria-pressed="true"] { background: var(--acento); color: #fff; border-color: var(--acento); }
+
+.oc-et-titulo { margin: 16px 0 8px; font-size: 14px; color: var(--texto-2); font-weight: 600; }
+.oc-etiquetas { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.et {
+  min-height: 58px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-3);
+  color: var(--texto);
+  font-size: 14px;
+  line-height: 1.2;
+  text-align: left;
+}
+.et[aria-pressed="true"] { background: var(--acento); border-color: var(--acento); }
+.et.grave[aria-pressed="true"] { background: var(--div); border-color: var(--div); }
+.et .marca-grave { display: block; font-size: 11px; opacity: .8; margin-top: 3px; }
+
+.aviso-grave {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(217,45,32,.16);
+  border: 1px solid var(--div);
+  font-size: 13.5px;
+  line-height: 1.4;
+}
+.foto-label { display: block; }
+.foto-label input { margin-top: 8px; font-size: 15px; }
+.fotos-preview { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.fotos-preview figure { margin: 0; position: relative; }
+.fotos-preview img {
+  width: 88px;
+  height: 88px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--borda);
+}
+.fotos-preview button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--div);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------------- relatório --- */
+.acoes-relatorio { display: flex; gap: 10px; padding: 0 18px 12px; }
+.acoes-relatorio .btn { flex: 1; }
+.relatorio-area {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 14px calc(24px + env(safe-area-inset-bottom));
+}
+
+@media (min-height: 780px) {
+  #camera-area { flex-basis: 38vh; }
+}

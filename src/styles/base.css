@@ -1,0 +1,161 @@
+/* base.css — tokens, reset e controles comuns ao app e aos painéis. */
+
+:root {
+  --ok: #12a150;
+  --div: #d92d20;
+  --dup: #e8a33d;
+  --inv: #8a8f98;
+  --oc: #7c5cff;
+
+  --fundo: #0b1220;
+  --fundo-2: #131c2e;
+  --fundo-3: #1c2740;
+  --borda: #2a3752;
+  --texto: #f4f7fb;
+  --texto-2: #a9b4c8;
+  --acento: #2f7bff;
+
+  --raio: 14px;
+  --toque: 56px; /* alvo mínimo de toque */
+}
+
+* { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; min-height: 100%; }
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--fundo);
+  color: var(--texto);
+  -webkit-text-size-adjust: 100%;
+}
+
+h1, h2, h3, h4 { margin: 0 0 8px; line-height: 1.2; }
+a { color: var(--acento); }
+code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+button { font: inherit; }
+
+.btn {
+  min-height: var(--toque);
+  padding: 0 18px;
+  border: 1px solid transparent;
+  border-radius: var(--raio);
+  background: var(--fundo-3);
+  color: var(--texto);
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: translateY(1px); }
+.btn-grande { width: 100%; min-height: 62px; font-size: 19px; }
+.btn-primario { background: var(--acento); }
+.btn-secundario { background: var(--fundo-3); border-color: var(--borda); }
+.btn-perigo { background: var(--div); }
+.btn-fantasma { background: transparent; border-color: var(--borda); color: var(--texto-2); }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+label {
+  display: block;
+  margin: 14px 0 6px;
+  font-size: 14px;
+  color: var(--texto-2);
+  font-weight: 600;
+}
+label em { font-style: normal; font-weight: 400; opacity: .75; }
+
+input[type="text"], input[type="password"], input[type="number"],
+input[type="date"], input[type="search"], select, textarea {
+  width: 100%;
+  min-height: 52px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--borda);
+  background: var(--fundo-2);
+  color: var(--texto);
+  font-size: 17px; /* 16px+ evita zoom automático no iOS */
+}
+textarea { min-height: 120px; resize: vertical; line-height: 1.4; }
+input:focus, select:focus, textarea:focus {
+  outline: 3px solid rgba(47, 123, 255, .45);
+  outline-offset: 1px;
+}
+
+.erro {
+  background: rgba(217, 45, 32, .16);
+  border: 1px solid var(--div);
+  color: #ffd7d3;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 15px;
+  margin: 12px 0 0;
+}
+.sucesso {
+  background: rgba(18, 161, 80, .16);
+  border: 1px solid var(--ok);
+  color: #cdf5de;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 15px;
+  margin: 12px 0 0;
+}
+
+.chip {
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--fundo-3);
+  color: var(--texto-2);
+  white-space: nowrap;
+}
+.chip-sync.sync-pendente { background: rgba(232,163,61,.22); color: #ffd79a; }
+.chip-sync.sync-ok { background: rgba(18,161,80,.22); color: #7ff0b0; }
+
+/* modal */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(3, 7, 15, .78);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 200;
+}
+.modal[hidden] { display: none; }
+.modal-caixa {
+  width: 100%;
+  max-width: 560px;
+  background: var(--fundo-2);
+  border: 1px solid var(--borda);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 18px calc(20px + env(safe-area-inset-bottom));
+  max-height: 92vh;
+  overflow-y: auto;
+}
+.modal-sub { margin: 0 0 6px; color: var(--texto-2); font-size: 15px; }
+.modal-acoes {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+  position: sticky;
+  bottom: 0;
+  background: var(--fundo-2);
+  padding-top: 12px;
+}
+.modal-acoes .btn { flex: 1; }
+.linha-2 { display: flex; gap: 12px; }
+.linha-2 > div { flex: 1; }
+
+/* cores de status reaproveitadas em todo lugar */
+.st-ok  { --cor-status: var(--ok); }
+.st-div { --cor-status: var(--div); }
+.st-dup { --cor-status: var(--dup); }
+.st-inv { --cor-status: var(--inv); }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

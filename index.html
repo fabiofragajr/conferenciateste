@@ -2,36 +2,212 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport"
-        content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <title>QuickScan — Feedback confiável</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="style.css" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <meta name="description" content="Conferência de volumes por bipagem na expedição da Milfarma." />
+  <title>LogDis Entrega — Conferência de volumes</title>
 </head>
-<body>
-  <main id="app">
+<body class="app">
+
+  <!-- flash de tela cheia: tem que ser visto de longe, sem ler nada -->
+  <div id="flash-overlay" aria-hidden="true"></div>
+
+  <!-- ------------------------------------------------------------ LOGIN -->
+  <section id="view-login" class="view">
+    <div class="login-box">
+      <h1 class="marca">LogDis <span>Entrega</span></h1>
+      <p class="marca-sub">Conferência de volumes — Milfarma</p>
+
+      <form id="form-login">
+        <label for="in-login">Login</label>
+        <input id="in-login" name="username" type="text" autocapitalize="none" autocomplete="username" required />
+
+        <label for="in-senha">Senha</label>
+        <input id="in-senha" name="password" type="password" autocomplete="current-password" required />
+
+        <p id="login-erro" class="erro" hidden></p>
+        <button type="submit" class="btn btn-primario btn-grande">Entrar</button>
+      </form>
+
+      <div class="aviso-lgpd">
+        <strong>Localização durante a conferência</strong>
+        <p>
+          Enquanto a conferência estiver aberta, o app registra a localização do
+          aparelho junto com cada volume bipado e cada ocorrência. A finalidade é
+          comprovar onde e quando a carga foi conferida e entregue à
+          transportadora. O registro começa ao abrir a conferência e para no
+          encerramento — nunca em segundo plano.
+        </p>
+      </div>
+
+      <p id="dica-seed" class="dica" hidden></p>
+    </div>
+  </section>
+
+  <!-- ------------------------------------------------------- GRUPO ROTA -->
+  <section id="view-grupo" class="view" hidden>
+    <header class="topo">
+      <div>
+        <p class="topo-titulo">Qual carga você vai conferir?</p>
+        <p class="topo-sub" id="grupo-usuario"></p>
+      </div>
+      <button id="btn-sair" class="btn btn-fantasma">Sair</button>
+    </header>
+
+    <div id="lista-grupos" class="grupos"></div>
+
+    <div id="grupo-vazio" class="vazio" hidden>
+      <p>Nenhum grupo de rota cadastrado.</p>
+      <p class="vazio-sub">O gestor precisa cadastrar os grupos no painel.</p>
+    </div>
+
+    <footer class="rodape-links">
+      <span id="sync-grupo" class="chip chip-sync">Fila local</span>
+      <a id="link-painel" href="gestor.html" hidden>Painel do gestor</a>
+    </footer>
+  </section>
+
+  <!-- ---------------------------------------------------------- BIPAGEM -->
+  <section id="view-bipagem" class="view" hidden>
+    <div class="bip-topo">
+      <div class="bip-carga">
+        <strong id="bip-grupo">—</strong>
+        <span id="bip-rotas">—</span>
+      </div>
+      <div class="bip-topo-acoes">
+        <button id="btn-tocha" class="chip-btn" hidden aria-pressed="false">Luz</button>
+        <span id="chip-geo" class="chip chip-geo">GPS</span>
+        <span id="chip-sync" class="chip chip-sync">Fila</span>
+      </div>
+    </div>
 
     <div id="camera-area">
-      <video id="video" playsinline></video>
-      <canvas id="canvas"></canvas>
-
-      <!-- overlay independente e confiável para flashes -->
-      <div id="flash-overlay" aria-hidden="true"></div>
-
-      <div id="status-message">Aguardando...</div>
-      <div id="counter">0</div>
+      <video id="video" playsinline muted></video>
+      <div class="mira"></div>
+      <div id="camera-erro" class="camera-erro" hidden>
+        <div>
+          <p id="camera-erro-txt"></p>
+          <button id="btn-recamera" class="btn btn-secundario">Tentar de novo</button>
+        </div>
+      </div>
     </div>
 
-    <div id="bottom-bar">
-      <button id="btn-start">Iniciar Leitura</button>
-      <button id="btn-stop">Parar</button>
-      <button id="btn-report">Gerar Relatório</button>
+    <div id="banner" class="banner st-neutro">
+      <span id="banner-status">Aponte para a etiqueta</span>
+      <span id="banner-codigo"></span>
     </div>
 
-  </main>
+    <div class="contadores">
+      <div class="cont"><b id="c-total">0</b><small>Total</small></div>
+      <div class="cont st-ok"><b id="c-ok">0</b><small>Liberados</small></div>
+      <div class="cont st-div"><b id="c-div">0</b><small>Outra rota</small></div>
+      <div class="cont st-dup"><b id="c-dup">0</b><small>Duplicados</small></div>
+      <div class="cont st-inv"><b id="c-inv">0</b><small>Inválidos</small></div>
+    </div>
 
-  <!-- jsQR CDN (worker também importa, mas manter aqui é OK) -->
-  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
-  <script src="main.js"></script>
+    <div id="lista-leituras" class="leituras"></div>
+
+    <div class="barra-inferior">
+      <button id="btn-manual" class="btn btn-secundario">Digitar código</button>
+      <button id="btn-oc-entrega" class="btn btn-secundario">Ocorrência da entrega</button>
+      <button id="btn-encerrar" class="btn btn-perigo">Encerrar</button>
+    </div>
+  </section>
+
+  <!-- -------------------------------------------------------- RELATÓRIO -->
+  <section id="view-relatorio" class="view" hidden>
+    <header class="topo">
+      <div>
+        <p class="topo-titulo">Conferência encerrada</p>
+        <p class="topo-sub" id="rel-sync"></p>
+      </div>
+      <button id="btn-nova" class="btn btn-primario">Nova conferência</button>
+    </header>
+    <div class="acoes-relatorio">
+      <button id="btn-pdf" class="btn btn-secundario">Baixar PDF</button>
+      <button id="btn-csv" class="btn btn-secundario">Baixar CSV</button>
+    </div>
+    <div id="relatorio-area" class="relatorio-area"></div>
+  </section>
+
+  <!-- ------------------------------------------------------------ MODAIS -->
+  <div id="modal-manual" class="modal" hidden>
+    <div class="modal-caixa">
+      <h2>Digitar código</h2>
+      <p class="modal-sub">Use quando o QR estiver danificado ou não ler.</p>
+
+      <label for="man-codigo">Código do volume</label>
+      <input id="man-codigo" type="text" autocapitalize="characters" spellcheck="false" placeholder="EMB0008314147" />
+
+      <label for="man-rota">Rota (como está na etiqueta)</label>
+      <input id="man-rota" type="text" autocapitalize="characters" spellcheck="false" placeholder="FNOR 100" />
+
+      <div class="linha-2">
+        <div>
+          <label for="man-pedido">Pedido <em>opcional</em></label>
+          <input id="man-pedido" type="text" inputmode="numeric" placeholder="86945574" />
+        </div>
+        <div>
+          <label for="man-volume">Volume <em>opcional</em></label>
+          <input id="man-volume" type="text" placeholder="0001/0002" />
+        </div>
+      </div>
+
+      <p id="man-erro" class="erro" hidden></p>
+      <div class="modal-acoes">
+        <button id="man-cancelar" class="btn btn-fantasma">Cancelar</button>
+        <button id="man-confirmar" class="btn btn-primario">Registrar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-ocorrencia" class="modal" hidden>
+    <div class="modal-caixa modal-alto">
+      <h2>Registrar ocorrência</h2>
+      <p id="oc-alvo" class="modal-sub"></p>
+
+      <div class="momento-toggle">
+        <button type="button" class="mom" data-momento="EXPEDICAO" aria-pressed="false">Na expedição</button>
+        <button type="button" class="mom" data-momento="TRANSPORTADORA" aria-pressed="false">Na transportadora</button>
+      </div>
+
+      <label for="oc-texto">O que aconteceu</label>
+      <textarea id="oc-texto" rows="5" placeholder="Escreva do seu jeito. Ex.: cheguei 7h, só me atenderam 9h20."></textarea>
+
+      <p class="oc-et-titulo">Etiquetas rápidas <em>opcional</em></p>
+      <div id="oc-etiquetas" class="oc-etiquetas"></div>
+
+      <div id="oc-aviso-grave" class="aviso-grave" hidden>
+        Carga farmacêutica: essa marcação tem implicação sanitária e sai
+        destacada no relatório.
+      </div>
+
+      <label class="foto-label" for="oc-foto">
+        Fotos <em>até 3, opcional</em>
+        <input id="oc-foto" type="file" accept="image/*" capture="environment" multiple />
+      </label>
+      <div id="oc-fotos-preview" class="fotos-preview"></div>
+
+      <p id="oc-erro" class="erro" hidden></p>
+      <div class="modal-acoes">
+        <button id="oc-cancelar" class="btn btn-fantasma">Cancelar</button>
+        <button id="oc-salvar" class="btn btn-primario">Salvar ocorrência</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-encerrar" class="modal" hidden>
+    <div class="modal-caixa">
+      <h2>Encerrar a conferência?</h2>
+      <p class="modal-sub" id="encerrar-resumo"></p>
+      <p class="modal-sub">Depois de encerrar não dá para bipar mais nada nesta carga.</p>
+      <div class="modal-acoes">
+        <button id="enc-cancelar" class="btn btn-fantasma">Continuar bipando</button>
+        <button id="enc-confirmar" class="btn btn-perigo">Encerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/app/operador.ts"></script>
 </body>
 </html>

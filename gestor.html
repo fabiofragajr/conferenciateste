@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#0b1220" />
+  <title>LogDis Entrega — Painel do gestor</title>
+</head>
+<body class="painel">
+
+  <header class="p-topo">
+    <h1>LogDis <span>Entrega</span> — painel do gestor</h1>
+    <span class="p-espaco"></span>
+    <span id="chip-sync" class="chip chip-sync">Fila</span>
+    <button id="btn-sync" class="btn btn-secundario">Sincronizar agora</button>
+    <a class="btn btn-fantasma" href="diretor.html">Painel do diretor</a>
+    <a class="btn btn-fantasma" href="index.html">Abrir bipagem</a>
+    <span id="p-usuario" class="p-usuario"></span>
+    <button id="btn-sair" class="btn btn-fantasma">Sair</button>
+  </header>
+
+  <main class="p-corpo">
+
+    <!-- acesso restrito a gestor -->
+    <section id="bloqueio" class="p-secao" hidden>
+      <div class="p-cartao" style="max-width:420px">
+        <h3>Acesso do gestor</h3>
+        <p class="p-vazio">Entre com um usuário marcado como gestor.</p>
+        <form id="form-login">
+          <label for="in-login">Login</label>
+          <input id="in-login" type="text" autocapitalize="none" autocomplete="username" required />
+          <label for="in-senha">Senha</label>
+          <input id="in-senha" type="password" autocomplete="current-password" required />
+          <p id="login-erro" class="erro" hidden></p>
+          <button class="btn btn-primario btn-grande" type="submit">Entrar</button>
+        </form>
+      </div>
+    </section>
+
+    <div id="conteudo" hidden>
+
+      <!-- 1. Tem algo errado agora? ------------------------------------- -->
+      <section class="p-secao">
+        <h2>1. Tem algo errado agora?</h2>
+
+        <div id="faixa-divergencia"></div>
+
+        <div class="p-grade p-grade-2">
+          <div class="p-cartao">
+            <h3>Conferências abertas agora</h3>
+            <div id="sessoes-abertas" class="p-tab-wrap"></div>
+          </div>
+          <div class="p-cartao">
+            <h3>Pedidos com volume faltando (hoje)</h3>
+            <div id="incompletos-hoje" class="p-tab-wrap"></div>
+          </div>
+        </div>
+
+        <div class="p-cartao" style="margin-top:16px">
+          <h3>Ocorrências do dia</h3>
+          <div class="p-filtros">
+            <div class="p-campo">
+              <label for="oc-momento">Momento</label>
+              <select id="oc-momento">
+                <option value="">Todos</option>
+                <option value="EXPEDICAO">Na expedição</option>
+                <option value="TRANSPORTADORA">Na transportadora</option>
+              </select>
+            </div>
+            <div class="p-campo">
+              <label for="oc-etiqueta">Etiqueta</label>
+              <select id="oc-etiqueta"><option value="">Todas</option></select>
+            </div>
+            <div class="p-campo">
+              <label for="oc-busca">Busca no texto</label>
+              <input id="oc-busca" type="search" placeholder="doca fechada" />
+            </div>
+            <div class="p-campo">
+              <label for="oc-dias">Período</label>
+              <select id="oc-dias">
+                <option value="1">Hoje</option>
+                <option value="7">Últimos 7 dias</option>
+                <option value="30">Últimos 30 dias</option>
+              </select>
+            </div>
+            <button id="btn-oc-csv" class="btn btn-secundario">Exportar CSV</button>
+          </div>
+          <div id="oc-lista" class="p-oc-lista"></div>
+        </div>
+
+        <div class="p-cartao" style="margin-top:16px">
+          <h3>Ocorrências repetidas por transportadora</h3>
+          <p class="p-vazio" style="padding-top:0">Sinal de que o problema virou rotina.</p>
+          <div id="recorrentes"></div>
+        </div>
+      </section>
+
+      <!-- 2. O que aconteceu? -------------------------------------------- -->
+      <section class="p-secao">
+        <h2>2. O que aconteceu?</h2>
+
+        <div class="p-filtros">
+          <div class="p-campo">
+            <label for="f-de">De</label>
+            <input id="f-de" type="date" />
+          </div>
+          <div class="p-campo">
+            <label for="f-ate">Até</label>
+            <input id="f-ate" type="date" />
+          </div>
+          <div class="p-campo">
+            <label for="f-pessoa">Pessoa</label>
+            <select id="f-pessoa"><option value="">Todas</option></select>
+          </div>
+          <div class="p-campo">
+            <label for="f-rota">Rota</label>
+            <select id="f-rota"><option value="">Todas</option></select>
+          </div>
+          <div class="p-campo">
+            <label for="f-status">Contém leitura</label>
+            <select id="f-status">
+              <option value="">Qualquer</option>
+              <option value="ROTA_DIVERGENTE">Com divergência</option>
+              <option value="DUPLICADO">Com duplicado</option>
+              <option value="INVALIDO">Com inválido</option>
+            </select>
+          </div>
+          <button id="btn-filtrar" class="btn btn-primario">Aplicar</button>
+          <button id="btn-csv-periodo" class="btn btn-secundario">CSV do período</button>
+        </div>
+
+        <div class="p-cartao">
+          <div id="tabela-sessoes" class="p-tab-wrap"></div>
+        </div>
+      </section>
+
+      <!-- 3. Como está o desempenho? ------------------------------------- -->
+      <section class="p-secao">
+        <h2>3. Como está o desempenho? <span style="text-transform:none;letter-spacing:0">(período filtrado)</span></h2>
+        <div class="p-grade p-grade-2">
+          <div class="p-cartao">
+            <h3>Por pessoa</h3>
+            <div id="desempenho-pessoa" class="p-tab-wrap"></div>
+          </div>
+          <div class="p-cartao">
+            <h3>Por rota</h3>
+            <div id="desempenho-rota" class="p-tab-wrap"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Cadastros ---------------------------------------------------- -->
+      <section class="p-secao">
+        <h2>4. Cadastros</h2>
+        <div class="p-grade p-grade-2">
+          <div class="p-cartao">
+            <h3>Pessoas</h3>
+            <p class="p-vazio" style="padding-top:0">
+              Cadastro mínimo: nome, login e senha. Função, telefone e placa são
+              descritivos e aparecem no relatório — não liberam nem bloqueiam nada.
+            </p>
+            <form id="form-usuario" class="p-filtros">
+              <div class="p-campo"><label for="u-nome">Nome</label><input id="u-nome" type="text" required /></div>
+              <div class="p-campo"><label for="u-login">Login</label><input id="u-login" type="text" autocapitalize="none" required /></div>
+              <div class="p-campo"><label for="u-senha">Senha</label><input id="u-senha" type="text" required /></div>
+              <div class="p-campo"><label for="u-funcao">Função <em>opcional</em></label><input id="u-funcao" type="text" /></div>
+              <div class="p-campo"><label for="u-placa">Placa <em>opcional</em></label><input id="u-placa" type="text" /></div>
+              <div class="p-campo"><label for="u-telefone">Telefone <em>opcional</em></label><input id="u-telefone" type="text" /></div>
+              <div class="p-campo">
+                <label for="u-gestor">Acesso ao painel</label>
+                <select id="u-gestor"><option value="nao">Não</option><option value="sim">Sim</option></select>
+              </div>
+              <button class="btn btn-primario" type="submit">Cadastrar</button>
+            </form>
+            <p id="u-msg" class="erro" hidden></p>
+            <div id="lista-usuarios" class="p-tab-wrap"></div>
+          </div>
+
+          <div class="p-cartao">
+            <h3>Grupos de rota</h3>
+            <p class="p-vazio" style="padding-top:0">
+              A comparação usa só o prefixo alfabético: cadastrando <code>FNOR</code>,
+              as leituras <code>FNOR 100</code> e <code>FNOR 15</code> entram no grupo.
+            </p>
+            <form id="form-grupo" class="p-filtros">
+              <div class="p-campo"><label for="g-nome">Nome do grupo</label><input id="g-nome" type="text" placeholder="Carga Norte" required /></div>
+              <div class="p-campo"><label for="g-rotas">Rotas (separadas por vírgula)</label><input id="g-rotas" type="text" placeholder="FNOR, FSUL" required /></div>
+              <div class="p-campo"><label for="g-transp">Transportadora <em>opcional</em></label><input id="g-transp" type="text" /></div>
+              <button class="btn btn-primario" type="submit">Cadastrar</button>
+            </form>
+            <p id="g-msg" class="erro" hidden></p>
+            <div id="lista-grupos" class="p-tab-wrap"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Sincronização ------------------------------------------------ -->
+      <section class="p-secao">
+        <h2>5. Sincronização com o Supabase</h2>
+        <div class="p-grade p-grade-2">
+          <div class="p-cartao">
+            <h3>Conexão</h3>
+            <p class="p-vazio" style="padding-top:0">
+              A conferência funciona sem isto. O Supabase só recebe o que já foi
+              gravado no aparelho — se faltar rede, a fila espera.
+            </p>
+            <label for="s-url">URL do projeto</label>
+            <input id="s-url" type="text" placeholder="https://xxxx.supabase.co" />
+            <label for="s-key">Chave anônima (anon)</label>
+            <input id="s-key" type="text" placeholder="eyJhbGciOi..." />
+            <label for="s-bucket">Bucket das fotos</label>
+            <input id="s-bucket" type="text" placeholder="ocorrencias" />
+            <div class="p-filtros" style="margin-top:14px">
+              <button id="btn-salvar-sup" class="btn btn-primario">Salvar</button>
+              <button id="btn-testar-sup" class="btn btn-secundario">Testar conexão</button>
+              <button id="btn-retry" class="btn btn-secundario">Reenviar o que falhou</button>
+            </div>
+            <p id="s-msg" class="sucesso" hidden></p>
+          </div>
+          <div class="p-cartao">
+            <h3>Fila local</h3>
+            <div id="fila-status"></div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- detalhe da sessão -->
+  <div id="gaveta" class="p-gaveta" hidden>
+    <div class="p-gaveta-caixa">
+      <div class="p-gaveta-topo">
+        <h2 id="gaveta-titulo">Sessão</h2>
+        <span class="p-espaco"></span>
+        <button id="gaveta-pdf" class="btn btn-secundario">PDF</button>
+        <button id="gaveta-csv" class="btn btn-secundario">CSV</button>
+        <button id="gaveta-fechar" class="btn btn-fantasma">Fechar</button>
+      </div>
+      <div id="gaveta-mapa"></div>
+      <div id="gaveta-conteudo"></div>
+    </div>
+  </div>
+
+  <script type="module" src="/src/app/gestor.ts"></script>
+</body>
+</html>
