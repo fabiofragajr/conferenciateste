@@ -151,6 +151,19 @@ function levarParaOPainel(): void {
   location.href = 'gestor.html';
 }
 
+/**
+ * Só quem é gestor tem painel para voltar — e precisa ver o botão em
+ * qualquer tela que alcançar, não só na que o boot escolheria por padrão.
+ * Sessão retomada e F5 no meio da conferência pulam `irParaGrupos()`; sem
+ * chamar isto nesses caminhos também, o gestor fica sem saída visível a não
+ * ser "Encerrar", que é irreversível.
+ */
+function definirAcessoAoPainel(): void {
+  if (!usuario) return;
+  el.btnPainel.hidden = !usuario.gestor;
+  el.btnPainelBip.hidden = !usuario.gestor;
+}
+
 /* --------------------------------------------------------------- boot ---- */
 
 async function boot(): Promise<void> {
@@ -191,6 +204,7 @@ async function boot(): Promise<void> {
     el.inLogin.focus();
     return;
   }
+  definirAcessoAoPainel();
 
   // Conferência aberta no aparelho: volta direto para a bipagem.
   const abertas = (await db.porIndice('sessoes', 'usuarioId', usuario.id))
@@ -204,8 +218,13 @@ async function boot(): Promise<void> {
 
   // "Abrir bipagem" no painel manda #bipar: é o gestor pedindo pra bipar agora,
   // não o app reabrindo do zero. A recarga perde o clique — por isso a intenção
-  // viaja na URL, onde ela sobrevive até a aba nova.
-  if (usuario.gestor && location.hash !== '#bipar') {
+  // viaja na URL, onde ela sobrevive até a aba nova. Consumido uma vez: sem
+  // limpar, o atalho gruda na URL e anula o roteamento por papel para sempre
+  // (ex.: depois de "Nova conferência", ou em qualquer reload seguinte).
+  const pediuBipagem = location.hash === '#bipar';
+  if (pediuBipagem) history.replaceState(null, '', location.pathname + location.search);
+
+  if (usuario.gestor && !pediuBipagem) {
     levarParaOPainel();
     return;
   }
@@ -228,6 +247,7 @@ el.formLogin.addEventListener('submit', async (ev) => {
   }
   usuario = r.usuario;
   el.inSenha.value = '';
+  definirAcessoAoPainel();
   if (usuario.gestor) {
     levarParaOPainel();
     return;
@@ -267,8 +287,6 @@ async function irParaGrupos(): Promise<void> {
   if (!usuario) return;
 
   el.grupoUsuario.textContent = `${usuario.nome}${usuario.funcao ? ` • ${usuario.funcao}` : ''}`;
-  el.btnPainel.hidden = !usuario.gestor;
-  el.btnPainelBip.hidden = !usuario.gestor;
 
   await carregarCadastro();
 

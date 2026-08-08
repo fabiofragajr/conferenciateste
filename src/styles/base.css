@@ -110,6 +110,9 @@ button { font: inherit; }
   -webkit-tap-highlight-color: transparent;
 }
 .btn:active { transform: translateY(1px); }
+/* [hidden] não vence display:inline-flex sem isto — um botão "escondido"
+   continua clicável e visível (ver .camera-erro[hidden] em app.css). */
+.btn[hidden] { display: none; }
 .btn-grande { width: 100%; min-height: 62px; font-size: 19px; }
 .btn-primario { background: var(--logdis-green); border-color: var(--logdis-green); color: #fff; }
 .btn-primario:hover { background: var(--logdis-mint); border-color: var(--logdis-mint); }

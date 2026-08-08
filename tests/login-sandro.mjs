@@ -76,6 +76,7 @@ await passo('ana entra pelo app e vai bipar', async () => {
   await entrar(p, 'ana');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
   if (/gestor\.html/.test(p.url())) throw new Error('conferente foi parar no painel');
+  if (await p.isVisible('#btn-painel')) throw new Error('conferente vê o botão do painel');
   await ctx.close();
 });
 
@@ -96,7 +97,10 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   await p.waitForURL(/gestor\.html/, { timeout: 8000 });
   const abertas = await p.evaluate(async () => {
     const req = indexedDB.open('logdis');
-    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    const bd = await new Promise((ok, falhou) => {
+      req.onsuccess = () => ok(req.result);
+      req.onerror = () => falhou(req.error);
+    });
     const tx = bd.transaction('sessoes', 'readonly');
     const todas = await new Promise((ok) => {
       const q = tx.objectStore('sessoes').getAll();
@@ -106,6 +110,12 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
     return todas.filter((s) => s.status === 'ABERTA').length;
   });
   if (abertas !== 1) throw new Error(`sessões abertas depois de voltar: ${abertas}`);
+
+  // A sessão continua ABERTA: o boot precisa devolver o caminho de volta ao
+  // painel, não só a câmera — senão a única saída visível vira "Encerrar".
+  await p.click('#btn-bipar');
+  await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
+  if (!(await p.isVisible('#btn-painel-bip'))) throw new Error('gestor voltou pra bipagem sem caminho de volta');
   await ctx.close();
 });
 
