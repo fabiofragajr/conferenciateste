@@ -395,3 +395,6 @@
   background: rgba(22, 163, 74, .12);
   border: 1px solid var(--ok);
 }
+
+/* topo da tela de transportadora: Painel e Sair lado a lado */
+.topo-acoes { display: flex; gap: 8px; align-items: center; }

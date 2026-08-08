@@ -70,7 +70,8 @@ const el = {
   listaGrupos: $('#lista-grupos'),
   grupoVazio: $('#grupo-vazio'),
   btnSair: $('#btn-sair'),
-  linkPainel: $<HTMLAnchorElement>('#link-painel'),
+  btnPainel: $<HTMLButtonElement>('#btn-painel'),
+  btnPainelBip: $<HTMLButtonElement>('#btn-painel-bip'),
   syncGrupo: $('#sync-grupo'),
 
   bipGrupo: $('#bip-grupo'),
@@ -140,6 +141,16 @@ function erroEm(node: HTMLElement, msg: string | null): void {
   node.hidden = !msg;
 }
 
+/**
+ * Cada um começa onde trabalha: gestor no painel, operador na bipagem.
+ *
+ * Conferência aberta ganha das duas regras — ninguém é tirado do meio de uma
+ * carga por causa do papel que tem no cadastro.
+ */
+function levarParaOPainel(): void {
+  location.href = 'gestor.html';
+}
+
 /* --------------------------------------------------------------- boot ---- */
 
 async function boot(): Promise<void> {
@@ -191,6 +202,18 @@ async function boot(): Promise<void> {
     return;
   }
 
+  if (usuario.gestor) {
+    // Exceção de um clique só: "Abrir bipagem" no painel é o gestor pedindo
+    // pra bipar agora, não o app reabrindo do zero. Sem essa marca ele nunca
+    // sairia do painel — a recarga de página perde o clique, só sobra a rota.
+    if (sessionStorage.getItem('logdis:ir-bipar')) {
+      sessionStorage.removeItem('logdis:ir-bipar');
+    } else {
+      levarParaOPainel();
+      return;
+    }
+  }
+
   await irParaGrupos();
 }
 
@@ -209,6 +232,10 @@ el.formLogin.addEventListener('submit', async (ev) => {
   }
   usuario = r.usuario;
   el.inSenha.value = '';
+  if (usuario.gestor) {
+    levarParaOPainel();
+    return;
+  }
   await irParaGrupos();
 });
 
@@ -217,6 +244,11 @@ el.btnSair.addEventListener('click', () => {
   usuario = null;
   mostrarView('login');
 });
+
+// Voltar ao painel não encerra nada: a sessão fica ABERTA e o boot a retoma.
+for (const b of [el.btnPainel, el.btnPainelBip]) {
+  b.addEventListener('click', levarParaOPainel);
+}
 
 /* ---------------------------------------------------- transportadora ----- */
 
@@ -239,7 +271,8 @@ async function irParaGrupos(): Promise<void> {
   if (!usuario) return;
 
   el.grupoUsuario.textContent = `${usuario.nome}${usuario.funcao ? ` • ${usuario.funcao}` : ''}`;
-  el.linkPainel.hidden = !usuario.gestor;
+  el.btnPainel.hidden = !usuario.gestor;
+  el.btnPainelBip.hidden = !usuario.gestor;
 
   await carregarCadastro();
 

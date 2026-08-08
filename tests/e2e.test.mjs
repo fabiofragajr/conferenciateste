@@ -161,6 +161,12 @@ await p.screenshot({ path: 'tests/saida/tela-relatorio.png', fullPage: true });
 const g = await ctx.newPage();
 await g.setViewportSize({ width: 1440, height: 900 });
 vigiarErros(g, 'gestor');
+
+// A ana (não-gestora) segue logada neste contexto, da bipagem lá em cima. Quem
+// não é gestor não trava mais no painel — o boot manda pro app. Para testar o
+// login do sandro, o teste precisa sair primeiro, senão nem chega no bloqueio.
+await g.goto(`${BASE}/index.html`);
+await g.evaluate(() => localStorage.removeItem('logdis.usuarioLogado'));
 await g.goto(`${BASE}/gestor.html`);
 
 await passo('painel do gestor exige gestor e mostra divergência do dia', async () => {

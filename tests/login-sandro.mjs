@@ -57,14 +57,6 @@ await passo('a senha do primeiro acesso passa a valer', async () => {
   await ctx.close();
 });
 
-await passo('quem não é gestor não abre o painel', async () => {
-  const { ctx, p } = await novoAparelho('gestor.html');
-  await entrar(p, 'ana');
-  await p.waitForTimeout(600);
-  if (await p.isVisible('#conteudo:not([hidden])')) throw new Error('conferente entrou no painel');
-  await ctx.close();
-});
-
 await passo('sandro abre o painel do diretor', async () => {
   const { ctx, p } = await novoAparelho('diretor.html');
   await entrar(p, 'sandro');
@@ -72,12 +64,55 @@ await passo('sandro abre o painel do diretor', async () => {
   await ctx.close();
 });
 
-await passo('sandro bipa no app do operador', async () => {
+await passo('sandro entra pelo app e cai no painel, não na tela de transportadora', async () => {
   const { ctx, p } = await novoAparelho('index.html', { width: 420, height: 900 });
   await entrar(p, 'sandro');
+  await p.waitForURL(/gestor\.html/, { timeout: 8000 });
+  await ctx.close();
+});
+
+await passo('ana entra pelo app e vai bipar', async () => {
+  const { ctx, p } = await novoAparelho('index.html', { width: 420, height: 900 });
+  await entrar(p, 'ana');
+  await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
+  if (/gestor\.html/.test(p.url())) throw new Error('conferente foi parar no painel');
+  await ctx.close();
+});
+
+await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
+  const { ctx, p } = await novoAparelho('index.html', { width: 420, height: 900 });
+  await entrar(p, 'sandro');
+  await p.waitForURL(/gestor\.html/, { timeout: 8000 });
+
+  await p.click('#btn-bipar');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
   await p.click('.grupo-btn >> nth=0');
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
+
+  // Conferência aberta: voltar ao painel não pode encerrar nada.
+  // (o botão da tela de bipagem é #btn-painel-bip; #btn-painel vive na tela
+  // de transportadora e fica hidden enquanto a câmera está aberta)
+  await p.click('#btn-painel-bip');
+  await p.waitForURL(/gestor\.html/, { timeout: 8000 });
+  const abertas = await p.evaluate(async () => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    const tx = bd.transaction('sessoes', 'readonly');
+    const todas = await new Promise((ok) => {
+      const q = tx.objectStore('sessoes').getAll();
+      q.onsuccess = () => ok(q.result);
+    });
+    bd.close();
+    return todas.filter((s) => s.status === 'ABERTA').length;
+  });
+  if (abertas !== 1) throw new Error(`sessões abertas depois de voltar: ${abertas}`);
+  await ctx.close();
+});
+
+await passo('quem não é gestor abre gestor.html e é mandado para a bipagem', async () => {
+  const { ctx, p } = await novoAparelho('gestor.html');
+  await entrar(p, 'ana');
+  await p.waitForURL(/index\.html/, { timeout: 8000 });
   await ctx.close();
 });
 

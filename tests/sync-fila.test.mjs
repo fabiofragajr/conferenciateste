@@ -150,6 +150,11 @@ await passo('o aparelho continua se registrando apesar da recusa', () => ateCheg
 await passo('o erro aparece para o gestor em vez de ficar escondido', async () => {
   const g = await ctx.newPage();
   await g.setViewportSize({ width: 1440, height: 900 });
+  // A ana (não-gestora) segue logada neste contexto. Quem não é gestor não
+  // trava mais no painel — o boot manda pro app; o teste precisa sair antes
+  // de logar como sandro, senão nunca chega no formulário de login.
+  await g.goto(`${BASE}/index.html`);
+  await g.evaluate(() => localStorage.removeItem('logdis.usuarioLogado'));
   await g.goto(`${BASE}/gestor.html`);
   await fazerLogin(g, 'sandro');
   await g.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });

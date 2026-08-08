@@ -126,9 +126,8 @@ elLogin.form.addEventListener('submit', async (ev) => {
     return;
   }
   if (!r.usuario.gestor) {
-    auth.sair();
-    elLogin.erro.textContent = 'Este usuário não tem acesso ao painel.';
-    elLogin.erro.hidden = false;
+    // Erro não é beco sem saída: quem não tem painel tem bipagem.
+    location.href = 'index.html';
     return;
   }
   usuario = r.usuario;
@@ -138,6 +137,13 @@ elLogin.form.addEventListener('submit', async (ev) => {
 $('#btn-sair').addEventListener('click', () => {
   auth.sair();
   location.reload();
+});
+
+// "Abrir bipagem" é o gestor pedindo pra bipar, não só reabrindo o app. Sem
+// essa marca, o boot do index.html manda todo gestor de volta pra cá antes de
+// ele decidir — a recarga de página perde o clique, só sobra a intenção.
+$('#btn-bipar').addEventListener('click', () => {
+  sessionStorage.setItem('logdis:ir-bipar', '1');
 });
 
 /* ---------------------------------------------------------------- boot --- */
@@ -157,8 +163,12 @@ async function boot(): Promise<void> {
   });
 
   usuario = await auth.usuarioLogado();
-  if (!usuario?.gestor) {
+  if (!usuario) {
     elLogin.bloqueio.hidden = false;
+    return;
+  }
+  if (!usuario.gestor) {
+    location.href = 'index.html';
     return;
   }
   await iniciarPainel();

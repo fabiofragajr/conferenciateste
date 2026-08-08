@@ -60,7 +60,10 @@
         <p class="topo-titulo">Qual transportadora você vai conferir?</p>
         <p class="topo-sub" id="grupo-usuario"></p>
       </div>
-      <button id="btn-sair" class="btn btn-fantasma">Sair</button>
+      <div class="topo-acoes">
+        <button id="btn-painel" class="btn btn-secundario" hidden>Painel</button>
+        <button id="btn-sair" class="btn btn-fantasma">Sair</button>
+      </div>
     </header>
 
     <div id="lista-grupos" class="grupos"></div>
@@ -72,7 +75,6 @@
 
     <footer class="rodape-links">
       <span id="sync-grupo" class="chip chip-sync">Fila local</span>
-      <a id="link-painel" href="gestor.html" hidden>Painel do gestor</a>
     </footer>
   </section>
 
@@ -85,6 +87,7 @@
         <span id="bip-rotas">—</span>
       </div>
       <div class="bip-topo-acoes">
+        <button id="btn-painel-bip" class="chip-btn" hidden>Painel</button>
         <button id="btn-tocha" class="chip-btn" hidden aria-pressed="false">Luz</button>
         <span id="chip-geo" class="chip chip-geo">GPS</span>
         <span id="chip-sync" class="chip chip-sync">Fila</span>
