@@ -83,9 +83,11 @@ assert.deepEqual(rotaDe('//painel//rotas'), { tela: 'painel', secao: 'rotas' });
 assert.equal(rotaDe('/'), null);
 assert.equal(rotaDe('/painel/inexistente'), null);
 assert.equal(rotaDe('/painel/rotas/extra'), null);
-// `inicio` não tem caminho próprio — ele É /painel. Aceitar os dois criaria duas
-// URLs para a mesma tela, e o item ativo do menu piscaria entre elas.
-assert.equal(rotaDe('/painel/inicio'), null);
+// `/painel/inicio` é aceito e canonizado para `/painel`. Recusá-lo faria o
+// interceptador de clique desistir, e o navegador recarregaria a página inteira —
+// recarga silenciosa é pior que normalização.
+assert.deepEqual(rotaDe('/painel/inicio'), { tela: 'painel', secao: 'inicio' });
+assert.equal(caminhoDe(rotaDe('/painel/inicio')!), '/painel');
 
 /* -------------------------------------------------------- caminhoDe ------ */
 
@@ -169,7 +171,7 @@ export const SECOES = [
 
 export type Secao = (typeof SECOES)[number];
 
-export type Rota =
+export type Tela =
   | { tela: 'entrar' }
   | { tela: 'bipagem' }
   | { tela: 'relatorio' }
@@ -199,14 +201,15 @@ export function rotaDe(pathname: string): Rota | null {
   if (p === '/painel') return { tela: 'painel', secao: 'inicio' };
 
   const m = /^\/painel\/([a-z]+)$/.exec(p);
-  // `inicio` fica de fora: ele É `/painel`. Duas URLs para a mesma tela fazem o
-  // item ativo do menu piscar entre elas.
-  if (m && m[1] !== 'inicio' && ehSecao(m[1])) return { tela: 'painel', secao: m[1] };
+  // `/painel/inicio` entra e sai canonizado como `/painel` por `caminhoDe`.
+  // Recusá-lo faria o interceptador de clique desistir e o navegador recarregar
+  // a página — e a URL já é canonizada de qualquer jeito, na abertura e em `ir`.
+  if (m && ehSecao(m[1])) return { tela: 'painel', secao: m[1] };
 
   return null;
 }
 
-export function caminhoDe(r: Rota): string {
+export function caminhoDe(t: Tela): string {
   if (r.tela === 'painel') return r.secao === 'inicio' ? '/painel' : `/painel/${r.secao}`;
   return `/${r.tela}`;
 }
@@ -238,7 +241,7 @@ export function resolver(pathname: string, s: Situacao): Rota {
 
 export interface Roteador {
   /** Navega sem recarregar. `substituir` troca a entrada atual do histórico. */
-  ir: (r: Rota, substituir?: boolean) => void;
+  ir: (t: Tela, substituir?: boolean) => void;
   atual: () => Rota;
 }
 
@@ -250,11 +253,11 @@ export interface Roteador {
  */
 export function criarRoteador(
   situacao: () => Situacao,
-  aoNavegar: (r: Rota) => void
+  aoNavegar: (t: Tela) => void
 ): Roteador {
   const atual = (): Rota => resolver(location.pathname, situacao());
 
-  const ir = (r: Rota, substituir = false): void => {
+  const ir = (t: Tela, substituir = false): void => {
     const destino = resolver(caminhoDe(r), situacao());
     const url = caminhoDe(destino);
     if (url !== location.pathname) {
@@ -606,7 +609,7 @@ export async function montar(amb: Ambiente): Promise<void> {
 }
 ```
 
-`Ambiente` (`{ usuario: Usuario; irPara: (r: Rota) => void }`) é definido no Step 6, em `src/app/painel/index.ts`. `ambiente` substitui `levarParaOPainel()`: onde o código chamava aquela função, passa a chamar `ambiente?.irPara({ tela: 'painel', secao: 'inicio' })`.
+`Ambiente` (`{ usuario: Usuario; irPara: (t: Tela) => void }`) é definido no Step 6, em `src/app/painel/index.ts`. `ambiente` substitui `levarParaOPainel()`: onde o código chamava aquela função, passa a chamar `ambiente?.irPara({ tela: 'painel', secao: 'inicio' })`.
 
 - O objeto `el` e `views` continuam no escopo do módulo, mas **a resolução deles precisa ser preguiçosa**: `$()` lança se o elemento não existe, e agora o módulo pode ser importado antes de a região estar no DOM. Trocar `const el = { ... }` por uma função:
 
@@ -653,7 +656,7 @@ import * as sync from '../lib/sync.js';
 import * as fb from '../lib/feedback.js';
 import { $ } from '../lib/util.js';
 import {
-  criarRoteador, destinoDeEntrada, type Roteador, type Rota, type Situacao
+  criarRoteador, destinoDeEntrada, type Roteador, type Tela, type Situacao
 } from '../lib/router.js';
 
 // Atalho antigo salvo na tela do celular da doca: o app reconhece o caminho por
@@ -698,7 +701,7 @@ async function conferirSessaoAberta(): Promise<void> {
     : false;
 }
 
-async function mostrar(r: Rota): Promise<void> {
+async function mostrar(t: Tela): Promise<void> {
   regiao.login.hidden = r.tela !== 'entrar';
   regiao.operacao.hidden = !(r.tela === 'bipagem' || r.tela === 'relatorio');
   regiao.painel.hidden = r.tela !== 'painel';
@@ -761,7 +764,7 @@ const pronto = boot().catch((e: unknown) => {
 
 O bloco `ANTIGOS` roda no topo do módulo, antes de `boot()`, de propósito: ele precisa consertar `location.pathname` antes de `criarRoteador` ler a URL.
 
-`Rota` fica importado como tipo e usado em `mostrar(r: Rota)`; `Roteador` em `let roteador`. Se o typecheck acusar import não usado, é sinal de que algum trecho acima foi omitido.
+`Tela` fica importado como tipo e usado em `mostrar(t: Tela)`; `Roteador` em `let roteador`. Se o typecheck acusar import não usado, é sinal de que algum trecho acima foi omitido.
 
 - [ ] **Step 6: `src/app/painel/index.ts` provisório**
 
@@ -772,11 +775,11 @@ Criar `src/app/painel/index.ts`, que por enquanto só delega para os dois módul
 // seções viram módulos próprios nas Tasks 10 a 13.
 
 import type { Usuario } from '../../types.js';
-import type { Rota } from '../../lib/router.js';
+import type { Tela } from '../../lib/router.js';
 
 export interface Ambiente {
   usuario: Usuario;
-  irPara: (r: Rota) => void;
+  irPara: (t: Tela) => void;
 }
 
 let montado = false;
@@ -2578,7 +2581,7 @@ para aparecer é divergência escondida."
 import type {
   Dispositivo, Leitura, Ocorrencia, Rota, Sessao, Transportadora, Usuario
 } from '../../types.js';
-import type { Rota as RotaApp } from '../../lib/router.js';
+import type { Tela } from '../../lib/router.js';
 
 export interface Base {
   usuarios: Usuario[];
@@ -2597,7 +2600,7 @@ export interface Contexto {
   dispositivos: () => Dispositivo[];
   /** Recarrega tudo do IndexedDB e repinta a seção visível. */
   recarregar: () => Promise<void>;
-  irPara: (r: RotaApp) => void;
+  irPara: (t: Tela) => void;
 }
 
 /** Contrato de toda seção do painel. */
@@ -2869,7 +2872,7 @@ import { montarShell, type ItemMenu, type Shell } from '../../lib/shell/index.js
 import { $ } from '../../lib/util.js';
 import { baseVazia, type Base, type Contexto, type Modulo } from './contexto.js';
 import type { Dispositivo, Usuario } from '../../types.js';
-import type { Rota as RotaApp } from '../../lib/router.js';
+import type { Tela } from '../../lib/router.js';
 
 import { montar as inicio } from './inicio.js';
 import { montar as divergencias } from './divergencias.js';
