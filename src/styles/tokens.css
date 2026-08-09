@@ -150,3 +150,58 @@ input, select, textarea { font-size: max(16px, var(--t-corpo)); }
 @media (max-width: 560px) {
   .ui-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
 }
+
+/* --------------------------------------------------------------- tabela --- */
+.ui-tabela-rolagem { overflow-x: auto; }
+.ui-tabela { width: 100%; border-collapse: collapse; font-size: var(--t-secundario); }
+.ui-tabela th {
+  text-align: left; padding: 6px 10px 6px 0;
+  font-size: var(--t-label); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--tinta-3); font-weight: 600; border-bottom: 1px solid var(--linha);
+  white-space: nowrap;
+}
+.ui-tabela td { padding: 8px 10px 8px 0; border-bottom: 1px solid var(--linha-fraca); color: var(--tinta); }
+.ui-tabela .ui-dir { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Celular: cada linha vira um bloco, com o rótulo da coluna ao lado do valor.
+   Tabela de operação não pode virar rolagem lateral — a divergência ficaria
+   fora da tela, e o gestor confere isto de pé na doca. */
+@media (max-width: 1023px) {
+  .ui-tabela, .ui-tabela tbody, .ui-tabela tr, .ui-tabela td { display: block; width: 100%; }
+  .ui-tabela thead { display: none; }
+  .ui-tabela tr {
+    border-bottom: 1px solid var(--linha);
+    padding: 10px 0;
+  }
+  .ui-tabela td {
+    display: flex; gap: 12px; align-items: baseline;
+    padding: 3px 0; border: 0; font-size: var(--t-corpo);
+  }
+  .ui-tabela td::before {
+    content: attr(data-rotulo);
+    flex: none; min-width: 40%;
+    font-size: var(--t-label); color: var(--tinta-2);
+  }
+  .ui-tabela .ui-dir { text-align: left; }
+}
+
+/* -------------------------------------------------------------- filtros --- */
+.ui-filtros { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
+.ui-filtros-campos { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.ui-filtros-abrir { display: none; }
+.ui-campo label { margin: 0 0 4px; font-size: var(--t-label); color: var(--tinta-2); font-weight: 600; }
+.ui-campo input, .ui-campo select { min-height: var(--toque); }
+.ui-so-leitor {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip-path: inset(50%); white-space: nowrap;
+}
+
+@media (max-width: 1023px) {
+  .ui-filtros-campos { display: none; }
+  .ui-filtros-campos.aberto { display: flex; flex-direction: column; align-items: stretch; width: 100%; }
+  .ui-filtros-abrir {
+    display: inline-flex; align-items: center; min-height: var(--toque);
+    padding: 0 14px; border: 1px solid var(--linha); border-radius: 999px;
+    background: var(--superficie); color: var(--tinta); font-size: var(--t-secundario);
+  }
+}

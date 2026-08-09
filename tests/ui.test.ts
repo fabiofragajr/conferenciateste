@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
 import { plural, vazio, badge, alerta, kpis, secao, pageHeader, status } from '../src/lib/ui/basico.ts';
+import { tabela } from '../src/lib/ui/tabela.ts';
+import { botao, campo, selecao, filtros } from '../src/lib/ui/forma.ts';
 
 /* ----------------------------------------------------------- plural ------ */
 // "1 volume(s)" é texto de sistema. A tela é de produto.
@@ -60,5 +62,66 @@ assert.ok(secao({ titulo: 'T', corpo: '<p>ok</p>' }).includes('<p>ok</p>'));
 /* -------------------------------------------------------- pageHeader ----- */
 const ph = pageHeader({ titulo: 'Início', sub: 'sábado, 8 de agosto' });
 assert.ok(ph.includes('Início') && ph.includes('sábado'));
+
+/* ------------------------------------------------------------ tabela ---- */
+const t = tabela({
+  colunas: [
+    { chave: 'codigo', rotulo: 'Código' },
+    { chave: 'rota', rotulo: 'Rota lida' },
+    { chave: 'hora', rotulo: 'Hora', alinhar: 'direita' }
+  ],
+  linhas: [
+    { codigo: 'EMB0008399999', rota: 'FSUL 200', hora: '19:05' }
+  ],
+  vazio: 'Nenhum volume divergente hoje.'
+});
+assert.ok(t.includes('<table'));
+assert.ok(t.includes('EMB0008399999'));
+// O rótulo viaja em cada célula: é ele que vira o rótulo da linha empilhada no
+// celular, sem o CSS precisar de um segundo HTML.
+assert.ok(t.includes('data-rotulo="Rota lida"'));
+assert.ok(t.includes('ui-dir'), 'coluna à direita marca a célula');
+
+// Tabela sem linha não desenha cabeçalho de coluna nenhuma: cabeçalho vazio é
+// promessa de dado que não veio.
+const tv = tabela({ colunas: [{ chave: 'a', rotulo: 'A' }], linhas: [], vazio: 'Nada aqui.' });
+assert.ok(!tv.includes('<table'));
+assert.ok(tv.includes('Nada aqui.'));
+
+// Escape na célula e no rótulo.
+const te = tabela({
+  colunas: [{ chave: 'a', rotulo: '<b>R</b>' }],
+  linhas: [{ a: '<b>x</b>' }],
+  vazio: '—'
+});
+assert.ok(!te.includes('<b>x</b>') && !te.includes('<b>R</b>'));
+
+// Célula pode ser HTML nosso quando marcada — é como o status entra com cor,
+// texto e forma sem a tabela conhecer status.
+const th = tabela({
+  colunas: [{ chave: 'a', rotulo: 'A', html: true }],
+  linhas: [{ a: '<span class="st">ok</span>' }],
+  vazio: '—'
+});
+assert.ok(th.includes('<span class="st">ok</span>'));
+
+/* ------------------------------------------------------------- forma ---- */
+assert.ok(botao({ rotulo: 'Liberar carga', tipo: 'primario' }).includes('btn-primario'));
+assert.ok(botao({ rotulo: 'x' }).includes('type="button"'), 'botão não vira submit por acidente');
+assert.ok(botao({ rotulo: 'x', enviar: true }).includes('type="submit"'));
+
+// Campo sempre tem label ligado por for/id: sem isso o leitor de tela anuncia
+// "caixa de edição" e nada mais.
+const c = campo({ id: 'f-de', rotulo: 'De' });
+assert.ok(c.includes('for="f-de"') && c.includes('id="f-de"'));
+
+const s2 = selecao({ id: 'f-mes', rotulo: 'Mês', opcoes: [{ valor: '2026-08', rotulo: 'Agosto' }], valor: '2026-08' });
+assert.ok(s2.includes('selected'));
+
+assert.ok(filtros([c], '30 dias').includes('30 dias'));
+
+// Escape em tudo que vem do cadastro.
+assert.ok(!botao({ rotulo: '<b>x</b>' }).includes('<b>x</b>'));
+assert.ok(!selecao({ id: 'a', rotulo: 'A', opcoes: [{ valor: '<b>', rotulo: '<b>x</b>' }] }).includes('<b>x</b>'));
 
 console.log('UI_OK');
