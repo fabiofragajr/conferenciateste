@@ -5,14 +5,8 @@
    Identidade: barra institucional em verde escuro, conteúdo claro, cartões
    brancos de borda fina. Empresarial e operacional — não painel de analytics. */
 
-body.painel { min-height: 100vh; }
-
-/* Grade do painel: lateral à esquerda em toda a altura, topo e corpo à direita.
-   Abaixo de 1024px a lateral sai do fluxo e vira gaveta sobre o conteúdo.
-
-   A classe vem do shell, não do HTML: o painel do diretor ainda usa o cabeçalho
-   antigo, e sem lateral a coluna de 248px seria uma faixa vazia na tela dele. */
-body.painel.p-com-menu {
+body.painel {
+  min-height: 100vh;
   display: grid;
   /* `minmax(0, …)` e não `1fr`: a coluna de conteúdo precisa poder ficar menor
      que a tabela mais larga que ela guarda, senão é a página que estica. */
@@ -21,62 +15,35 @@ body.painel.p-com-menu {
     "lateral topo"
     "lateral corpo";
   grid-template-rows: auto 1fr;
+  background: var(--fundo);
 }
-body.p-com-menu > .p-topo { grid-area: topo; }
-body.p-com-menu > .p-lateral { grid-area: lateral; }
-/* `min-width: 0` e `width: 100%` juntos, e os dois são obrigatórios: sem o
-   primeiro o conteúdo se recusa a encolher abaixo da tabela mais larga; sem o
-   segundo o `margin: 0 auto` que centraliza o corpo faz dele uma caixa de
-   largura livre, que volta a ser medida pela tabela. É essa dupla que fazia o
-   painel vazar centenas de pixels para o lado no celular. */
-body.p-com-menu > .p-corpo { grid-area: corpo; min-width: 0; width: 100%; }
+body.painel > .sh-topo { grid-area: topo; }
+body.painel > .p-lateral { grid-area: lateral; }
+body.painel > #tela-painel { grid-area: corpo; min-width: 0; padding: 20px 24px 40px; }
 
 /* A moldura mora no <body>, fora de #tela-painel, porque é ela quem forma a
-   grade. Então ela não some junto com a tela, e precisa sumir por conta: a
-   gaveta aberta é `position: fixed` e ficava sobre a bipagem, engolindo o
-   toque nos botões de grupo — o gestor abria o menu, tocava "Abrir bipagem" e
-   caía numa tela que não respondia. Quem manda é a mesma classe que liga a
-   grade: a tela é do roteador, e a moldura segue a tela. */
-body:not(.painel) > .p-topo,
+   grade. Então ela não some junto com a tela, e precisa sumir por conta —
+   senão fica por cima da bipagem, engolindo o toque. Quem manda é a mesma
+   classe que liga a grade: a tela é do roteador, e a moldura segue a tela. */
+body:not(.painel) > .sh-topo,
 body:not(.painel) > .p-lateral,
-body:not(.painel) > .p-fundo-gaveta { display: none; }
+body:not(.painel) > .sh-barra { display: none; }
 
-/* -------------------------------------------------- barra institucional --- */
-.p-topo {
+/* ------------------------------------------------------- barra do topo --- */
+/* Faixa fina e clara. O cabeçalho verde alto foi o que deixou a tela pesada e
+   roubou o destaque de quem precisava dele. */
+.sh-topo {
   position: sticky;
   top: 0;
   z-index: 50;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 24px;
-  background: var(--logdis-forest);
-  border-bottom: 1px solid var(--logdis-forest);
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 20px calc(10px + env(safe-area-inset-top));
+  background: var(--superficie); border-bottom: 1px solid var(--linha);
 }
-.p-topo h1 { font-size: 19px; margin: 0; color: #fff; }
-/* símbolo menor que no app: aqui a barra é fina e a tela é de trabalho */
-.p-topo .marca-logdis img { width: 34px; height: 34px; }
-.p-topo .marca-nome { color: #fff; }
-.p-topo .marca-nome i { color: var(--logdis-mint); }
-.p-topo .p-titulo-painel {
-  font-size: 14px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, .78);
-  border-left: 1px solid rgba(255, 255, 255, .28);
-  padding-left: 16px;
-}
-.p-topo .p-espaco { flex: 1; }
-.p-topo .btn { min-height: 40px; font-size: 14px; padding: 0 14px; }
-.p-topo .btn-fantasma {
-  border-color: rgba(255, 255, 255, .38);
-  color: #fff;
-}
-.p-topo .btn-fantasma:hover { background: rgba(255, 255, 255, .12); }
-.p-topo .chip { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .3); color: #fff; }
-.p-topo .chip-sync.sync-pendente { background: var(--dup); border-color: var(--dup); color: var(--texto); }
-.p-topo .chip-sync.sync-ok { background: rgba(255, 255, 255, .14); border-color: rgba(255, 255, 255, .3); color: #fff; }
-.p-topo label { color: rgba(255, 255, 255, .8); }
-.p-usuario { font-size: 13px; color: rgba(255, 255, 255, .8); }
+.sh-espaco { flex: 1; }
+.sh-titulo-secao { font-size: var(--t-corpo); font-weight: 700; color: var(--tinta); }
+.sh-sync { flex: none; }
+.p-usuario { font-size: var(--t-secundario); color: var(--tinta-2); }
 
 .p-corpo { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; }
 
@@ -296,147 +263,39 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 
 /* ------------------------------------------------------------- lateral --- */
 .p-lateral {
-  background: var(--fundo-2);
-  border-right: 1px solid var(--borda);
-  padding: 16px 0 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  overflow-y: auto;
+  background: var(--superficie); border-right: 1px solid var(--linha);
+  padding: 16px 0 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto;
 }
 .p-lateral-grupo h2 {
-  font-size: 11px;
-  letter-spacing: .09em;
-  text-transform: uppercase;
-  color: var(--texto-2);
-  margin: 0 0 6px;
-  padding: 0 18px;
+  font-size: var(--t-label); letter-spacing: .09em; text-transform: uppercase;
+  color: var(--tinta-3); margin: 0 0 4px; padding: 0 18px;
 }
 .p-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 18px;
-  font-size: 14.5px;
-  color: var(--texto);
-  text-decoration: none;
-  border-left: 3px solid transparent;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-height: var(--toque); padding: 0 18px; font-size: var(--t-corpo);
+  color: var(--tinta); text-decoration: none; border-left: 3px solid transparent;
 }
-.p-item:hover { background: var(--logdis-mint-surface); color: var(--texto); }
+.p-item:hover { background: var(--marca-superficie); }
 .p-item.ativo {
-  background: var(--logdis-mint-surface);
-  border-left-color: var(--logdis-green);
-  color: var(--logdis-forest);
-  font-weight: 700;
+  background: var(--marca-superficie); border-left-color: var(--marca-forte);
+  color: var(--marca); font-weight: 700;
 }
 .p-lateral-rodape {
-  margin-top: auto;
-  padding: 16px 18px 0;
-  border-top: 1px solid var(--borda);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  align-items: stretch;
+  margin-top: auto; padding: 16px 18px 0; border-top: 1px solid var(--linha);
+  display: flex; flex-direction: column; gap: 8px;
 }
-.p-lateral-rodape .p-usuario { color: var(--texto-2); }
-.p-lateral-rodape .btn { min-height: 40px; font-size: 14px; display: flex; align-items: center; justify-content: center; }
-
-/* badge de divergência: o item leva até ela, e o número aparece sem abrir nada */
-.p-badge {
-  min-width: 22px;
-  padding: 1px 7px;
-  border-radius: 999px;
-  background: var(--div);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  flex: none;
+.p-lateral-rodape .p-usuario { color: var(--tinta-2); font-size: var(--t-secundario); }
+.p-lateral-rodape .btn {
+  min-height: 40px; font-size: var(--t-secundario);
+  display: flex; align-items: center; justify-content: center;
 }
-.p-badge[hidden] { display: none; }
 
-/* faixa que acompanha as DEMAIS seções enquanto houver divergência no dia
-   (em Hoje ela se cala: lá o alarme já é o conteúdo da tela) */
+/* Faixa que acompanha as DEMAIS seções enquanto houver divergência no dia.
+   Em Divergências ela se cala: lá o alarme já é o conteúdo da tela. */
 .p-alerta-fixo {
-  border: 2px solid var(--div);
-  background: rgba(220, 38, 38, .08);
-  border-radius: var(--raio);
-  padding: 12px 18px;
-  margin-bottom: 18px;
-  font-size: 15px;
+  border-left: 4px solid var(--alarme); background: var(--alarme-superficie);
+  border-radius: 0 var(--raio) var(--raio) 0; padding: 12px 16px; margin-bottom: 18px;
+  font-size: var(--t-corpo);
 }
 .p-alerta-fixo[hidden] { display: none; }
-.p-alerta-fixo a { color: var(--div); font-weight: 700; }
-
-/* hambúrguer: só existe abaixo de 1024px */
-.p-hamburguer {
-  display: none;
-  flex: none;
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  width: 44px;
-  height: 44px;
-  padding: 0 10px;
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, .38);
-  border-radius: 8px;
-  cursor: pointer;
-}
-.p-hamburguer span { display: block; height: 2px; background: #fff; border-radius: 2px; }
-/* O título da seção é o que sobra do cabeçalho antigo: encolhe antes de todo o
-   resto, porque quem precisa caber inteiro é o alerta e o chip de fila. */
-.p-titulo-secao {
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.p-topo .chip-sync { flex: none; }
-.p-fundo-gaveta { display: none; }
-
-@media (max-width: 1023px) {
-  body.painel.p-com-menu {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: "topo" "corpo";
-  }
-  .p-hamburguer { display: flex; }
-  /* Título do painel some: no celular a barra é estreita e quem manda é a seção. */
-  .p-com-menu .p-topo { padding: 8px 12px; gap: 8px; }
-  .p-com-menu .p-topo .p-titulo-painel { display: none; }
-  .p-com-menu .p-topo .marca-nome { display: none; }
-  .p-com-menu .p-topo .marca-logdis img { width: 28px; height: 28px; }
-  .p-com-menu .p-topo .p-espaco { display: none; }
-  .p-titulo-secao { flex: 1 1 auto; }
-
-  body.p-com-menu > .p-lateral {
-    position: fixed;
-    z-index: 200;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: min(300px, 84vw);
-    transform: translateX(-100%);
-    /* `visibility` junto do `transform`: gaveta fechada precisa sair do alcance
-       do toque e do leitor de tela, não só de vista. */
-    visibility: hidden;
-    transition: transform .18s ease-out, visibility .18s;
-    box-shadow: 0 0 32px rgba(0, 0, 0, .18);
-  }
-  body.p-com-menu > .p-lateral.aberta { transform: translateX(0); visibility: visible; }
-  .p-fundo-gaveta {
-    display: block;
-    position: fixed;
-    inset: 0;
-    z-index: 150;
-    background: rgba(34, 38, 37, .5);
-  }
-  .p-fundo-gaveta[hidden] { display: none; }
-  .p-item { min-height: 48px; }
-}
+.p-alerta-fixo a { color: var(--alarme); font-weight: 700; }

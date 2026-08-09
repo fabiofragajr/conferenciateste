@@ -18,7 +18,7 @@ import {
   ETIQUETAS, etiquetaTexto, pedidosIncompletos, pendenciasDaCarga, prefixoRota
 } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
-import { montarShell, type ItemMenu, type Shell } from '../lib/painel-shell.js';
+import { montarShell, type ItemMenu, type Shell } from '../lib/shell/index.js';
 import { sinalSync } from '../lib/ui/index.js';
 import type { Ambiente } from './ambiente.js';
 import {
@@ -54,17 +54,21 @@ let shell: Shell | null = null;
 let ambiente: Ambiente | null = null;
 
 const MENU: ItemMenu[] = [
-  { id: 'inicio', rotulo: 'Início', grupo: 'Operação' },
-  { id: 'conferencias', rotulo: 'Conferências', grupo: 'Operação' },
-  { id: 'ocorrencias', rotulo: 'Ocorrências', grupo: 'Operação' },
-  { id: 'desempenho', rotulo: 'Desempenho', grupo: 'Análise' },
+  { id: 'inicio', rotulo: 'Início', grupo: 'Operação', href: '/painel' },
+  { id: 'divergencias', rotulo: 'Divergências', grupo: 'Operação', href: '/painel/divergencias' },
+  { id: 'incompletos', rotulo: 'Pedidos incompletos', grupo: 'Operação', href: '/painel/incompletos' },
+  { id: 'conferencias', rotulo: 'Conferências', grupo: 'Operação', href: '/painel/conferencias' },
+  { id: 'ocorrencias', rotulo: 'Ocorrências', grupo: 'Operação', href: '/painel/ocorrencias' },
+  { id: 'desempenho', rotulo: 'Desempenho', grupo: 'Análise', href: '/painel/desempenho' },
   // Deixou de ser link para outra página: a leitura agregada virou seção deste
   // mesmo painel, e a palavra "diretor" some da interface.
-  { id: 'indicadores', rotulo: 'Indicadores', grupo: 'Análise' },
-  { id: 'pessoas', rotulo: 'Pessoas', grupo: 'Cadastros' },
-  { id: 'transportadoras', rotulo: 'Transportadoras', grupo: 'Cadastros' },
-  { id: 'rotas', rotulo: 'Códigos de rota', grupo: 'Cadastros' },
-  { id: 'sincronizacao', rotulo: 'Sincronização', grupo: 'Sistema' }
+  { id: 'indicadores', rotulo: 'Indicadores', grupo: 'Análise', href: '/painel/indicadores' },
+  { id: 'mapa', rotulo: 'Mapa', grupo: 'Análise', href: '/painel/mapa' },
+  { id: 'relatorios', rotulo: 'Relatórios', grupo: 'Análise', href: '/painel/relatorios' },
+  { id: 'pessoas', rotulo: 'Pessoas', grupo: 'Cadastros', href: '/painel/pessoas' },
+  { id: 'transportadoras', rotulo: 'Transportadoras', grupo: 'Cadastros', href: '/painel/transportadoras' },
+  { id: 'rotas', rotulo: 'Códigos de rota', grupo: 'Cadastros', href: '/painel/rotas' },
+  { id: 'sincronizacao', rotulo: 'Sincronização', grupo: 'Sistema', href: '/painel/sincronizacao' }
 ];
 
 async function carregar(): Promise<void> {
@@ -145,11 +149,15 @@ async function boot(): Promise<void> {
 }
 
 async function iniciarPainel(): Promise<void> {
-  shell = montarShell(MENU, {
-    titulo: 'Painel do gestor',
+  shell = montarShell({
+    modo: 'painel',
+    itens: MENU,
     usuario: usuario ? `${usuario.nome} • gestor` : '',
-    inicial: 'inicio'
+    raiz: $('#tela-painel')
   });
+  // O teste de ponta a ponta precisa de um jeito de forçar o badge sem inventar
+  // divergência no banco. É a única superfície pública do shell.
+  (window as unknown as { __shell: Shell }).__shell = shell;
 
   $('#btn-sair').addEventListener('click', () => ambiente?.sair());
 
@@ -195,11 +203,11 @@ function pintarAgora(): void {
   // badge e a faixa do shell recolocam o alarme nas demais seções — inclusive em
   // Cadastros, onde ninguém iria procurar por ele. Em Hoje a faixa do shell se
   // cala: o alarme já está aqui, com os volumes na frente do gestor.
-  shell?.definirBadge('inicio', divergentes.length);
+  shell?.definirBadge('divergencias', divergentes.length);
   shell?.definirAlerta(divergentes.length
     ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
-       Não podem embarcar — <a href="#hoje">ver quais são</a>.`
-    : null, { redundanteEm: 'inicio' });
+       Não podem embarcar — <a href="/painel/divergencias">ver quais são</a>.`
+    : null, { redundanteEm: 'divergencias' });
 
   // A divergência vem antes de tudo, sem filtro, sem clique.
   $('#faixa-divergencia').innerHTML = divergentes.length
@@ -1042,5 +1050,5 @@ export async function montar(amb: Ambiente): Promise<void> {
 
 /** Mostra uma seção do painel. Chamado pelo roteador a cada navegação. */
 export function mostrarSecao(id: string): void {
-  shell?.irPara(id);
+  shell?.mostrar(id);
 }

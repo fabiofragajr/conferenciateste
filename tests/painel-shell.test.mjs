@@ -121,32 +121,33 @@ const irParaSecao = async (p, id) => {
   await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
 };
 
-await passo('em Hoje o alarme não aparece duas vezes', async () => {
+await passo('a faixa fixa se cala em Divergências e fala nas demais', async () => {
   const { ctx, p } = await painelAberto(undefined, semearDivergencia);
   await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
 
-  // A faixa fixa é para quem está longe do alarme. Em Hoje o gestor está nele,
-  // com a tabela dos volumes divergentes na frente: repetir o aviso aqui ensina
-  // a ignorar a faixa nas seções onde ela é a única notícia do problema.
-  if (await p.isVisible('.p-alerta-fixo')) throw new Error('o alarme apareceu duas vezes em Hoje');
-  if (!(await p.isVisible('#faixa-divergencia'))) throw new Error('a divergência sumiu da própria seção Hoje');
+  // A faixa fixa é para quem está LONGE do alarme. Divergências virou destino
+  // próprio, e é lá que o gestor está diante dos volumes: repetir o aviso ali
+  // ensina a ignorar a faixa nas seções onde ela é a única notícia do problema.
+  await irParaSecao(p, 'divergencias');
+  if (await p.isVisible('.p-alerta-fixo')) throw new Error('o alarme apareceu duas vezes em Divergências');
 
   for (const id of ['transportadoras', 'sincronizacao']) {
     await irParaSecao(p, id);
-    if (!(await p.isVisible('.p-alerta-fixo'))) throw new Error(`${id}: longe de Hoje, o alarme sumiu`);
+    if (!(await p.isVisible('.p-alerta-fixo'))) throw new Error(`${id}: longe do alarme, a faixa sumiu`);
   }
   await ctx.close();
 });
 
-await passo('o badge de divergência acompanha toda seção, inclusive Hoje', async () => {
+await passo('o badge de divergência acompanha toda seção, inclusive Divergências', async () => {
   const { ctx, p } = await painelAberto(undefined, semearDivergencia);
   await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
 
-  // O badge é a contagem, não a repetição do aviso: ele fica mesmo em Hoje.
-  for (const id of ['inicio', 'transportadoras', 'sincronizacao']) {
+  // O badge é a contagem, não a repetição do aviso: ele fica mesmo na seção que
+  // já mostra o alarme inteiro, onde a faixa se cala.
+  for (const id of ['divergencias', 'transportadoras', 'sincronizacao']) {
     await irParaSecao(p, id);
-    if (!(await p.isVisible('[data-badge="inicio"]'))) throw new Error(`${id}: badge escondido`);
-    const n = (await p.textContent('[data-badge="inicio"]')).trim();
+    if (!(await p.isVisible('[data-badge="divergencias"]'))) throw new Error(`${id}: badge escondido`);
+    const n = (await p.textContent('[data-badge="divergencias"]')).trim();
     if (n !== String(DIVERGENCIAS)) throw new Error(`${id}: badge diz ${n}, e são ${DIVERGENCIAS}`);
   }
   await ctx.close();
