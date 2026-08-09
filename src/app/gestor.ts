@@ -21,7 +21,8 @@ import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/shell/index.js';
 import { sinalSync } from '../lib/ui/index.js';
 import type { Ambiente } from './ambiente.js';
-import { baseVazia, dentro, type Base, type Modulo } from './painel/contexto.js';
+import { baseVazia, dentro, type Base, type Contexto, type Modulo } from './painel/contexto.js';
+import { montar as montarDivergencias } from './painel/divergencias.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -60,6 +61,14 @@ const MENU: ItemMenu[] = [
 
 /** Seções já migradas, por id do menu. Cresce nas Tasks 11 a 13. */
 const secoes = new Map<string, Modulo>();
+
+const contexto: Contexto = {
+  usuario: () => usuario as Usuario,
+  base: () => base,
+  dispositivos: () => dispositivos,
+  recarregar: () => recarregarTudo(),
+  irPara: (r) => ambiente?.irPara(r)
+};
 
 /**
  * Repinta só a seção visível.
@@ -160,6 +169,8 @@ async function iniciarPainel(): Promise<void> {
   (window as unknown as { __shell: Shell }).__shell = shell;
   shell.aoTrocarSecao(() => pintarSecaoVisivel());
 
+  secoes.set('divergencias', montarDivergencias($('[data-secao="divergencias"]'), contexto));
+
   // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
   // folha "Mais", que é remontada a cada abertura — um listener preso ao
   // elemento morreria junto com o HTML anterior.
@@ -208,37 +219,15 @@ function pintarAgora(): void {
 
   pintarAtencao(leiturasHoje);
 
-  // Com o painel em seções, a faixa abaixo deixa de estar sempre na tela. O
-  // badge e a faixa do shell recolocam o alarme nas demais seções — inclusive em
-  // Cadastros, onde ninguém iria procurar por ele. Em Hoje a faixa do shell se
-  // cala: o alarme já está aqui, com os volumes na frente do gestor.
+  // Com o painel em seções, o alarme deixa de estar sempre na tela. O badge e a
+  // faixa do shell o recolocam em todas elas — inclusive em Cadastros, onde
+  // ninguém iria procurar por ele. Só em Divergências a faixa se cala: lá os
+  // volumes já estão na frente do gestor.
   shell?.definirBadge('divergencias', divergentes.length);
   shell?.definirAlerta(divergentes.length
     ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
        Não podem embarcar — <a href="/painel/divergencias">ver quais são</a>.`
     : null, { redundanteEm: 'divergencias' });
-
-  // A divergência vem antes de tudo, sem filtro, sem clique.
-  $('#faixa-divergencia').innerHTML = divergentes.length
-    ? `<div class="p-faixa-alerta">
-         <span class="p-num">${divergentes.length}</span>
-         <span class="p-txt"><b>volume(s) de outra rota hoje</b>
-         Não podem embarcar. Confira antes de liberar a carga.</span>
-       </div>
-       <div class="p-cartao p-alerta" style="margin-bottom:18px">
-         <div class="p-tab-wrap">${tabela(
-           ['Código', 'Rota lida', 'Pedido', 'Conferente', 'Carga', 'Hora'],
-           divergentes.map((l) => {
-             const s = base.sessoes.find((x) => x.id === l.sessaoId);
-             return [
-               `<code>${esc(l.codigoVolume ?? '—')}</code>`, esc(l.rota ?? '—'), esc(l.pedido ?? '—'),
-               esc(s?.usuarioNome ?? '—'), esc(s ? `${s.transportadoraNome} (${s.rotas.join(', ')})` : '—'),
-               dataHora(l.timestamp)
-             ];
-           })
-         )}</div>
-       </div>`
-    : '<div class="p-faixa-ok">Nenhum volume de outra rota hoje.</div>';
 
   const abertas = base.sessoes.filter((s) => s.status === 'ABERTA');
   $('#sessoes-abertas').innerHTML = tabela(
@@ -278,7 +267,7 @@ function pintarAtencao(leiturasHoje: Leitura[]): void {
   const itens: { texto: string; alvo?: string }[] = [];
 
   const divergentes = leiturasHoje.filter((l) => l.status === 'ROTA_DIVERGENTE').length;
-  if (divergentes) itens.push({ texto: `${divergentes} volume(s) de outra transportadora`, alvo: '#faixa-divergencia' });
+  if (divergentes) itens.push({ texto: `${divergentes} volume(s) de outra transportadora`, alvo: '/painel/divergencias' });
 
   const naoMapeados = new Set(
     leiturasHoje.filter((l) => l.status === 'DESTINO_NAO_MAPEADO').map((l) => l.rotaPrefixo ?? '?')

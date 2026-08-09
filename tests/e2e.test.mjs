@@ -181,8 +181,11 @@ await passo('painel do gestor exige gestor e mostra divergência do dia', async 
   await g.waitForSelector('#tela-painel:not([hidden])', { timeout: 5000 });
   // Espera a pintura, não a visibilidade: a seção de Pessoas nasce escondida.
   await g.waitForSelector('#lista-usuarios button[data-editar]', { state: 'attached', timeout: 10000 });
-  const faixa = await g.innerHTML('#faixa-divergencia');
-  if (!/outra rota hoje/.test(faixa)) throw new Error('faixa de divergência não apareceu');
+  // A divergência do dia virou seção própria — é para lá que o badge e a faixa
+  // fixa apontam, e é lá que os volumes ficam.
+  await secao(g, 'divergencias');
+  const faixa = await g.innerHTML('[data-secao="divergencias"]');
+  if (!/outra transportadora/.test(faixa)) throw new Error('divergência não apareceu na seção');
   const oc = await g.innerHTML('#oc-lista');
   if (!/Cheguei 7h/.test(oc)) throw new Error('ocorrência não listada no painel');
 });

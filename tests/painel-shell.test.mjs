@@ -123,7 +123,12 @@ const irParaSecao = async (p, id) => {
 
 await passo('a faixa fixa se cala em Divergências e fala nas demais', async () => {
   const { ctx, p } = await painelAberto(undefined, semearDivergencia);
-  await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
+  // O sinal de que a divergência já foi lida do banco é o badge — o cartão que
+  // se esperava aqui virou a seção `divergencias` inteira.
+  await p.waitForFunction(() => {
+    const b = document.querySelector('[data-badge="divergencias"]');
+    return b && !b.hidden && b.textContent.trim() !== '0';
+  }, null, { timeout: 8000 });
 
   // A faixa fixa é para quem está LONGE do alarme. Divergências virou destino
   // próprio, e é lá que o gestor está diante dos volumes: repetir o aviso ali
@@ -140,7 +145,12 @@ await passo('a faixa fixa se cala em Divergências e fala nas demais', async () 
 
 await passo('o badge de divergência acompanha toda seção, inclusive Divergências', async () => {
   const { ctx, p } = await painelAberto(undefined, semearDivergencia);
-  await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
+  // O sinal de que a divergência já foi lida do banco é o badge — o cartão que
+  // se esperava aqui virou a seção `divergencias` inteira.
+  await p.waitForFunction(() => {
+    const b = document.querySelector('[data-badge="divergencias"]');
+    return b && !b.hidden && b.textContent.trim() !== '0';
+  }, null, { timeout: 8000 });
 
   // O badge é a contagem, não a repetição do aviso: ele fica mesmo na seção que
   // já mostra o alarme inteiro, onde a faixa se cala.
