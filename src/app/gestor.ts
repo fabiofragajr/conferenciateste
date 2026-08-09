@@ -23,6 +23,7 @@ import { sinalSync } from '../lib/ui/index.js';
 import type { Ambiente } from './ambiente.js';
 import { baseVazia, dentro, type Base, type Contexto, type Modulo } from './painel/contexto.js';
 import { montar as montarDivergencias } from './painel/divergencias.js';
+import { montar as montarIncompletos } from './painel/incompletos.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -170,6 +171,7 @@ async function iniciarPainel(): Promise<void> {
   shell.aoTrocarSecao(() => pintarSecaoVisivel());
 
   secoes.set('divergencias', montarDivergencias($('[data-secao="divergencias"]'), contexto));
+  secoes.set('incompletos', montarIncompletos($('[data-secao="incompletos"]'), contexto));
 
   // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
   // folha "Mais", que é remontada a cada abertura — um listener preso ao
@@ -245,15 +247,6 @@ function pintarAgora(): void {
     'Nenhuma conferência aberta agora.'
   );
 
-  const incompletos = pedidosIncompletos(leiturasHoje);
-  $('#incompletos-hoje').innerHTML = tabela(
-    ['Pedido', 'Rota', 'Bipados', 'Declarado', 'Faltando'],
-    incompletos.map((p) => [
-      esc(p.pedido), esc(p.rota), String(p.bipados), String(p.total), esc(p.faltando.join(', '))
-    ]),
-    'Nenhum pedido incompleto hoje.'
-  );
-
   pintarNaoMapeados(leiturasHoje);
   pintarOcorrencias();
   pintarRecorrentes();
@@ -277,7 +270,7 @@ function pintarAtencao(leiturasHoje: Leitura[]): void {
   }
 
   const incompletos = pedidosIncompletos(leiturasHoje).length;
-  if (incompletos) itens.push({ texto: `${incompletos} pedido(s) com volume faltando`, alvo: '#incompletos-hoje' });
+  if (incompletos) itens.push({ texto: `${incompletos} pedido(s) com volume faltando`, alvo: '/painel/incompletos' });
 
   const aguardando = base.sessoes.filter((s) => s.status === 'ENCERRADA' && !s.liberadaEm
     && dentro(s.inicio, limitesDoDia().inicio, limitesDoDia().fim)).length;

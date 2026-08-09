@@ -280,6 +280,10 @@ for (const tela of CELULARES) {
 
   await passo(`o topo cabe em 64 px em ${tela.nome}`, async () => {
     const { ctx, p } = await painelAberto({ width: tela.width, height: tela.height });
+    // `#tela-painel` deixa de estar `hidden` antes de o shell montar: o roteador
+    // troca a tela e só então importa o painel. Medir sem esperar a barra pegava
+    // `null` de vez em quando.
+    await p.waitForSelector('.sh-topo', { timeout: 8000 });
     const altura = await p.evaluate(() =>
       Math.round(document.querySelector('.sh-topo').getBoundingClientRect().height));
     if (altura > 64) throw new Error(`o topo voltou a crescer: ${altura}px`);
