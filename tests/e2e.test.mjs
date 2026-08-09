@@ -237,6 +237,30 @@ await passo('cadastro de transportadora e código de rota', async () => {
   if (!/FLES/.test(await g.innerHTML('#lista-rotas'))) throw new Error('rota não cadastrada');
 });
 
+await passo('excluir recusa cadastro com histórico e explica o caminho', async () => {
+  await secao(g, 'rotas');
+  // FNOR já foi bipada lá em cima: excluir apagaria o vínculo que responde
+  // "quem bipou esta caixa". O aviso precisa dizer isso e oferecer Desativar.
+  let aviso = '';
+  g.once('dialog', (d) => { aviso = d.message(); void d.dismiss(); });
+  const linhaFnor = g.locator('#lista-rotas tr', { hasText: 'FNOR' }).first();
+  await linhaFnor.locator('button[data-excluir-rotas]').click();
+  await g.waitForTimeout(300);
+  if (!/histórico/i.test(aviso)) throw new Error(`aviso não explicou o motivo: ${aviso}`);
+  if (!/Desativar/.test(aviso)) throw new Error(`aviso não ofereceu saída: ${aviso}`);
+  if (!/FNOR/.test(await g.innerHTML('#lista-rotas'))) throw new Error('FNOR sumiu mesmo assim');
+});
+
+await passo('excluir apaga o cadastro que nunca foi usado', async () => {
+  await secao(g, 'rotas');
+  // FLES foi cadastrada agora e nunca recebeu leitura: esta é a que pode sair.
+  g.once('dialog', (d) => void d.accept());
+  const linhaFles = g.locator('#lista-rotas tr', { hasText: 'FLES' }).first();
+  await linhaFles.locator('button[data-excluir-rotas]').click();
+  await g.waitForTimeout(600);
+  if (/FLES/.test(await g.innerHTML('#lista-rotas'))) throw new Error('a rota continuou na lista');
+});
+
 await passo('código de rota não pode ter dois donos', async () => {
   await secao(g, 'rotas');
   const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));

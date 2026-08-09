@@ -25,6 +25,7 @@ import { montar as montarIncompletos } from './painel/incompletos.js';
 import { montar as montarInicio } from './painel/inicio.js';
 import { montar as montarOcorrencias } from './painel/ocorrencias.js';
 import { cadastrarRota } from './painel/cadastro-rotas.js';
+import { excluirCadastro, impedimentos, type TipoCadastro } from './painel/excluir-cadastro.js';
 import {
   exportarPDF, exportarCSV, hidratarFotos, montarRelatorio, renderizarHTML,
   type DadosRelatorio
@@ -170,6 +171,7 @@ async function iniciarPainel(): Promise<void> {
   // divergência no banco. É a única superfície pública do shell.
   (window as unknown as { __shell: Shell }).__shell = shell;
   shell.aoTrocarSecao(() => pintarSecaoVisivel());
+  ligarExclusao();
 
   secoes.set('divergencias', montarDivergencias($('[data-secao="divergencias"]'), contexto));
   secoes.set('incompletos', montarIncompletos($('[data-secao="incompletos"]'), contexto));
@@ -460,6 +462,55 @@ function preencherSelects(): void {
   selTransp.value = escolhida;
 }
 
+/**
+ * Um handler para as três listas: o que muda entre elas é só o nome do que se
+ * apaga. Delegação no documento porque as tabelas são remontadas a cada
+ * repintura — listener preso ao botão morre junto com o HTML anterior.
+ */
+function ligarExclusao(): void {
+  document.addEventListener('click', async (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>(
+      'button[data-excluir-usuarios], button[data-excluir-transportadoras], button[data-excluir-rotas]'
+    );
+    if (!btn) return;
+
+    const tipo = (['usuarios', 'transportadoras', 'rotas'] as TipoCadastro[])
+      .find((t) => btn.dataset[`excluir${t[0].toUpperCase()}${t.slice(1)}`]);
+    if (!tipo) return;
+    const id = btn.dataset[`excluir${tipo[0].toUpperCase()}${tipo.slice(1)}`] as string;
+
+    const nomes: Record<TipoCadastro, string> = {
+      usuarios: 'esta pessoa', transportadoras: 'esta transportadora', rotas: 'este código de rota'
+    };
+
+    // Apagar o próprio acesso tranca o painel sem ninguém do outro lado.
+    if (tipo === 'usuarios' && id === usuario?.id) {
+      alert('Você não pode excluir o próprio acesso.');
+      return;
+    }
+
+    const motivos = impedimentos(tipo, id, base);
+    if (motivos.length) {
+      alert(
+        `Não dá para excluir ${nomes[tipo]}: já existe histórico.\n\n`
+        + motivos.map((m) => `• ${m}`).join('\n')
+        + '\n\nO relatório de ontem depende deste cadastro. Use Desativar: '
+        + 'ele sai das listas de escolha e o histórico continua de pé.'
+      );
+      return;
+    }
+
+    if (!confirm(`Excluir ${nomes[tipo]} de vez, aqui e na base? Não dá para desfazer.`)) return;
+
+    const r = await excluirCadastro(tipo, id);
+    if (!r.ok) {
+      alert(r.erro);
+      return;
+    }
+    await recarregarTudo();
+  });
+}
+
 function pintarCadastros(): void {
   const acao = (attr: string, id: string, texto: string): string =>
     `<button class="btn btn-fantasma" ${attr}="${esc(id)}"
@@ -477,6 +528,7 @@ function pintarCadastros(): void {
       acao('data-editar', u.id, 'Editar')
         + ' ' + acao('data-senha', u.id, 'Redefinir senha')
         + ' ' + acao('data-usuario', u.id, u.ativo ? 'Desativar' : 'Reativar')
+        + ' ' + acao('data-excluir-usuarios', u.id, 'Excluir')
     ]),
     'Nenhuma pessoa cadastrada.'
   );
@@ -525,7 +577,8 @@ function pintarCadastros(): void {
         esc(t.responsavel || '—'),
         t.ativo ? 'ativa' : '<span style="color:var(--texto-2)">inativa</span>',
         `<button class="btn btn-fantasma" data-transp="${esc(t.id)}" style="min-height:32px;font-size:12px">
-           ${t.ativo ? 'Desativar' : 'Reativar'}</button>`
+           ${t.ativo ? 'Desativar' : 'Reativar'}</button>
+         ${acao('data-excluir-transportadoras', t.id, 'Excluir')}`
       ];
     }),
     'Nenhuma transportadora cadastrada. Cadastre a primeira para o operador ter o que escolher.'
@@ -548,7 +601,8 @@ function pintarCadastros(): void {
       esc(nomeTransp(r.transportadoraId)),
       r.ativo ? 'ativa' : '<span style="color:var(--texto-2)">inativa</span>',
       `<button class="btn btn-fantasma" data-rota="${esc(r.id)}" style="min-height:32px;font-size:12px">
-         ${r.ativo ? 'Desativar' : 'Reativar'}</button>`
+         ${r.ativo ? 'Desativar' : 'Reativar'}</button>
+         ${acao('data-excluir-rotas', r.id, 'Excluir')}`
     ]),
     'Nenhum código de rota cadastrado. Sem isso, toda leitura cai como rota não cadastrada.'
   );
