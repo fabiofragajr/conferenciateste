@@ -7,16 +7,14 @@ import '../styles/painel.css';
 import '../styles/relatorio.css';
 
 import type {
-  Dispositivo, Leitura, Momento, Ocorrencia, Sessao, StatusLeitura, Usuario
+  Dispositivo, Leitura, Ocorrencia, Sessao, StatusLeitura, Usuario
 } from '../types.js';
 import * as db from '../lib/db.js';
 import { novoSync } from '../lib/db.js';
 import * as auth from '../lib/auth.js';
 import * as sync from '../lib/sync.js';
 import { salvarConfig, obterConfig, testarConexao } from '../lib/supabase.js';
-import {
-  ETIQUETAS, etiquetaTexto, pendenciasDaCarga, prefixoRota
-} from '../lib/model.js';
+import { pendenciasDaCarga, prefixoRota } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/shell/index.js';
 import { sinalSync } from '../lib/ui/index.js';
@@ -25,10 +23,11 @@ import { baseVazia, dentro, type Base, type Contexto, type Modulo } from './pain
 import { montar as montarDivergencias } from './painel/divergencias.js';
 import { montar as montarIncompletos } from './painel/incompletos.js';
 import { montar as montarInicio } from './painel/inicio.js';
+import { montar as montarOcorrencias } from './painel/ocorrencias.js';
 import { cadastrarRota } from './painel/cadastro-rotas.js';
 import {
-  cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
-  hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
+  exportarPDF, exportarCSV, hidratarFotos, montarRelatorio, renderizarHTML,
+  type DadosRelatorio
 } from '../lib/relatorio.js';
 import {
   $, baixarArquivo, dataHora, duracao, esc, limitesDoDia, minutosEntre,
@@ -175,6 +174,7 @@ async function iniciarPainel(): Promise<void> {
   secoes.set('divergencias', montarDivergencias($('[data-secao="divergencias"]'), contexto));
   secoes.set('incompletos', montarIncompletos($('[data-secao="incompletos"]'), contexto));
   secoes.set('inicio', montarInicio($('[data-secao="inicio"]'), contexto));
+  secoes.set('ocorrencias', montarOcorrencias($('[data-secao="ocorrencias"]'), contexto));
 
   // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
   // folha "Mais", que é remontada a cada abertura — um listener preso ao
@@ -232,8 +232,6 @@ function pintarAgora(): void {
        Não podem embarcar — <a href="/painel/divergencias">ver quais são</a>.`
     : null, { redundanteEm: 'divergencias' });
 
-  pintarOcorrencias();
-  pintarRecorrentes();
 }
 
 /** Aparelho com fila pendente significa que o número desta tela está incompleto. */
@@ -253,72 +251,6 @@ function pintarDispositivos(): void {
 }
 
 /* ------------------------------------------------------- ocorrências ----- */
-
-function ocorrenciasFiltradas(): Ocorrencia[] {
-  const dias = Number($<HTMLSelectElement>('#oc-dias').value);
-  const momento = $<HTMLSelectElement>('#oc-momento').value as Momento | '';
-  const etiqueta = $<HTMLSelectElement>('#oc-etiqueta').value;
-  const busca = $<HTMLInputElement>('#oc-busca').value.trim().toLowerCase();
-
-  const desde = new Date();
-  desde.setHours(0, 0, 0, 0);
-  desde.setDate(desde.getDate() - (dias - 1));
-  const desdeIso = desde.toISOString();
-
-  return base.ocorrencias
-    .filter((o) => o.timestamp >= desdeIso)
-    .filter((o) => !momento || o.momento === momento)
-    .filter((o) => !etiqueta || o.etiquetas.includes(etiqueta))
-    // Busca no texto livre: o gestor precisa achar "doca fechada" sem depender
-    // de alguém ter marcado a etiqueta certa.
-    .filter((o) => !busca || o.texto.toLowerCase().includes(busca))
-    .sort((a, b) => Number(b.grave) - Number(a.grave) || b.timestamp.localeCompare(a.timestamp));
-}
-
-function pintarOcorrencias(): void {
-  const lista = ocorrenciasFiltradas();
-  const alvo = $('#oc-lista');
-  alvo.innerHTML = lista.length
-    ? lista.map((o) => {
-        const s = base.sessoes.find((x) => x.id === o.sessaoId);
-        const quem = s ? `${s.usuarioNome} • ${s.transportadoraNome}` : '';
-        return cardOcorrencia(o, `<div class="rel-oc-local">${esc(quem)}</div>`);
-      }).join('')
-    : '<p class="p-vazio">Nenhuma ocorrência no filtro atual.</p>';
-  hidratarFotos(alvo, lista);
-}
-
-
-function pintarRecorrentes(): void {
-  const desde = new Date(Date.now() - 30 * 86400000).toISOString();
-  const contagem = new Map<string, { total: number; graves: number; etiquetas: Map<string, number> }>();
-
-  for (const o of base.ocorrencias) {
-    if (o.timestamp < desde || o.momento !== 'TRANSPORTADORA') continue;
-    const s = base.sessoes.find((x) => x.id === o.sessaoId);
-    const chave = s?.transportadoraNome || 'Sem identificação';
-    const atual = contagem.get(chave) ?? { total: 0, graves: 0, etiquetas: new Map<string, number>() };
-    atual.total++;
-    if (o.grave) atual.graves++;
-    for (const e of o.etiquetas) atual.etiquetas.set(e, (atual.etiquetas.get(e) ?? 0) + 1);
-    contagem.set(chave, atual);
-  }
-
-  const linhas = [...contagem.entries()]
-    .filter(([, v]) => v.total >= 2)
-    .sort((a, b) => b[1].total - a[1].total)
-    .map(([nome, v]) => {
-      const top = [...v.etiquetas.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3)
-        .map(([e, n]) => `${etiquetaTexto(e)} (${n})`).join(', ');
-      return [esc(nome), String(v.total), v.graves ? `<b style="color:var(--div)">${v.graves}</b>` : '0', esc(top || '—')];
-    });
-
-  $('#recorrentes').innerHTML = tabela(
-    ['Transportadora / carga', 'Ocorrências (30 dias)', 'Graves', 'Etiquetas mais frequentes'],
-    linhas,
-    'Nenhuma repetição na transportadora nos últimos 30 dias.'
-  );
-}
 
 /* ------------------------------------------------- 2. o que aconteceu? --- */
 
@@ -507,7 +439,6 @@ async function abrirGaveta(sessaoId: string): Promise<void> {
 function preencherSelects(): void {
   const pessoa = $<HTMLSelectElement>('#f-pessoa');
   const rota = $<HTMLSelectElement>('#f-rota');
-  const etiqueta = $<HTMLSelectElement>('#oc-etiqueta');
 
   const manter = (sel: HTMLSelectElement, opcoes: string[][], rotuloTodos: string): void => {
     const atual = sel.value;
@@ -518,7 +449,6 @@ function preencherSelects(): void {
 
   manter(pessoa, base.usuarios.map((u) => [u.id, u.nome]), 'Todas');
   manter(rota, base.rotas.map((r) => [r.codigo, `${r.codigo} — ${r.nome}`]), 'Todas');
-  manter(etiqueta, ETIQUETAS.map((e) => [e.id, e.texto]), 'Todas');
 
   // O select do cadastro de rota não é filtro: sem "Todas".
   const selTransp = $<HTMLSelectElement>('#r-transportadora');
@@ -714,14 +644,6 @@ function pintarFila(erro: string | null, pendentes: number, configurado: boolean
  * região do painel existir no DOM.
  */
 function ligarEventos(): void {
-
-  for (const id of ['#oc-momento', '#oc-etiqueta', '#oc-dias']) {
-    $<HTMLSelectElement>(id).addEventListener('change', pintarOcorrencias);
-  }
-
-  $<HTMLInputElement>('#oc-busca').addEventListener('input', pintarOcorrencias);
-
-  $('#btn-oc-csv').addEventListener('click', () => exportarCSVOcorrencias(ocorrenciasFiltradas()));
 
   $('#btn-filtrar').addEventListener('click', pintarHistorico);
 

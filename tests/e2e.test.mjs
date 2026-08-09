@@ -186,6 +186,9 @@ await passo('painel do gestor exige gestor e mostra divergência do dia', async 
   await secao(g, 'divergencias');
   const faixa = await g.innerHTML('[data-secao="divergencias"]');
   if (!/outra transportadora/.test(faixa)) throw new Error('divergência não apareceu na seção');
+  // A lista só é montada quando a seção está visível: o painel repinta a seção
+  // atual, não as treze.
+  await secao(g, 'ocorrencias');
   const oc = await g.innerHTML('#oc-lista');
   if (!/Cheguei 7h/.test(oc)) throw new Error('ocorrência não listada no painel');
 });
