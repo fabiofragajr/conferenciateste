@@ -7,7 +7,7 @@ import '../styles/painel.css';
 import '../styles/relatorio.css';
 
 import type {
-  Dispositivo, Leitura, Momento, Ocorrencia, Rota, Sessao, StatusLeitura, Usuario
+  Dispositivo, Leitura, Momento, Ocorrencia, Sessao, StatusLeitura, Usuario
 } from '../types.js';
 import * as db from '../lib/db.js';
 import { novoSync } from '../lib/db.js';
@@ -15,7 +15,7 @@ import * as auth from '../lib/auth.js';
 import * as sync from '../lib/sync.js';
 import { salvarConfig, obterConfig, testarConexao } from '../lib/supabase.js';
 import {
-  ETIQUETAS, etiquetaTexto, pedidosIncompletos, pendenciasDaCarga, prefixoRota
+  ETIQUETAS, etiquetaTexto, pendenciasDaCarga, prefixoRota
 } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/shell/index.js';
@@ -24,6 +24,8 @@ import type { Ambiente } from './ambiente.js';
 import { baseVazia, dentro, type Base, type Contexto, type Modulo } from './painel/contexto.js';
 import { montar as montarDivergencias } from './painel/divergencias.js';
 import { montar as montarIncompletos } from './painel/incompletos.js';
+import { montar as montarInicio } from './painel/inicio.js';
+import { cadastrarRota } from './painel/cadastro-rotas.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -172,6 +174,7 @@ async function iniciarPainel(): Promise<void> {
 
   secoes.set('divergencias', montarDivergencias($('[data-secao="divergencias"]'), contexto));
   secoes.set('incompletos', montarIncompletos($('[data-secao="incompletos"]'), contexto));
+  secoes.set('inicio', montarInicio($('[data-secao="inicio"]'), contexto));
 
   // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
   // folha "Mais", que é remontada a cada abertura — um listener preso ao
@@ -216,140 +219,21 @@ async function atualizarAoVivo(): Promise<void> {
 
 function pintarAgora(): void {
   const { inicio, fim } = limitesDoDia();
-  const leiturasHoje = base.leituras.filter((l) => dentro(l.timestamp, inicio, fim));
-  const divergentes = leiturasHoje.filter((l) => l.status === 'ROTA_DIVERGENTE');
+  const divergentes = base.leituras.filter(
+    (l) => dentro(l.timestamp, inicio, fim) && l.status === 'ROTA_DIVERGENTE'
+  );
 
-  pintarAtencao(leiturasHoje);
-
-  // Com o painel em seções, o alarme deixa de estar sempre na tela. O badge e a
-  // faixa do shell o recolocam em todas elas — inclusive em Cadastros, onde
-  // ninguém iria procurar por ele. Só em Divergências a faixa se cala: lá os
-  // volumes já estão na frente do gestor.
+  // O que sobrou aqui é do shell, não de uma seção: o badge e a faixa precisam
+  // valer em TODAS as telas, então quem os atualiza não pode ser um módulo que
+  // só pinta quando está visível.
   shell?.definirBadge('divergencias', divergentes.length);
   shell?.definirAlerta(divergentes.length
     ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
        Não podem embarcar — <a href="/painel/divergencias">ver quais são</a>.`
     : null, { redundanteEm: 'divergencias' });
 
-  const abertas = base.sessoes.filter((s) => s.status === 'ABERTA');
-  $('#sessoes-abertas').innerHTML = tabela(
-    ['Pessoa', 'Carga', 'Rotas', 'Volumes', 'Divergentes', 'Aberta há'],
-    abertas.map((s) => {
-      const ls = base.porSessao.get(s.id) ?? [];
-      const div = ls.filter((l) => l.status === 'ROTA_DIVERGENTE').length;
-      return [
-        esc(s.usuarioNome), esc(s.transportadoraNome), esc(s.rotas.join(', ')),
-        `<span class="p-num-col">${ls.length}</span>`,
-        div ? `<b style="color:var(--div)">${div}</b>` : '0',
-        duracao(s.inicio)
-      ];
-    }),
-    'Nenhuma conferência aberta agora.'
-  );
-
-  pintarNaoMapeados(leiturasHoje);
   pintarOcorrencias();
   pintarRecorrentes();
-}
-
-/**
- * A primeira tela responde uma pergunta só: existe alguma carga que precisa da
- * minha atenção agora? Sem isso o gestor tem que caçar o problema pelo painel.
- */
-function pintarAtencao(leiturasHoje: Leitura[]): void {
-  const itens: { texto: string; alvo?: string }[] = [];
-
-  const divergentes = leiturasHoje.filter((l) => l.status === 'ROTA_DIVERGENTE').length;
-  if (divergentes) itens.push({ texto: `${divergentes} volume(s) de outra transportadora`, alvo: '/painel/divergencias' });
-
-  const naoMapeados = new Set(
-    leiturasHoje.filter((l) => l.status === 'DESTINO_NAO_MAPEADO').map((l) => l.rotaPrefixo ?? '?')
-  );
-  if (naoMapeados.size) {
-    itens.push({ texto: `${naoMapeados.size} código(s) de rota sem cadastro`, alvo: '#nao-mapeados' });
-  }
-
-  const incompletos = pedidosIncompletos(leiturasHoje).length;
-  if (incompletos) itens.push({ texto: `${incompletos} pedido(s) com volume faltando`, alvo: '/painel/incompletos' });
-
-  const aguardando = base.sessoes.filter((s) => s.status === 'ENCERRADA' && !s.liberadaEm
-    && dentro(s.inicio, limitesDoDia().inicio, limitesDoDia().fim)).length;
-  // Aviso que mora em outra seção leva ao item de menu, não ao id do cartão:
-  // rolar até um elemento escondido não mostra nada.
-  if (aguardando) itens.push({ texto: `${aguardando} carga(s) aguardando liberação`, alvo: '#conferencias' });
-
-  const paradas = dispositivos.filter((d) => d.pendentes > 0);
-  if (paradas.length) {
-    const total = paradas.reduce((n, d) => n + d.pendentes, 0);
-    itens.push({ texto: `${total} leitura(s) ainda num aparelho sem sincronizar`, alvo: '#sincronizacao' });
-  }
-
-  $('#atencao').innerHTML = itens.length
-    ? `<div class="p-atencao">
-         <h3>Precisa de atenção</h3>
-         <ul>${itens.map((i) => `<li><a href="${i.alvo ?? '#'}">${esc(i.texto)}</a></li>`).join('')}</ul>
-       </div>`
-    : '<div class="p-faixa-ok">Operação normal: nenhuma pendência hoje.</div>';
-}
-
-/**
- * Códigos que apareceram na doca e ninguém cadastrou. O operador não decide a
- * rota — a decisão é daqui, e em um clique.
- */
-function pintarNaoMapeados(leiturasHoje: Leitura[]): void {
-  const porCodigo = new Map<string, { codigo: string; volumes: number; ultima: string; transportadoras: Set<string> }>();
-
-  for (const l of base.leituras) {
-    if (l.status !== 'DESTINO_NAO_MAPEADO' || !l.rotaPrefixo) continue;
-    const atual = porCodigo.get(l.rotaPrefixo)
-      ?? { codigo: l.rotaPrefixo, volumes: 0, ultima: l.timestamp, transportadoras: new Set<string>() };
-    atual.volumes++;
-    if (l.timestamp > atual.ultima) atual.ultima = l.timestamp;
-    const s = base.sessoes.find((x) => x.id === l.sessaoId);
-    if (s) atual.transportadoras.add(s.transportadoraNome);
-    porCodigo.set(l.rotaPrefixo, atual);
-  }
-
-  // Já cadastrado depois da leitura? Some da lista: o problema foi resolvido.
-  const cadastrados = new Set(base.rotas.map((r) => r.codigo));
-  const pendentes = [...porCodigo.values()]
-    .filter((c) => !cadastrados.has(c.codigo))
-    .sort((a, b) => b.volumes - a.volumes);
-
-  const opcoes = base.transportadoras.filter((t) => t.ativo)
-    .map((t) => `<option value="${esc(t.id)}">${esc(t.nome)}</option>`).join('');
-
-  $('#nao-mapeados').innerHTML = pendentes.length
-    ? tabela(
-        ['Código', 'Volumes', 'Apareceu conferindo', 'Última leitura', 'Cadastrar como rota de'],
-        pendentes.map((c) => [
-          `<code>${esc(c.codigo)}</code>`,
-          `<span class="p-num-col">${c.volumes}</span>`,
-          esc([...c.transportadoras].join(', ') || '—'),
-          dataHora(c.ultima),
-          `<span class="p-acao-inline">
-             <select data-mapear="${esc(c.codigo)}">${opcoes}</select>
-             <button class="btn btn-primario" data-cadastrar="${esc(c.codigo)}"
-                     style="min-height:32px;font-size:12px">Cadastrar</button>
-           </span>`
-        ])
-      )
-    : '<p class="p-vazio">Nenhum código de rota pendente de cadastro.</p>';
-
-  $('#nao-mapeados').querySelectorAll<HTMLButtonElement>('button[data-cadastrar]').forEach((btn) => {
-    btn.addEventListener('click', async () => {
-      const codigo = btn.dataset.cadastrar as string;
-      const select = $<HTMLSelectElement>(`select[data-mapear="${codigo}"]`);
-      const r = await cadastrarRota({ codigo, nome: codigo, transportadoraId: select.value });
-      if (!r.ok) {
-        alert(r.erro);
-        return;
-      }
-      await recarregarTudo();
-    });
-  });
-
-  void leiturasHoje;
 }
 
 /** Aparelho com fila pendente significa que o número desta tela está incompleto. */
@@ -750,37 +634,6 @@ function pintarCadastros(): void {
 }
 
 /** O código é único no sistema: é isso que permite achar o dono pela etiqueta. */
-async function donoDoCodigo(codigo: string, ignorarId?: string): Promise<Rota | null> {
-  const existente = await db.umPorIndice('rotas', 'codigo', codigo);
-  if (!existente || existente.id === ignorarId) return null;
-  return existente;
-}
-
-/** Cadastra um código de rota, recusando duplicidade com mensagem que explica. */
-async function cadastrarRota(dados: {
-  codigo: string; nome: string; transportadoraId: string; descricao?: string;
-}): Promise<{ ok: true } | { ok: false; erro: string }> {
-  const codigo = prefixoRota(dados.codigo);
-  if (!codigo) return { ok: false, erro: 'O código precisa começar com letras (ex.: FNOR).' };
-  if (!dados.transportadoraId) return { ok: false, erro: 'Escolha a transportadora dona do código.' };
-
-  const conflito = await donoDoCodigo(codigo);
-  if (conflito) {
-    const dona = base.transportadoras.find((t) => t.id === conflito.transportadoraId)?.nome ?? 'outra transportadora';
-    return { ok: false, erro: `O código ${codigo} já pertence à ${dona}. Um código de rota é de uma transportadora só.` };
-  }
-
-  await db.salvar('rotas', {
-    ...novoSync(),
-    codigo,
-    nome: dados.nome.trim() || codigo,
-    transportadoraId: dados.transportadoraId,
-    descricao: (dados.descricao ?? '').trim(),
-    ativo: true
-  });
-  return { ok: true };
-}
-
 /* ------------------------------------------------------------ acessos --- */
 // Um formulário só, dois modos: em branco cadastra, carregado edita. Duas telas
 // para a mesma coisa é o que faz o gestor errar de campo.
@@ -974,7 +827,7 @@ function ligarEventos(): void {
       nome: $<HTMLInputElement>('#r-nome').value,
       transportadoraId: $<HTMLSelectElement>('#r-transportadora').value,
       descricao: $<HTMLInputElement>('#r-descricao').value
-    });
+    }, base.transportadoras);
 
     if (!r.ok) {
       msg.textContent = r.erro;

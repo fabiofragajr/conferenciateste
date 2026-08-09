@@ -358,11 +358,12 @@ await passo('gestor não consegue tirar o próprio acesso', async () => {
 });
 
 await passo('rota lida sem cadastro vira fila de decisão do gestor', async () => {
-  const html = await g.innerHTML('#nao-mapeados');
+  // `#nao-mapeados` e `#atencao` deixaram de ser ids do HTML: Início virou
+  // módulo e monta o próprio conteúdo.
+  await secao(g, 'inicio');
+  const html = await g.innerHTML('[data-secao="inicio"]');
   if (!/RDESC/.test(html)) throw new Error('código não cadastrado não apareceu para o gestor');
-  if (!/Precisa de atenção/.test(await g.innerHTML('#atencao'))) {
-    throw new Error('bloco de atenção não destacou a pendência');
-  }
+  if (!/Precisa de atenção/.test(html)) throw new Error('bloco de atenção não destacou a pendência');
 });
 
 // ---- painel do diretor
