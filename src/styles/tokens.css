@@ -100,3 +100,53 @@ input, select, textarea { font-size: max(16px, var(--t-corpo)); }
 @media (max-width: 1023px) {
   .ui-secao { margin-bottom: 30px; }
 }
+
+/* ------------------------------------------------------- componentes UI --- */
+.ui-page-header { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+.ui-page-header h2 { margin: 0; font-size: var(--t-pagina); color: var(--tinta); letter-spacing: -.01em; }
+.ui-page-header > span { font-size: var(--t-secundario); color: var(--tinta-2); }
+.ui-page-acoes { margin-left: auto; display: flex; gap: 8px; }
+
+.ui-vazio { margin: 4px 0; font-size: var(--t-corpo); color: var(--tinta-3); }
+.ui-acao { font-size: var(--t-secundario); font-weight: 700; white-space: nowrap; }
+
+.ui-badge {
+  min-width: 20px; padding: 1px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 800; color: #fff; text-align: center;
+  font-variant-numeric: tabular-nums; background: var(--alarme);
+}
+.ui-badge.ui-atencao { background: var(--atencao); }
+.ui-badge.ui-marca { background: var(--marca-forte); }
+
+/* Faixa lateral, não moldura. Uma por tela. */
+.ui-alerta {
+  display: flex; gap: 12px; align-items: flex-start;
+  border-left: 4px solid var(--alarme); background: var(--alarme-superficie);
+  border-radius: 0 var(--raio) var(--raio) 0; padding: 10px 14px; margin-bottom: 16px;
+}
+.ui-alerta.ui-atencao { border-left-color: var(--atencao); background: var(--atencao-superficie); }
+.ui-alerta b { display: block; font-size: var(--t-corpo); color: var(--tinta); }
+.ui-alerta p { margin: 2px 0 0; font-size: var(--t-secundario); color: var(--tinta-2); }
+.ui-alerta .ui-acao { margin-left: auto; align-self: center; }
+
+.ui-kpis { display: flex; flex-wrap: wrap; gap: 28px; padding: 2px 0 6px; }
+.ui-kpi small { display: block; font-size: var(--t-label); color: var(--tinta-2); }
+.ui-kpi b {
+  font-size: var(--t-indicador); color: var(--tinta);
+  letter-spacing: -.02em; font-variant-numeric: tabular-nums;
+}
+.ui-kpi b.ui-alarme { color: var(--alarme); }
+.ui-kpi b.ui-atencao { color: var(--atencao); }
+
+/* Status: forma + texto. A cor acompanha, nunca carrega sozinha. */
+.ui-status {
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+  font-size: var(--t-label); font-weight: 600; color: var(--tinta);
+}
+.ui-status i { font-size: 9px; line-height: 1; font-style: normal; }
+
+/* Duas colunas no celular só para número curto. Texto explicativo ocupa a
+   largura toda — dois cartões estreitos com frase dentro viram ilegíveis. */
+@media (max-width: 560px) {
+  .ui-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 20px; }
+}
