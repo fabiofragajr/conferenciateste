@@ -372,3 +372,4 @@ O painel do gestor pode ser denso — ele senta, tem tempo e teclado. Mas denso 
 - Integração com o ERP Senior / GeneXus para puxar rotas e pedidos
 - Multiusuário com backend e sincronização entre coletores
 - Histórico de sessões e dashboard de divergências por rota/período
+POSE
