@@ -6,15 +6,18 @@
    brancos de borda fina. Empresarial e operacional — não painel de analytics. */
 
 body.painel {
-  min-height: 100vh;
+  /* Casca de app, e não página que rola inteira: a altura é a da janela e o
+     estouro é proibido aqui. Quem rola é a coluna do meio, sozinha. Com
+     `min-height` a lateral subia junto com o conteúdo e a moldura sumia — era
+     isso que dava a sensação de página solta em vez de sistema. */
+  height: 100dvh;
+  overflow: hidden;
   display: grid;
-  /* `minmax(0, …)` e não `1fr`: a coluna de conteúdo precisa poder ficar menor
-     que a tabela mais larga que ela guarda, senão é a página que estica. */
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 252px minmax(0, 1fr);
   grid-template-areas:
     "lateral topo"
     "lateral corpo";
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   background: var(--fundo);
 }
 body.painel > .sh-topo { grid-area: topo; }
@@ -25,40 +28,122 @@ body.painel > .p-lateral { grid-area: lateral; }
    largura livre, que volta a ser medida pela tabela. É essa dupla que fazia o
    painel vazar centenas de pixels para o lado no celular. */
 body.painel > #tela-painel {
-  grid-area: corpo; min-width: 0; width: 100%; padding: 20px 24px 40px;
+  grid-area: corpo;
+  min-width: 0; width: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+  padding: 22px 28px 48px;
 }
 
 /* A moldura mora no <body>, fora de #tela-painel, porque é ela quem forma a
    grade. Então ela não some junto com a tela, e precisa sumir por conta —
-   senão fica por cima da bipagem, engolindo o toque. Quem manda é a mesma
-   classe que liga a grade: a tela é do roteador, e a moldura segue a tela. */
+   senão fica por cima da bipagem, engolindo o toque. */
 body:not(.painel) > .sh-topo,
 body:not(.painel) > .p-lateral,
 body:not(.painel) > .sh-barra { display: none; }
 
 /* ------------------------------------------------------- barra do topo --- */
-/* Faixa fina e clara. O cabeçalho verde alto foi o que deixou a tela pesada e
-   roubou o destaque de quem precisava dele. */
 .sh-topo {
-  position: sticky;
-  top: 0;
-  z-index: 50;
   display: flex; align-items: center; gap: 12px;
   min-width: 0;
-  padding: 10px 20px calc(10px + env(safe-area-inset-top));
-  background: var(--superficie); border-bottom: 1px solid var(--linha);
+  padding: 0 24px;
+  height: 56px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--linha);
 }
+.sh-marca { display: none; }
 .sh-espaco { flex: 1; }
 /* O título encolhe com reticências em vez de empurrar a barra: numa tela de
    320px é ele que decide se a página rola para o lado. */
 .sh-titulo-secao {
-  font-size: var(--t-corpo); font-weight: 700; color: var(--tinta);
+  font-size: 15px; font-weight: 700; color: var(--tinta);
+  letter-spacing: -.01em;
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .sh-sync { flex: none; }
-.p-usuario { font-size: var(--t-secundario); color: var(--tinta-2); }
 
-.p-corpo { max-width: 1500px; margin: 0 auto; padding: 20px 24px 60px; }
+/* --------------------------------------------------- lateral (a marca) --- */
+/* Verde institucional na coluna, claro no miolo. A identidade fica na borda; o
+   centro fica livre para o vermelho da divergência ser a única cor forte. */
+.p-lateral {
+  background: var(--marca);
+  color: #fff;
+  display: flex; flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.p-marca {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 18px; height: 56px; flex: none;
+  border-bottom: 1px solid rgba(255, 255, 255, .12);
+}
+.p-marca img { border-radius: 7px; }
+.p-marca-nome {
+  font-size: 15px; font-weight: 800; letter-spacing: .04em; color: #fff;
+  white-space: nowrap;
+}
+.p-marca-nome i { font-style: normal; font-weight: 400; color: var(--marca-clara); }
+
+/* A lista rola sozinha; o rodapé com "Sair" nunca sai da tela. */
+.p-lateral-rolagem {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  padding: 14px 0 18px;
+}
+.p-lateral-grupo { margin-bottom: 16px; }
+.p-lateral-grupo h2 {
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: rgba(255, 255, 255, .45); margin: 0 0 6px; padding: 0 18px; font-weight: 700;
+}
+.p-item {
+  display: flex; align-items: center; gap: 11px;
+  min-height: var(--toque); padding: 0 18px;
+  font-size: 13.5px; color: rgba(255, 255, 255, .82); text-decoration: none;
+  border-left: 3px solid transparent;
+  transition: background .12s ease, color .12s ease;
+}
+.p-item-icone { font-size: 13px; width: 16px; text-align: center; opacity: .55; flex: none; }
+.p-item-rotulo { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-item:hover { background: rgba(255, 255, 255, .07); color: #fff; }
+.p-item.ativo {
+  background: rgba(255, 255, 255, .12);
+  border-left-color: var(--marca-clara);
+  color: #fff; font-weight: 700;
+}
+.p-item.ativo .p-item-icone { opacity: 1; color: var(--marca-clara); }
+.p-item:focus-visible { outline: 2px solid var(--marca-clara); outline-offset: -2px; }
+
+.p-lateral-rodape {
+  flex: none;
+  padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+  border-top: 1px solid rgba(255, 255, 255, .12);
+  display: flex; flex-direction: column; gap: 7px;
+}
+.p-lateral-rodape .p-usuario {
+  color: rgba(255, 255, 255, .6); font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.p-lateral-rodape .btn {
+  min-height: 38px; font-size: 13px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px; border: 1px solid transparent; cursor: pointer;
+}
+.btn-bipar { background: var(--marca-forte); color: #fff; text-decoration: none; }
+.btn-bipar:hover { background: var(--marca-clara); }
+.btn-sair { background: transparent; color: rgba(255, 255, 255, .7); border-color: rgba(255, 255, 255, .22); }
+.btn-sair:hover { background: rgba(255, 255, 255, .1); color: #fff; }
+
+/* Faixa que acompanha as DEMAIS seções enquanto houver divergência no dia.
+   Em Divergências ela se cala: lá o alarme já é o conteúdo da tela. */
+.p-alerta-fixo {
+  border-left: 4px solid var(--alarme); background: var(--alarme-superficie);
+  border-radius: 0 var(--raio) var(--raio) 0; padding: 12px 16px; margin-bottom: 18px;
+  font-size: var(--t-corpo);
+}
+.p-alerta-fixo[hidden] { display: none; }
+.p-alerta-fixo a { color: var(--alarme); font-weight: 700; }
+
+.p-corpo { max-width: 1500px; margin: 0 auto; }
 
 .p-secao { margin-bottom: 34px; }
 .p-secao > h2 {
@@ -70,7 +155,10 @@ body:not(.painel) > .sh-barra { display: none; }
   padding-bottom: 8px;
   margin-bottom: 16px;
 }
-.p-secao h3 { font-size: 15px; margin: 0 0 10px; color: var(--logdis-forest); }
+/* Escopado ao cartão de propósito: solto, `.p-secao h3` vencia o
+   `.ui-secao > h3` do design system por vir depois, e todo título de seção
+   nova saía verde e grande em vez do rótulo pequeno sobre a régua. */
+.p-secao .p-cartao h3 { font-size: 15px; margin: 0 0 10px; color: var(--marca); }
 
 .p-grade { display: grid; gap: 16px; }
 /* O `min()` é o que faz a coluna desistir da largura mínima quando a tela é
@@ -274,44 +362,6 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 .p-acao-inline { display: inline-flex; gap: 6px; align-items: center; }
 .p-acao-inline select { min-width: 150px; min-height: 32px; font-size: 12px; padding: 4px 8px; }
 
-/* ------------------------------------------------------------- lateral --- */
-.p-lateral {
-  background: var(--superficie); border-right: 1px solid var(--linha);
-  padding: 16px 0 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto;
-}
-.p-lateral-grupo h2 {
-  font-size: var(--t-label); letter-spacing: .09em; text-transform: uppercase;
-  color: var(--tinta-3); margin: 0 0 4px; padding: 0 18px;
-}
-.p-item {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
-  min-height: var(--toque); padding: 0 18px; font-size: var(--t-corpo);
-  color: var(--tinta); text-decoration: none; border-left: 3px solid transparent;
-}
-.p-item:hover { background: var(--marca-superficie); }
-.p-item.ativo {
-  background: var(--marca-superficie); border-left-color: var(--marca-forte);
-  color: var(--marca); font-weight: 700;
-}
-.p-lateral-rodape {
-  margin-top: auto; padding: 16px 18px 0; border-top: 1px solid var(--linha);
-  display: flex; flex-direction: column; gap: 8px;
-}
-.p-lateral-rodape .p-usuario { color: var(--tinta-2); font-size: var(--t-secundario); }
-.p-lateral-rodape .btn {
-  min-height: 40px; font-size: var(--t-secundario);
-  display: flex; align-items: center; justify-content: center;
-}
-
-/* Faixa que acompanha as DEMAIS seções enquanto houver divergência no dia.
-   Em Divergências ela se cala: lá o alarme já é o conteúdo da tela. */
-.p-alerta-fixo {
-  border-left: 4px solid var(--alarme); background: var(--alarme-superficie);
-  border-radius: 0 var(--raio) var(--raio) 0; padding: 12px 16px; margin-bottom: 18px;
-  font-size: var(--t-corpo);
-}
-.p-alerta-fixo[hidden] { display: none; }
-.p-alerta-fixo a { color: var(--alarme); font-weight: 700; }
 
 /* --------------------------------------------- celular: barra inferior --- */
 .sh-barra { display: none; }
@@ -320,15 +370,32 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 @media (max-width: 1023px) {
   body.painel {
     /* `minmax(0, 1fr)` e não `1fr`: o mínimo de um `1fr` é o min-content, e o
-       min-content da barra do topo (título + chip, que não quebram linha)
-       esticava a coluna para 340px numa tela de 320px — a página inteira
-       rolava para o lado por causa da barra. */
+       min-content da barra do topo esticava a coluna para 340px numa tela de
+       320px — era a própria barra fazendo a página rolar para o lado. */
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: "topo" "corpo";
   }
   body.painel > .p-lateral { display: none; }
   body.painel > #tela-painel {
-    padding: 16px 16px calc(78px + env(safe-area-inset-bottom));
+    padding: 14px 14px calc(84px + env(safe-area-inset-bottom));
+    /* Rolagem com inércia no iOS: sem isto o miolo trava a cada arrasto. */
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Sem a coluna, a marca precisa aparecer em algum lugar — a barra é o único
+     que sobra, e é ela que dá o "isto é um app" na primeira olhada. */
+  .sh-topo {
+    padding: 0 14px;
+    padding-top: env(safe-area-inset-top);
+    height: calc(54px + env(safe-area-inset-top));
+    background: var(--marca);
+    border-bottom: 0;
+  }
+  .sh-marca { display: flex; align-items: center; }
+  .sh-marca img { border-radius: 6px; }
+  .sh-titulo-secao { color: #fff; font-size: 16px; }
+  .sh-topo .chip-sync {
+    background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .28); color: #fff;
   }
 
   .sh-barra {
@@ -336,20 +403,31 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
     display: grid; grid-template-columns: repeat(5, 1fr);
     background: var(--superficie); border-top: 1px solid var(--linha);
     padding-bottom: env(safe-area-inset-bottom);
+    box-shadow: 0 -6px 20px rgba(22, 33, 29, .07);
   }
   .sh-aba {
-    display: flex; flex-direction: column; align-items: center; gap: 2px;
-    padding: 7px 2px 9px; font-size: 10px; color: var(--tinta-2);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    padding: 8px 2px 10px; font-size: 10px; color: var(--tinta-3);
     text-decoration: none; background: transparent; border: 0; cursor: pointer;
     position: relative; min-height: 56px; justify-content: center;
+    transition: color .12s ease;
   }
-  .sh-aba i { font-size: 17px; line-height: 1; opacity: .65; }
+  .sh-aba i { font-size: 18px; line-height: 1; opacity: .5; }
   .sh-aba.ativa { color: var(--marca); font-weight: 700; }
   .sh-aba.ativa i { opacity: 1; }
-  .sh-aba .ui-badge { position: absolute; top: 4px; right: 22%; }
+  .sh-aba .ui-badge { position: absolute; top: 5px; right: 20%; }
 
   .ui-folha-fundo { display: block; position: fixed; inset: 0; z-index: 150; background: rgba(22,33,29,.45); }
   .ui-folha-fundo[hidden] { display: none; }
+
+  /* Na folha a lista volta a ser clara: ali ela é conteúdo, não moldura. */
+  .ui-folha .p-lateral-grupo h2 { color: var(--tinta-3); }
+  .ui-folha .p-item { color: var(--tinta); border-left-color: transparent; }
+  .ui-folha .p-item-icone { color: var(--tinta-2); }
+  .ui-folha .p-item:hover { background: var(--marca-superficie); }
+  .ui-folha .p-lateral-rodape { border-top-color: var(--linha); }
+  .ui-folha .p-lateral-rodape .p-usuario { color: var(--tinta-2); }
+  .ui-folha .btn-sair { color: var(--tinta-2); border-color: var(--linha); }
 }
 
 /* ------------------------------------------------------------- folha ----- */

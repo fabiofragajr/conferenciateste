@@ -16,7 +16,9 @@ export function montarTopo(modo: ModoShell): HTMLElement {
   const topo = document.createElement('header');
   topo.className = `sh-topo sh-topo-${modo}`;
   topo.innerHTML = modo === 'painel'
-    ? `<button class="sh-voltar" type="button" hidden aria-label="Voltar">‹</button>
+    ? `<span class="sh-marca" aria-hidden="true">
+         <img src="/logdis-simbolo.png" alt="" width="26" height="26" />
+       </span>
        <span class="sh-titulo-secao"></span>
        <span class="sh-espaco"></span>
        <span class="sh-sync chip chip-sync" id="chip-sync-painel">—</span>`
