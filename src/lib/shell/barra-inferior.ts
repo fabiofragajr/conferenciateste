@@ -2,24 +2,35 @@
 //
 // Cinco abas na zona do polegar, contra um hambúrguer no canto mais alto e mais
 // longe da mão. As quatro primeiras são o que o gestor usa todo dia; as outras
-// oito são consulta, e moram atrás de "Mais".
+// nove são consulta, e moram atrás de "Mais".
 //
 // A aba Divergências carrega o badge, e é essa a razão de ela estar aqui em vez
 // de dentro de "Mais": com a gaveta, a contagem só existia com o menu aberto.
+//
+// Os ícones vêm de `icones.ts`, e não de um mapa próprio. O mapa próprio era o
+// jeito de a mesma seção ganhar desenhos diferentes na coluna e na barra —
+// duas telas do mesmo sistema pedindo para serem decoradas separadamente.
 
 import { esc } from '../util.js';
-import type { ItemMenu } from './lateral.js';
+import { icone } from './icones.js';
+import { htmlDaArvore, type ItemMenu } from './lateral.js';
 
 /** Ids que ganham aba própria, nesta ordem. O resto vai para "Mais". */
 export const ABAS = ['inicio', 'divergencias', 'conferencias', 'mapa'] as const;
 
-const ICONE: Record<string, string> = {
-  inicio: '◱', divergencias: '▲', conferencias: '▤', mapa: '◎', mais: '⋯'
-};
-
 const ROTULO_CURTO: Record<string, string> = {
   inicio: 'Início', divergencias: 'Alertas', conferencias: 'Conferências', mapa: 'Mapa'
 };
+
+/**
+ * Traço mais grosso que o da lateral, e não é descuido.
+ *
+ * 1,5 px é o peso certo a 18 px sobre o verde escuro da coluna. Na barra o
+ * ícone tem 22 px sobre fundo branco, e o mesmo traço fica anêmico — some no
+ * relance de quem está de pé segurando caixa. O desenho é o mesmo; o peso
+ * acompanha o tamanho e o fundo.
+ */
+const TRACO_BARRA = 1.75;
 
 export function montarBarra(itens: ItemMenu[]): HTMLElement {
   const barra = document.createElement('nav');
@@ -30,7 +41,7 @@ export function montarBarra(itens: ItemMenu[]): HTMLElement {
     const item = itens.find((i) => i.id === id);
     if (!item) return '';
     return `<a class="sh-aba" data-aba="${esc(id)}" href="${esc(item.href)}">
-      <i aria-hidden="true">${ICONE[id]}</i>
+      ${icone(id, { tamanho: 22, traco: TRACO_BARRA })}
       <span class="ui-badge" data-badge="${esc(id)}" hidden></span>
       ${esc(ROTULO_CURTO[id] ?? item.rotulo)}
     </a>`;
@@ -38,7 +49,7 @@ export function montarBarra(itens: ItemMenu[]): HTMLElement {
 
   barra.innerHTML = `${abas}
     <button class="sh-aba" data-aba="mais" type="button">
-      <i aria-hidden="true">${ICONE.mais}</i>Mais
+      ${icone('mais', { tamanho: 22, traco: TRACO_BARRA })}Mais
     </button>`;
   return barra;
 }
@@ -48,15 +59,14 @@ export function itensDaFolha(itens: ItemMenu[]): ItemMenu[] {
   return itens.filter((i) => !(ABAS as readonly string[]).includes(i.id));
 }
 
-export function htmlDaFolha(itens: ItemMenu[]): string {
-  const grupos = [...new Set(itens.map((i) => i.grupo))];
-  return grupos.map((g) => `
-    <div class="p-lateral-grupo">
-      <h2>${esc(g)}</h2>
-      ${itens.filter((i) => i.grupo === g).map((i) => `
-        <a class="p-item" href="${esc(i.href)}" data-item="${esc(i.id)}">
-          <span>${esc(i.rotulo)}</span>
-          <span class="ui-badge" data-badge="${esc(i.id)}" hidden></span>
-        </a>`).join('')}
-    </div>`).join('');
+/**
+ * A folha usa a MESMA árvore da lateral, com o mesmo recolhimento.
+ *
+ * O prefixo `folha` separa os ids de `aria-controls` dos da coluna: as duas
+ * árvores existem no documento ao mesmo tempo, e id repetido faz o cabeçalho de
+ * uma abrir a lista da outra. O estado de recolhido é compartilhado de
+ * propósito — é a preferência da pessoa, não da tela.
+ */
+export function htmlDaFolha(itens: ItemMenu[], fechados: Set<string>): string {
+  return htmlDaArvore(itens, { fechados, prefixo: 'folha', tamanho: 20 });
 }

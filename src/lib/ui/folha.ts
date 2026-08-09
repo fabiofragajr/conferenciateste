@@ -31,8 +31,14 @@ export function criarFolha(rotulo: string): Folha {
 
   fundo.addEventListener('click', fechar);
   // Escolher um item fecha: ninguém quer tocar duas vezes para chegar num lugar.
+  //
+  // `data-nao-fecha` é a exceção, e ela é obrigatória: o cabeçalho de grupo do
+  // menu é um <button> que recolhe a lista ali dentro. Sem a marca, tocar nele
+  // fecharia a folha inteira — a pessoa pediria para recolher "Cadastros" e
+  // perderia o menu, sem entender o que fez de errado.
   folha.addEventListener('click', (ev) => {
-    if ((ev.target as HTMLElement).closest('a, button')) fechar();
+    const alvo = (ev.target as HTMLElement).closest('a, button');
+    if (alvo && !alvo.hasAttribute('data-nao-fecha')) fechar();
   });
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') fechar(); });
 

@@ -54,14 +54,21 @@ body:not(.painel) > .sh-barra { display: none; }
 }
 .sh-marca { display: none; }
 .sh-espaco { flex: 1; }
-/* O título encolhe com reticências em vez de empurrar a barra: numa tela de
-   320px é ele que decide se a página rola para o lado. */
-.sh-titulo-secao {
-  font-size: 15px; font-weight: 700; color: var(--tinta);
-  letter-spacing: -.01em;
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
 .sh-sync { flex: none; }
+
+/* A trilha encolhe com reticências em vez de empurrar a barra: numa tela de
+   320px é ela que decide se a página rola para o lado. */
+.sh-trilha {
+  display: flex; align-items: baseline; gap: 7px;
+  min-width: 0; overflow: hidden; white-space: nowrap;
+}
+.sh-trilha-grupo { font-size: 13px; color: var(--tinta-3); flex: none; }
+.sh-trilha-sep { color: var(--tinta-3); font-size: 13px; flex: none; }
+.sh-trilha-sep[hidden] { display: none; }
+.sh-trilha-secao {
+  font-size: 15px; font-weight: 700; color: var(--tinta); letter-spacing: -.01em;
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
 
 /* --------------------------------------------------- lateral (a marca) --- */
 /* Verde institucional na coluna, claro no miolo. A identidade fica na borda; o
@@ -90,11 +97,34 @@ body:not(.painel) > .sh-barra { display: none; }
   flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
   padding: 14px 0 18px;
 }
-.p-lateral-grupo { margin-bottom: 16px; }
-.p-lateral-grupo h2 {
+/* ------------------------------------------------- grupo recolhível --- */
+/* O cabeçalho é botão, mas não pode parecer botão: parece o rótulo de sempre,
+   e ganha a seta na coluna do ícone. É ela que diz o que o toque vai fazer —
+   por isso o grupo não recebe ícone próprio. Ícone de grupo alinhado com ícone
+   de item apaga a diferença de nível que o recolhimento existe para criar. */
+.p-grupo { margin-bottom: 4px; }
+.p-grupo-cab {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  min-height: 34px; padding: 0 18px; margin: 10px 0 2px;
+  background: none; border: 0; cursor: pointer; text-align: left;
   font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
-  color: rgba(255, 255, 255, .45); margin: 0 0 6px; padding: 0 18px; font-weight: 700;
+  font-weight: 700; color: rgba(255, 255, 255, .45);
+  font-family: inherit;
+  transition: color .12s ease;
 }
+.p-grupo-cab:hover { color: rgba(255, 255, 255, .75); }
+.p-grupo-cab:focus-visible { outline: 2px solid var(--marca-clara); outline-offset: -2px; }
+.p-grupo-nome { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.p-grupo-seta {
+  flex: none; opacity: .7;
+  transition: transform .15s ease;
+}
+.p-grupo-cab[aria-expanded="true"] .p-grupo-seta { transform: rotate(90deg); }
+/* O badge do grupo fechado é o alarme que o recolhimento tentaria esconder:
+   ele não é discreto de propósito. */
+.p-grupo-badge { flex: none; }
+.p-grupo-itens[hidden] { display: none; }
+
 .p-item {
   display: flex; align-items: center; gap: 11px;
   min-height: var(--toque); padding: 0 18px;
@@ -102,9 +132,14 @@ body:not(.painel) > .sh-barra { display: none; }
   border-left: 3px solid transparent;
   transition: background .12s ease, color .12s ease;
 }
-.p-item-icone { font-size: 13px; width: 16px; text-align: center; opacity: .55; flex: none; }
+/* `display:flex` no invólucro: sem ele o <svg> herda a linha de base do texto e
+   fica 2px mais baixo que o rótulo — treze itens desalinhados por igual, o
+   defeito que ninguém aponta e todo mundo sente. */
+.p-item-icone { display: flex; flex: none; opacity: .72; }
 .p-item-rotulo { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.p-item .ui-badge { flex: none; }
 .p-item:hover { background: rgba(255, 255, 255, .07); color: #fff; }
+.p-item:hover .p-item-icone { opacity: 1; }
 .p-item.ativo {
   background: rgba(255, 255, 255, .12);
   border-left-color: var(--marca-clara);
@@ -125,7 +160,7 @@ body:not(.painel) > .sh-barra { display: none; }
 }
 .p-lateral-rodape .btn {
   min-height: 38px; font-size: 13px; font-weight: 700;
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
   border-radius: 8px; border: 1px solid transparent; cursor: pointer;
 }
 .btn-bipar { background: var(--marca-forte); color: #fff; text-decoration: none; }
@@ -393,7 +428,11 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
   }
   .sh-marca { display: flex; align-items: center; }
   .sh-marca img { border-radius: 6px; }
-  .sh-titulo-secao { color: #fff; font-size: 16px; }
+  /* Um nível só: em 320px a trilha inteira ("Operação › Pedidos incompletos")
+     não cabe, e o que a pessoa precisa ler é onde ela ESTÁ. O grupo continua no
+     DOM para o leitor de tela anunciar os dois níveis. */
+  .sh-trilha-grupo, .sh-trilha-sep { display: none; }
+  .sh-trilha-secao { color: #fff; font-size: 16px; }
   .sh-topo .chip-sync {
     background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .28); color: #fff;
   }
@@ -412,18 +451,22 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
     position: relative; min-height: 56px; justify-content: center;
     transition: color .12s ease;
   }
-  .sh-aba i { font-size: 18px; line-height: 1; opacity: .5; }
+  .sh-aba .ui-icone { opacity: .55; }
   .sh-aba.ativa { color: var(--marca); font-weight: 700; }
-  .sh-aba.ativa i { opacity: 1; }
+  .sh-aba.ativa .ui-icone { opacity: 1; }
   .sh-aba .ui-badge { position: absolute; top: 5px; right: 20%; }
 
   .ui-folha-fundo { display: block; position: fixed; inset: 0; z-index: 150; background: rgba(22,33,29,.45); }
   .ui-folha-fundo[hidden] { display: none; }
 
   /* Na folha a lista volta a ser clara: ali ela é conteúdo, não moldura. */
-  .ui-folha .p-lateral-grupo h2 { color: var(--tinta-3); }
+  .ui-folha .p-grupo-cab { color: var(--tinta-3); min-height: var(--toque); }
+  .ui-folha .p-grupo-cab:hover { color: var(--tinta); }
+  .ui-folha .p-grupo-cab:focus-visible { outline-color: var(--marca-forte); }
   .ui-folha .p-item { color: var(--tinta); border-left-color: transparent; }
-  .ui-folha .p-item-icone { color: var(--tinta-2); }
+  .ui-folha .p-item-icone { color: var(--tinta-2); opacity: 1; }
+  .ui-folha .p-item.ativo { background: var(--marca-superficie); color: var(--marca); }
+  .ui-folha .p-item.ativo .p-item-icone { color: var(--marca-forte); }
   .ui-folha .p-item:hover { background: var(--marca-superficie); }
   .ui-folha .p-lateral-rodape { border-top-color: var(--linha); }
   .ui-folha .p-lateral-rodape .p-usuario { color: var(--tinta-2); }

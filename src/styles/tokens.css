@@ -113,6 +113,12 @@ input, select, textarea { font-size: max(16px, var(--t-corpo)); }
 .ui-vazio { margin: 4px 0; font-size: var(--t-corpo); color: var(--tinta-3); }
 .ui-acao { font-size: var(--t-secundario); font-weight: 700; white-space: nowrap; }
 
+/* Ícone traçado. `block` porque um <svg> inline herda a linha de base do texto
+   e assenta 2px abaixo do rótulo ao lado; `flex:none` porque num item de menu
+   estreito ele seria a primeira coisa a ser espremida — e ícone amassado deixa
+   de ser reconhecível, que é a única coisa que ele tem para oferecer. */
+.ui-icone { display: block; flex: none; }
+
 .ui-badge {
   min-width: 20px; padding: 1px 6px; border-radius: 999px;
   font-size: 11px; font-weight: 800; color: #fff; text-align: center;

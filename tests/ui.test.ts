@@ -155,4 +155,37 @@ for (const p of [{}, { pendentes: 8 }, { online: false }, { ultimoErro: 'x' }, {
   }
 }
 
+/* ----------------------------------------------------------- ícones ------ */
+// Um item de menu sem desenho próprio cai no ponto neutro do fallback. Isso
+// evita o buraco na coluna, mas não é o que se quer entregar: a seção nova sai
+// indistinguível das outras. O teste falha quando alguém acrescenta uma seção
+// e esquece o ícone — que é exatamente quando o esquecimento é barato.
+const { icone, temIcone } = await import('../src/lib/shell/icones.ts');
+const { SECOES } = await import('../src/lib/router.ts');
+
+for (const s of SECOES) {
+  assert.ok(temIcone(s), `a seção "${s}" entrou no menu sem ícone desenhado`);
+}
+for (const extra of ['mais', 'seta']) {
+  assert.ok(temIcone(extra), `falta o ícone de moldura "${extra}"`);
+}
+
+// Monocromático de verdade: a cor vem do item que o contém, nunca do desenho.
+// Um `#hex` aqui é um ícone que ignora o estado ativo e o fundo verde da coluna.
+for (const s of [...SECOES, 'mais', 'seta']) {
+  const svg = icone(s);
+  assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(svg), `${s}: cor fixa no desenho`);
+  assert.ok(svg.includes('stroke="currentColor"'), `${s}: não herda a cor do item`);
+  assert.ok(svg.includes('aria-hidden="true"'), `${s}: o leitor de tela vai lê-lo além do rótulo`);
+  assert.ok(svg.includes('viewBox="0 0 24 24"'), `${s}: fora do quadro comum`);
+}
+
+// Tamanho e traço acompanham a tela: 18px na coluna, 22px e traço mais grosso
+// na barra do celular.
+assert.ok(icone('mapa', { tamanho: 22, traco: 1.75 }).includes('width="22"'));
+assert.ok(icone('mapa', { tamanho: 22, traco: 1.75 }).includes('stroke-width="1.75"'));
+
+// Id desconhecido não devolve string vazia: buraco na coluna desalinha os treze.
+assert.ok(icone('secao-que-nao-existe').includes('<svg'));
+
 console.log('UI_OK');
