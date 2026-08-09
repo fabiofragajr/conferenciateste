@@ -86,6 +86,18 @@ await prepararAparelho(d, BASE, '/entrar');
 vigiar(d, 'diretor');
 await fazerLogin(d, 'sandro');
 await d.waitForSelector('#tela-painel:not([hidden])');
+// O painel do diretor virou uma seção do painel único: quem escolhe a seção é
+// a URL. O login cai em `/painel` (Início), onde `#btn-pdf-periodo` está
+// dentro de uma seção `hidden` — antes da Task 3 isto era uma página própria e
+// o botão já estava na tela ao carregar.
+await d.goto(`${BASE}/painel/indicadores`);
+// O botão existe antes de os blocos pintarem; exportar aí geraria um PDF do
+// período vazio. Espera o conteúdo, como faz o e2e.
+await d.waitForFunction(
+  () => (document.querySelector('#kpis')?.textContent ?? '').includes('Taxa de divergência'),
+  null,
+  { timeout: 10000 }
+);
 await baixar(d, () => d.click('#btn-pdf-periodo'), 'diretor');
 
 await navegador.close();

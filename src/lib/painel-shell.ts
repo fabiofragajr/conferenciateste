@@ -77,7 +77,7 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
       <span class="p-titulo-secao"></span>
       <span class="p-espaco"></span>
       <span class="p-badge p-badge-topo" data-badge-topo hidden></span>
-      <span id="chip-sync" class="chip chip-sync">Fila</span>
+      <span id="chip-sync-painel" class="chip chip-sync">Fila</span>
     </header>
 
     <div class="p-fundo-gaveta" hidden></div>
@@ -114,6 +114,16 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
   });
   fundo.addEventListener('click', fecharGaveta);
 
+  // Tocar em qualquer coisa que navegue fecha a gaveta. `mostrar()` já fazia
+  // isso ao trocar de seção, mas o que SAI do painel — "Abrir bipagem",
+  // "Sair", o painel do diretor — não passa por ele: a gaveta continuava
+  // aberta por cima da tela seguinte, engolindo o toque, e na volta o painel
+  // abria com o menu deslizando sozinho.
+  lateral.addEventListener('click', (ev) => {
+    if ((ev.target as HTMLElement).closest('a, button')) fecharGaveta();
+  });
+  // Voltar pelo botão do navegador sai do painel sem passar por clique nenhum.
+  window.addEventListener('popstate', fecharGaveta);
 
   // Quem decide se a faixa aparece é a seção visível, não quem chama
   // `definirAlerta` — o painel repinta a cada 15s e trocaria de seção no meio.

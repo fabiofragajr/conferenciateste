@@ -131,7 +131,7 @@ async function boot(): Promise<void> {
   // Cadastro local, sincronização e login são do `main.ts`. Aqui fica só o que
   // é do painel: o chip da barra e a caixa de estado da fila.
   sync.aoMudarSync((estado) => {
-    const chip = document.querySelector('#chip-sync');
+    const chip = document.querySelector('#chip-sync-painel');
     if (chip) {
       chip.textContent = !estado.configurado
         ? `${estado.pendentes} só no aparelho`

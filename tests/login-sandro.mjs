@@ -102,6 +102,15 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   await p.click('.grupo-btn >> nth=0');
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
 
+  // O chip da fila da bipagem tem que ser o da bipagem. O shell do painel
+  // injetava outro `#chip-sync` no <body>, antes de #tela-operacao na ordem do
+  // documento: para quem é gestor, o `$('#chip-sync')` do operador pegava o do
+  // painel, e a fila parava de aparecer na tela em que ela importa.
+  const donoDoChip = await p.evaluate(
+    () => document.querySelector('#chip-sync')?.closest('.view')?.id ?? null
+  );
+  if (donoDoChip !== 'view-bipagem') throw new Error(`#chip-sync resolveu para: ${donoDoChip}`);
+
   // Conferência aberta: voltar ao painel não pode encerrar nada.
   // (o botão da tela de bipagem é #btn-painel-bip; #btn-painel vive na tela
   // de transportadora e fica hidden enquanto a câmera está aberta)

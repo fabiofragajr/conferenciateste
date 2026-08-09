@@ -257,7 +257,7 @@ for (const tela of CELULARES) {
       b.hidden = false;
     });
 
-    for (const sel of ['[data-badge-topo]', '#chip-sync']) {
+    for (const sel of ['[data-badge-topo]', '#chip-sync-painel']) {
       if (!(await p.isVisible(sel))) throw new Error(`${sel} invisível com a gaveta fechada`);
       const dentro = await p.evaluate((s) => {
         const r = document.querySelector(s).getBoundingClientRect();

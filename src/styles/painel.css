@@ -31,6 +31,16 @@ body.p-com-menu > .p-lateral { grid-area: lateral; }
    painel vazar centenas de pixels para o lado no celular. */
 body.p-com-menu > .p-corpo { grid-area: corpo; min-width: 0; width: 100%; }
 
+/* A moldura mora no <body>, fora de #tela-painel, porque é ela quem forma a
+   grade. Então ela não some junto com a tela, e precisa sumir por conta: a
+   gaveta aberta é `position: fixed` e ficava sobre a bipagem, engolindo o
+   toque nos botões de grupo — o gestor abria o menu, tocava "Abrir bipagem" e
+   caía numa tela que não respondia. Quem manda é a mesma classe que liga a
+   grade: a tela é do roteador, e a moldura segue a tela. */
+body:not(.painel) > .p-topo,
+body:not(.painel) > .p-lateral,
+body:not(.painel) > .p-fundo-gaveta { display: none; }
+
 /* -------------------------------------------------- barra institucional --- */
 .p-topo {
   position: sticky;
