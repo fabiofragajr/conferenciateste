@@ -120,32 +120,22 @@ const dentro = (iso: string, de: string, ate: string): boolean => iso >= de && i
 
 /* --------------------------------------------------------------- login --- */
 
-const elLogin = {
+// Resolvidos só quando a tela é montada. `$()` lança se o elemento não existe
+// (util.ts), e no app único este módulo passa a ser importado antes de a região
+// do painel estar no DOM — no escopo do módulo, isso derrubaria o app inteiro
+// com exceção, em vez de quebrar um botão.
+function lerElLogin() {
+  return {
   bloqueio: $('#bloqueio'),
   conteudo: $('#conteudo'),
   form: $<HTMLFormElement>('#form-login'),
   login: $<HTMLInputElement>('#in-login'),
   senha: $<HTMLInputElement>('#in-senha'),
   erro: $('#login-erro')
-};
+  };
+}
+let elLogin!: ReturnType<typeof lerElLogin>;
 
-elLogin.form.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  await bootPronto; // senão o boot termina depois e rebloqueia quem acabou de entrar
-  const r = await auth.entrar(elLogin.login.value, elLogin.senha.value);
-  if (!r.ok) {
-    elLogin.erro.textContent = r.erro;
-    elLogin.erro.hidden = false;
-    return;
-  }
-  if (!r.usuario.gestor) {
-    // Erro não é beco sem saída: quem não tem painel tem bipagem.
-    location.href = 'index.html';
-    return;
-  }
-  usuario = r.usuario;
-  await iniciarPainel();
-});
 
 /* ---------------------------------------------------------------- boot --- */
 
@@ -445,11 +435,6 @@ function pintarOcorrencias(): void {
   hidratarFotos(alvo, lista);
 }
 
-for (const id of ['#oc-momento', '#oc-etiqueta', '#oc-dias']) {
-  $<HTMLSelectElement>(id).addEventListener('change', pintarOcorrencias);
-}
-$<HTMLInputElement>('#oc-busca').addEventListener('input', pintarOcorrencias);
-$('#btn-oc-csv').addEventListener('click', () => exportarCSVOcorrencias(ocorrenciasFiltradas()));
 
 function pintarRecorrentes(): void {
   const desde = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -590,29 +575,7 @@ async function liberarCarga(sessaoId: string): Promise<void> {
   await recarregarTudo();
 }
 
-$('#btn-filtrar').addEventListener('click', pintarHistorico);
 
-$('#btn-csv-periodo').addEventListener('click', () => {
-  const sessoes = sessoesFiltradas();
-  const ids = new Set(sessoes.map((s) => s.id));
-  const linhas = base.leituras
-    .filter((l) => ids.has(l.sessaoId))
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    .map((l) => {
-      const s = base.sessoes.find((x) => x.id === l.sessaoId);
-      const ocs = (base.ocPorSessao.get(l.sessaoId) ?? []).filter((o) => o.leituraId === l.id);
-      return [
-        s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '', (s?.rotas ?? []).join('|'),
-        l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
-        l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
-        ocs.map((o) => o.texto).join(' | '), l.rawData
-      ];
-    });
-  const cab = ['sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas', 'codigo_volume', 'rota',
-    'pedido', 'volume', 'status', 'origem', 'horario', 'lat', 'lng', 'precisao_m', 'geo_status',
-    'ocorrencias', 'raw_qr'];
-  baixarArquivo(paraCSV(cab, linhas), 'conferencias_periodo.csv', 'text/csv;charset=utf-8');
-});
 
 /* ------------------------------------------------- 3. desempenho --------- */
 
@@ -672,7 +635,7 @@ function pintarDesempenho(sessoes: Sessao[]): void {
 
 /* ---------------------------------------------------------- gaveta ------- */
 
-const gaveta = $('#gaveta');
+let gaveta!: HTMLElement;
 
 async function abrirGaveta(sessaoId: string): Promise<void> {
   relatorioAberto = await montarRelatorio(sessaoId);
@@ -685,10 +648,6 @@ async function abrirGaveta(sessaoId: string): Promise<void> {
   gaveta.hidden = false;
 }
 
-$('#gaveta-fechar').addEventListener('click', () => { gaveta.hidden = true; });
-gaveta.addEventListener('click', (ev) => { if (ev.target === gaveta) gaveta.hidden = true; });
-$('#gaveta-pdf').addEventListener('click', () => { if (relatorioAberto) void exportarPDF(relatorioAberto); });
-$('#gaveta-csv').addEventListener('click', () => { if (relatorioAberto) exportarCSV(relatorioAberto); });
 
 /* ------------------------------------------------------- 4. cadastros --- */
 
@@ -895,90 +854,9 @@ function entrarEmEdicao(u: Usuario): void {
   $<HTMLInputElement>('#u-nome').focus();
 }
 
-$('#u-cancelar').addEventListener('click', () => limparFormUsuario());
 
-$<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
 
-  const campos = {
-    nome: $<HTMLInputElement>('#u-nome').value,
-    login: $<HTMLInputElement>('#u-login').value,
-    funcao: $<HTMLInputElement>('#u-funcao').value,
-    placa: $<HTMLInputElement>('#u-placa').value,
-    telefone: $<HTMLInputElement>('#u-telefone').value,
-    gestor: $<HTMLSelectElement>('#u-gestor').value === 'sim'
-  };
-  const senha = $<HTMLInputElement>('#u-senha').value;
 
-  try {
-    if (editando) {
-      // Tirar o próprio acesso ao painel deixa o gestor do lado de fora.
-      if (editando === usuario?.id && !campos.gestor) {
-        throw new Error('Você não pode tirar o próprio acesso ao painel.');
-      }
-      const salvo = await auth.atualizarUsuario(editando, campos, senha || undefined);
-      limparFormUsuario();
-      await recarregarTudo();
-      avisoUsuario(`${salvo.nome} atualizado.`);
-    } else {
-      const novo = await auth.criarUsuario({ ...campos, senha: senha || undefined });
-      limparFormUsuario();
-      await recarregarTudo();
-      avisoUsuario(senha
-        ? `${novo.nome} cadastrado. Passe a senha para a pessoa; ela já pode entrar.`
-        : `${novo.nome} cadastrado. Na primeira entrada, ela escolhe a própria senha.`);
-    }
-  } catch (e) {
-    avisoUsuario(e instanceof Error ? e.message : 'Não foi possível salvar.', true);
-  }
-});
-
-$<HTMLFormElement>('#form-transportadora').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const msg = $('#t-msg');
-  const nome = $<HTMLInputElement>('#t-nome').value.trim();
-  if (!nome) {
-    msg.textContent = 'Informe o nome da transportadora.';
-    msg.hidden = false;
-    return;
-  }
-
-  await db.salvar('transportadoras', {
-    ...novoSync(),
-    nome,
-    cnpj: $<HTMLInputElement>('#t-cnpj').value.trim(),
-    responsavel: $<HTMLInputElement>('#t-resp').value.trim(),
-    telefone: $<HTMLInputElement>('#t-tel').value.trim(),
-    email: '',
-    ativo: true
-  });
-
-  $<HTMLFormElement>('#form-transportadora').reset();
-  msg.hidden = true;
-  await recarregarTudo();
-});
-
-$<HTMLFormElement>('#form-rota').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const msg = $('#r-msg');
-
-  const r = await cadastrarRota({
-    codigo: $<HTMLInputElement>('#r-codigo').value,
-    nome: $<HTMLInputElement>('#r-nome').value,
-    transportadoraId: $<HTMLSelectElement>('#r-transportadora').value,
-    descricao: $<HTMLInputElement>('#r-descricao').value
-  });
-
-  if (!r.ok) {
-    msg.textContent = r.erro;
-    msg.hidden = false;
-    return;
-  }
-
-  $<HTMLFormElement>('#form-rota').reset();
-  msg.hidden = true;
-  await recarregarTudo();
-});
 
 /* --------------------------------------------------- 5. sincronização --- */
 
@@ -1000,41 +878,219 @@ function pintarFila(erro: string | null, pendentes: number, configurado: boolean
     ${erro ? `<p class="erro">${esc(erro)}</p>` : ''}`;
 }
 
-$('#btn-sync').addEventListener('click', async () => {
-  await sync.sincronizar();
-  await recarregarTudo();
-});
 
-$('#btn-retry').addEventListener('click', async () => {
-  await sync.tentarNovamente();
-  await recarregarTudo();
-});
 
-$('#btn-salvar-sup').addEventListener('click', async () => {
-  await salvarConfig({
-    url: $<HTMLInputElement>('#s-url').value,
-    anonKey: $<HTMLInputElement>('#s-key').value,
-    bucket: $<HTMLInputElement>('#s-bucket').value
-  });
-  const msg = $('#s-msg');
-  msg.className = 'sucesso';
-  msg.textContent = 'Configuração salva neste aparelho.';
-  msg.hidden = false;
-  await sync.atualizarContagem();
-});
 
-$('#btn-testar-sup').addEventListener('click', async () => {
-  const msg = $('#s-msg');
-  msg.textContent = 'Testando…';
-  msg.className = 'sucesso';
-  msg.hidden = false;
-  const r = await testarConexao();
-  msg.className = r.ok ? 'sucesso' : 'erro';
-  msg.textContent = r.mensagem;
-});
 
 // O boot decide a tela inicial e demora (seed, IndexedDB, rede). Guardar a
 // promessa deixa o login esperar por ele em vez de disputar a tela.
-const bootPronto = boot().catch((e: unknown) => {
-  console.error('boot', e);
-});
+/**
+ * Registra tudo que antes rodava no `import`.
+ *
+ * Precisa de `elLogin` e `gaveta` já resolvidos: `$()` lança quando não acha
+ * (util.ts), e no app único este módulo passa a ser importado antes de a
+ * região do painel existir no DOM.
+ */
+function ligarEventos(): void {
+  elLogin.form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    await bootPronto; // senão o boot termina depois e rebloqueia quem acabou de entrar
+    const r = await auth.entrar(elLogin.login.value, elLogin.senha.value);
+    if (!r.ok) {
+      elLogin.erro.textContent = r.erro;
+      elLogin.erro.hidden = false;
+      return;
+    }
+    if (!r.usuario.gestor) {
+      // Erro não é beco sem saída: quem não tem painel tem bipagem.
+      location.href = 'index.html';
+      return;
+    }
+    usuario = r.usuario;
+    await iniciarPainel();
+  });
+
+  for (const id of ['#oc-momento', '#oc-etiqueta', '#oc-dias']) {
+    $<HTMLSelectElement>(id).addEventListener('change', pintarOcorrencias);
+  }
+
+  $<HTMLInputElement>('#oc-busca').addEventListener('input', pintarOcorrencias);
+
+  $('#btn-oc-csv').addEventListener('click', () => exportarCSVOcorrencias(ocorrenciasFiltradas()));
+
+  $('#btn-filtrar').addEventListener('click', pintarHistorico);
+
+  $('#btn-csv-periodo').addEventListener('click', () => {
+    const sessoes = sessoesFiltradas();
+    const ids = new Set(sessoes.map((s) => s.id));
+    const linhas = base.leituras
+      .filter((l) => ids.has(l.sessaoId))
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      .map((l) => {
+        const s = base.sessoes.find((x) => x.id === l.sessaoId);
+        const ocs = (base.ocPorSessao.get(l.sessaoId) ?? []).filter((o) => o.leituraId === l.id);
+        return [
+          s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '', (s?.rotas ?? []).join('|'),
+          l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
+          l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
+          ocs.map((o) => o.texto).join(' | '), l.rawData
+        ];
+      });
+    const cab = ['sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas', 'codigo_volume', 'rota',
+      'pedido', 'volume', 'status', 'origem', 'horario', 'lat', 'lng', 'precisao_m', 'geo_status',
+      'ocorrencias', 'raw_qr'];
+    baixarArquivo(paraCSV(cab, linhas), 'conferencias_periodo.csv', 'text/csv;charset=utf-8');
+  });
+
+  $('#gaveta-fechar').addEventListener('click', () => { gaveta.hidden = true; });
+
+  gaveta.addEventListener('click', (ev) => { if (ev.target === gaveta) gaveta.hidden = true; });
+
+  $('#gaveta-pdf').addEventListener('click', () => { if (relatorioAberto) void exportarPDF(relatorioAberto); });
+
+  $('#gaveta-csv').addEventListener('click', () => { if (relatorioAberto) exportarCSV(relatorioAberto); });
+
+  $('#u-cancelar').addEventListener('click', () => limparFormUsuario());
+
+  $<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+
+    const campos = {
+      nome: $<HTMLInputElement>('#u-nome').value,
+      login: $<HTMLInputElement>('#u-login').value,
+      funcao: $<HTMLInputElement>('#u-funcao').value,
+      placa: $<HTMLInputElement>('#u-placa').value,
+      telefone: $<HTMLInputElement>('#u-telefone').value,
+      gestor: $<HTMLSelectElement>('#u-gestor').value === 'sim'
+    };
+    const senha = $<HTMLInputElement>('#u-senha').value;
+
+    try {
+      if (editando) {
+        // Tirar o próprio acesso ao painel deixa o gestor do lado de fora.
+        if (editando === usuario?.id && !campos.gestor) {
+          throw new Error('Você não pode tirar o próprio acesso ao painel.');
+        }
+        const salvo = await auth.atualizarUsuario(editando, campos, senha || undefined);
+        limparFormUsuario();
+        await recarregarTudo();
+        avisoUsuario(`${salvo.nome} atualizado.`);
+      } else {
+        const novo = await auth.criarUsuario({ ...campos, senha: senha || undefined });
+        limparFormUsuario();
+        await recarregarTudo();
+        avisoUsuario(senha
+          ? `${novo.nome} cadastrado. Passe a senha para a pessoa; ela já pode entrar.`
+          : `${novo.nome} cadastrado. Na primeira entrada, ela escolhe a própria senha.`);
+      }
+    } catch (e) {
+      avisoUsuario(e instanceof Error ? e.message : 'Não foi possível salvar.', true);
+    }
+  });
+
+  $<HTMLFormElement>('#form-transportadora').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('#t-msg');
+    const nome = $<HTMLInputElement>('#t-nome').value.trim();
+    if (!nome) {
+      msg.textContent = 'Informe o nome da transportadora.';
+      msg.hidden = false;
+      return;
+    }
+
+    await db.salvar('transportadoras', {
+      ...novoSync(),
+      nome,
+      cnpj: $<HTMLInputElement>('#t-cnpj').value.trim(),
+      responsavel: $<HTMLInputElement>('#t-resp').value.trim(),
+      telefone: $<HTMLInputElement>('#t-tel').value.trim(),
+      email: '',
+      ativo: true
+    });
+
+    $<HTMLFormElement>('#form-transportadora').reset();
+    msg.hidden = true;
+    await recarregarTudo();
+  });
+
+  $<HTMLFormElement>('#form-rota').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('#r-msg');
+
+    const r = await cadastrarRota({
+      codigo: $<HTMLInputElement>('#r-codigo').value,
+      nome: $<HTMLInputElement>('#r-nome').value,
+      transportadoraId: $<HTMLSelectElement>('#r-transportadora').value,
+      descricao: $<HTMLInputElement>('#r-descricao').value
+    });
+
+    if (!r.ok) {
+      msg.textContent = r.erro;
+      msg.hidden = false;
+      return;
+    }
+
+    $<HTMLFormElement>('#form-rota').reset();
+    msg.hidden = true;
+    await recarregarTudo();
+  });
+
+  $('#btn-sync').addEventListener('click', async () => {
+    await sync.sincronizar();
+    await recarregarTudo();
+  });
+
+  $('#btn-retry').addEventListener('click', async () => {
+    await sync.tentarNovamente();
+    await recarregarTudo();
+  });
+
+  $('#btn-salvar-sup').addEventListener('click', async () => {
+    await salvarConfig({
+      url: $<HTMLInputElement>('#s-url').value,
+      anonKey: $<HTMLInputElement>('#s-key').value,
+      bucket: $<HTMLInputElement>('#s-bucket').value
+    });
+    const msg = $('#s-msg');
+    msg.className = 'sucesso';
+    msg.textContent = 'Configuração salva neste aparelho.';
+    msg.hidden = false;
+    await sync.atualizarContagem();
+  });
+
+  $('#btn-testar-sup').addEventListener('click', async () => {
+    const msg = $('#s-msg');
+    msg.textContent = 'Testando…';
+    msg.className = 'sucesso';
+    msg.hidden = false;
+    const r = await testarConexao();
+    msg.className = r.ok ? 'sucesso' : 'erro';
+    msg.textContent = r.mensagem;
+  });
+}
+
+let bootPronto: Promise<void>;
+let montado = false;
+
+/**
+ * Ponto de entrada da tela. No app único quem chama é o roteador; por enquanto
+ * é a própria página, na linha logo abaixo.
+ *
+ * A ordem é obrigatória: elementos primeiro (senão `ligarEventos` não acha o
+ * formulário), `bootPronto` antes dos ouvintes (senão um `submit` muito rápido
+ * aguardaria `undefined`), e o `await` por último.
+ */
+export async function montar(): Promise<void> {
+  if (montado) return;
+  montado = true;
+  elLogin = lerElLogin();
+  gaveta = $('#gaveta');
+  bootPronto = boot().catch((e: unknown) => {
+    console.error('boot', e);
+  });
+  ligarEventos();
+  await bootPronto;
+}
+
+// Entrada temporária: sai quando `main.ts` assumir o boot do app único.
+void montar();

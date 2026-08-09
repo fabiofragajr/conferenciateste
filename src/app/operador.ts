@@ -51,14 +51,22 @@ const ocorrenciasPorLeitura = new Map<string, number>();
 
 /* ---------------------------------------------------------------- DOM ---- */
 
-const views = {
+// Resolvidos só quando a tela é montada. `$()` lança se o elemento não existe
+// (util.ts), e no app único este módulo passa a ser importado antes de a região
+// da operação estar no DOM — no escopo do módulo, isso derrubaria o app inteiro
+// com exceção, em vez de quebrar um botão.
+function lerViews() {
+  return {
   login: $('#view-login'),
   grupo: $('#view-grupo'),
   bipagem: $('#view-bipagem'),
   relatorio: $('#view-relatorio')
-};
+  };
+}
+let views!: ReturnType<typeof lerViews>;
 
-const el = {
+function lerEls() {
+  return {
   flash: $('#flash-overlay'),
   formLogin: $<HTMLFormElement>('#form-login'),
   inLogin: $<HTMLInputElement>('#in-login'),
@@ -126,9 +134,10 @@ const el = {
   encerrarResumo: $('#encerrar-resumo'),
   encCancelar: $('#enc-cancelar'),
   encConfirmar: $('#enc-confirmar')
-};
+  };
+}
+let el!: ReturnType<typeof lerEls>;
 
-fb.definirOverlay(el.flash);
 
 function mostrarView(nome: keyof typeof views): void {
   for (const [chave, node] of Object.entries(views)) {
@@ -234,37 +243,8 @@ async function boot(): Promise<void> {
 
 /* -------------------------------------------------------------- login ---- */
 
-el.formLogin.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  fb.prepararAudio(); // gesto do usuário: é aqui que o som fica liberado
-  erroEm(el.loginErro, null);
-  await bootPronto;
 
-  const r = await auth.entrar(el.inLogin.value, el.inSenha.value);
-  if (!r.ok) {
-    erroEm(el.loginErro, r.erro);
-    return;
-  }
-  usuario = r.usuario;
-  el.inSenha.value = '';
-  definirAcessoAoPainel();
-  if (usuario.gestor) {
-    levarParaOPainel();
-    return;
-  }
-  await irParaGrupos();
-});
 
-el.btnSair.addEventListener('click', () => {
-  auth.sair();
-  usuario = null;
-  mostrarView('login');
-});
-
-// Voltar ao painel não encerra nada: a sessão fica ABERTA e o boot a retoma.
-for (const b of [el.btnPainel, el.btnPainelBip]) {
-  b.addEventListener('click', levarParaOPainel);
-}
 
 /* ---------------------------------------------------- transportadora ----- */
 
@@ -442,14 +422,7 @@ async function abrirCamera(): Promise<void> {
   }
 }
 
-el.btnRecamera.addEventListener('click', () => void abrirCamera());
 
-el.btnTocha.addEventListener('click', async () => {
-  if (!scanner) return;
-  const ligar = el.btnTocha.getAttribute('aria-pressed') !== 'true';
-  const ok = await scanner.alternarTocha(ligar);
-  if (ok) el.btnTocha.setAttribute('aria-pressed', String(ligar));
-});
 
 /* ------------------------------------------------------------ leitura ---- */
 
@@ -581,31 +554,8 @@ function fecharModal(node: HTMLElement): void {
   node.hidden = true;
 }
 
-el.btnManual.addEventListener('click', () => {
-  el.manCodigo.value = '';
-  el.manRota.value = '';
-  el.manPedido.value = '';
-  el.manVolume.value = '';
-  erroEm(el.manErro, null);
-  abrirModal(el.modalManual);
-  el.manCodigo.focus();
-});
 
-el.manCancelar.addEventListener('click', () => fecharModal(el.modalManual));
 
-el.manConfirmar.addEventListener('click', async () => {
-  const codigo = normalizar(el.manCodigo.value);
-  const rota = normalizar(el.manRota.value);
-  if (!codigo) return erroEm(el.manErro, 'Informe o código do volume.');
-  if (!prefixoRota(rota)) return erroEm(el.manErro, 'Informe a rota como está na etiqueta (ex.: FNOR 100).');
-
-  const pedido = normalizar(el.manPedido.value) || '000000';
-  const volume = normalizar(el.manVolume.value) || '0001/0001';
-
-  fecharModal(el.modalManual);
-  // Passa pelo mesmo classificador da câmera: uma regra só para os dois caminhos.
-  await registrarLeitura(`${codigo};${rota};${volume};${pedido}`, 'MANUAL');
-});
 
 /* -------------------------------------------------------- ocorrências ---- */
 
@@ -657,33 +607,7 @@ function pintarMomento(): void {
   });
 }
 
-el.modalOc.querySelectorAll<HTMLButtonElement>('.mom').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    const novo = btn.dataset.momento as Momento;
-    if (novo === ocMomento) return;
-    ocMomento = novo;
-    // Etiqueta pertence a um momento; trocar de momento limpa o que não vale mais.
-    for (const id of [...ocEtiquetasMarcadas]) {
-      const et = ETIQUETAS.find((e) => e.id === id);
-      if (et && et.momento !== novo) ocEtiquetasMarcadas.delete(id);
-    }
-    el.ocAvisoGrave.hidden = !derivarGrave([...ocEtiquetasMarcadas]);
-    pintarMomento();
-  });
-});
 
-el.btnOcEntrega.addEventListener('click', () => abrirOcorrencia(null));
-el.ocCancelar.addEventListener('click', () => fecharModal(el.modalOc));
-
-el.ocFoto.addEventListener('change', async () => {
-  const arquivos = Array.from(el.ocFoto.files ?? []);
-  for (const arq of arquivos) {
-    if (ocFotos.length >= 3) break;
-    ocFotos.push(await comprimirImagem(arq));
-  }
-  el.ocFoto.value = '';
-  pintarFotos();
-});
 
 function pintarFotos(): void {
   el.ocFotosPreview.innerHTML = '';
@@ -700,95 +624,11 @@ function pintarFotos(): void {
   });
 }
 
-el.ocSalvar.addEventListener('click', async () => {
-  if (!sessao || !usuario) return;
-
-  const texto = el.ocTexto.value.trim();
-  if (!texto && ocEtiquetasMarcadas.size === 0) {
-    return erroEm(el.ocErro, 'Escreva o que aconteceu ou marque ao menos uma etiqueta.');
-  }
-
-  const etiquetas = [...ocEtiquetasMarcadas];
-  const ponto = geo.snapshot(); // hora e local do registro, não da leitura
-
-  const ocorrencia: Ocorrencia = {
-    ...novoSync(),
-    sessaoId: sessao.id,
-    leituraId: ocLeitura?.id ?? null,
-    codigoVolume: ocLeitura?.codigoVolume ?? null,
-    usuarioId: usuario.id,
-    momento: ocMomento,
-    texto,
-    etiquetas,
-    grave: derivarGrave(etiquetas),
-    fotos: [...ocFotos],
-    fotosRemotas: [],
-    timestamp: agora(),
-    lat: ponto.lat,
-    lng: ponto.lng,
-    precisaoMetros: ponto.precisaoMetros,
-    geoStatus: ponto.geoStatus
-  };
-
-  await db.salvar('ocorrencias', ocorrencia);
-
-  if (ocLeitura) {
-    const qtd = (ocorrenciasPorLeitura.get(ocLeitura.id) ?? 0) + 1;
-    ocorrenciasPorLeitura.set(ocLeitura.id, qtd);
-    const item = el.listaLeituras.querySelector<HTMLElement>(`.leitura[data-id="${ocLeitura.id}"]`);
-    if (item) marcarComOcorrencia(item, qtd);
-  }
-
-  fecharModal(el.modalOc);
-  fb.sinalizarAcao();
-  sync.agendarContagem();
-});
 
 /* ------------------------------------------------------------ encerrar --- */
 
-el.btnEncerrar.addEventListener('click', async () => {
-  if (!sessao) return;
 
-  // A conta das pendências é a mesma do relatório e do painel — uma regra só,
-  // para os três não discordarem na frente do motorista.
-  const leituras = await db.porIndice('leituras', 'sessaoId', sessao.id);
-  const pendencias = pendenciasDaCarga(leituras);
 
-  el.encerrarResumo.innerHTML = `
-    <b>${contadores.total} volumes bipados</b> na ${esc(sessao.transportadoraNome)}.
-    ${pendencias.length
-      ? `<span class="enc-pendencias">A carga fica <b>com pendência</b>:<br>${
-          pendencias.map((p) => `• ${esc(p.descricao)}`).join('<br>')}</span>`
-      : '<span class="enc-ok">Sem pendências: carga pronta para sair.</span>'}`;
-
-  abrirModal(el.modalEncerrar);
-});
-
-el.encCancelar.addEventListener('click', () => fecharModal(el.modalEncerrar));
-
-el.encConfirmar.addEventListener('click', async () => {
-  if (!sessao) return;
-  fecharModal(el.modalEncerrar);
-
-  scanner?.parar();
-  scanner = null;
-
-  const geoFim = geo.snapshot();
-  sessao = await db.salvar('sessoes', {
-    ...sessao,
-    status: 'ENCERRADA',
-    fim: agora(),
-    geoFim: geoFim.geoStatus === 'INDISPONIVEL' ? sessao.geoFim : geoFim
-  });
-
-  geo.parar();
-  telaAcesa?.liberar();
-  telaAcesa = null;
-  fb.sinalizarAcao();
-
-  await mostrarRelatorio(sessao.id);
-  sync.sincronizarEmSegundoPlano();
-});
 
 /* ----------------------------------------------------------- relatório --- */
 
@@ -805,46 +645,268 @@ async function mostrarRelatorio(sessaoId: string): Promise<void> {
   mostrarView('relatorio');
 }
 
-el.btnPdf.addEventListener('click', async () => {
-  if (!relatorioAtual) return;
-  el.btnPdf.disabled = true;
-  el.btnPdf.textContent = 'Gerando…';
-  try {
-    await exportarPDF(relatorioAtual);
-  } finally {
-    el.btnPdf.disabled = false;
-    el.btnPdf.textContent = 'Baixar PDF';
-  }
-});
 
-el.btnCsv.addEventListener('click', () => {
-  if (relatorioAtual) exportarCSV(relatorioAtual);
-});
 
-el.btnNova.addEventListener('click', () => {
-  sessao = null;
-  relatorioAtual = null;
-  void irParaGrupos();
-});
 
 /* -------------------------------------------------------------- extras --- */
 
-// Fechar modal tocando fora da caixa — saída óbvia, sem beco sem saída.
-for (const modal of [el.modalManual, el.modalOc, el.modalEncerrar]) {
-  modal.addEventListener('click', (ev) => {
-    if (ev.target === modal) modal.hidden = true;
-  });
-}
 
-window.addEventListener('beforeunload', () => {
-  scanner?.parar();
-  telaAcesa?.liberar();
-});
 
 // O boot é quem decide a tela inicial, e ele demora (seed, IndexedDB, GPS).
 // Se alguém logar antes dele terminar, o boot ainda acha que não há usuário e
 // joga a pessoa de volta para o login já autenticada. Guardar a promessa deixa
 // o submit esperar o boot em vez de disputar a tela com ele.
-const bootPronto = boot().catch((e: unknown) => {
-  console.error('boot', e);
-});
+/**
+ * Registra tudo que antes rodava no `import`.
+ *
+ * Precisa de `el` já resolvido: `$()` lança quando não acha (util.ts), e no
+ * app único este módulo passa a ser importado antes de a região da operação
+ * existir no DOM.
+ */
+function ligarEventos(): void {
+  fb.definirOverlay(el.flash);
+
+  el.modalOc.querySelectorAll<HTMLButtonElement>('.mom').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const novo = btn.dataset.momento as Momento;
+      if (novo === ocMomento) return;
+      ocMomento = novo;
+      // Etiqueta pertence a um momento; trocar de momento limpa o que não vale mais.
+      for (const id of [...ocEtiquetasMarcadas]) {
+        const et = ETIQUETAS.find((e) => e.id === id);
+        if (et && et.momento !== novo) ocEtiquetasMarcadas.delete(id);
+      }
+      el.ocAvisoGrave.hidden = !derivarGrave([...ocEtiquetasMarcadas]);
+      pintarMomento();
+    });
+  });
+
+  el.formLogin.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    fb.prepararAudio(); // gesto do usuário: é aqui que o som fica liberado
+    erroEm(el.loginErro, null);
+    await bootPronto;
+
+    const r = await auth.entrar(el.inLogin.value, el.inSenha.value);
+    if (!r.ok) {
+      erroEm(el.loginErro, r.erro);
+      return;
+    }
+    usuario = r.usuario;
+    el.inSenha.value = '';
+    definirAcessoAoPainel();
+    if (usuario.gestor) {
+      levarParaOPainel();
+      return;
+    }
+    await irParaGrupos();
+  });
+
+  el.btnSair.addEventListener('click', () => {
+    auth.sair();
+    usuario = null;
+    mostrarView('login');
+  });
+
+  // Voltar ao painel não encerra nada: a sessão fica ABERTA e o boot a retoma.
+  for (const b of [el.btnPainel, el.btnPainelBip]) {
+    b.addEventListener('click', levarParaOPainel);
+  }
+
+  el.btnRecamera.addEventListener('click', () => void abrirCamera());
+
+  el.btnTocha.addEventListener('click', async () => {
+    if (!scanner) return;
+    const ligar = el.btnTocha.getAttribute('aria-pressed') !== 'true';
+    const ok = await scanner.alternarTocha(ligar);
+    if (ok) el.btnTocha.setAttribute('aria-pressed', String(ligar));
+  });
+
+  el.btnManual.addEventListener('click', () => {
+    el.manCodigo.value = '';
+    el.manRota.value = '';
+    el.manPedido.value = '';
+    el.manVolume.value = '';
+    erroEm(el.manErro, null);
+    abrirModal(el.modalManual);
+    el.manCodigo.focus();
+  });
+
+  el.manCancelar.addEventListener('click', () => fecharModal(el.modalManual));
+
+  el.manConfirmar.addEventListener('click', async () => {
+    const codigo = normalizar(el.manCodigo.value);
+    const rota = normalizar(el.manRota.value);
+    if (!codigo) return erroEm(el.manErro, 'Informe o código do volume.');
+    if (!prefixoRota(rota)) return erroEm(el.manErro, 'Informe a rota como está na etiqueta (ex.: FNOR 100).');
+
+    const pedido = normalizar(el.manPedido.value) || '000000';
+    const volume = normalizar(el.manVolume.value) || '0001/0001';
+
+    fecharModal(el.modalManual);
+    // Passa pelo mesmo classificador da câmera: uma regra só para os dois caminhos.
+    await registrarLeitura(`${codigo};${rota};${volume};${pedido}`, 'MANUAL');
+  });
+
+  el.btnOcEntrega.addEventListener('click', () => abrirOcorrencia(null));
+
+  el.ocCancelar.addEventListener('click', () => fecharModal(el.modalOc));
+
+  el.ocFoto.addEventListener('change', async () => {
+    const arquivos = Array.from(el.ocFoto.files ?? []);
+    for (const arq of arquivos) {
+      if (ocFotos.length >= 3) break;
+      ocFotos.push(await comprimirImagem(arq));
+    }
+    el.ocFoto.value = '';
+    pintarFotos();
+  });
+
+  el.ocSalvar.addEventListener('click', async () => {
+    if (!sessao || !usuario) return;
+
+    const texto = el.ocTexto.value.trim();
+    if (!texto && ocEtiquetasMarcadas.size === 0) {
+      return erroEm(el.ocErro, 'Escreva o que aconteceu ou marque ao menos uma etiqueta.');
+    }
+
+    const etiquetas = [...ocEtiquetasMarcadas];
+    const ponto = geo.snapshot(); // hora e local do registro, não da leitura
+
+    const ocorrencia: Ocorrencia = {
+      ...novoSync(),
+      sessaoId: sessao.id,
+      leituraId: ocLeitura?.id ?? null,
+      codigoVolume: ocLeitura?.codigoVolume ?? null,
+      usuarioId: usuario.id,
+      momento: ocMomento,
+      texto,
+      etiquetas,
+      grave: derivarGrave(etiquetas),
+      fotos: [...ocFotos],
+      fotosRemotas: [],
+      timestamp: agora(),
+      lat: ponto.lat,
+      lng: ponto.lng,
+      precisaoMetros: ponto.precisaoMetros,
+      geoStatus: ponto.geoStatus
+    };
+
+    await db.salvar('ocorrencias', ocorrencia);
+
+    if (ocLeitura) {
+      const qtd = (ocorrenciasPorLeitura.get(ocLeitura.id) ?? 0) + 1;
+      ocorrenciasPorLeitura.set(ocLeitura.id, qtd);
+      const item = el.listaLeituras.querySelector<HTMLElement>(`.leitura[data-id="${ocLeitura.id}"]`);
+      if (item) marcarComOcorrencia(item, qtd);
+    }
+
+    fecharModal(el.modalOc);
+    fb.sinalizarAcao();
+    sync.agendarContagem();
+  });
+
+  el.btnEncerrar.addEventListener('click', async () => {
+    if (!sessao) return;
+
+    // A conta das pendências é a mesma do relatório e do painel — uma regra só,
+    // para os três não discordarem na frente do motorista.
+    const leituras = await db.porIndice('leituras', 'sessaoId', sessao.id);
+    const pendencias = pendenciasDaCarga(leituras);
+
+    el.encerrarResumo.innerHTML = `
+      <b>${contadores.total} volumes bipados</b> na ${esc(sessao.transportadoraNome)}.
+      ${pendencias.length
+        ? `<span class="enc-pendencias">A carga fica <b>com pendência</b>:<br>${
+            pendencias.map((p) => `• ${esc(p.descricao)}`).join('<br>')}</span>`
+        : '<span class="enc-ok">Sem pendências: carga pronta para sair.</span>'}`;
+
+    abrirModal(el.modalEncerrar);
+  });
+
+  el.encCancelar.addEventListener('click', () => fecharModal(el.modalEncerrar));
+
+  el.encConfirmar.addEventListener('click', async () => {
+    if (!sessao) return;
+    fecharModal(el.modalEncerrar);
+
+    scanner?.parar();
+    scanner = null;
+
+    const geoFim = geo.snapshot();
+    sessao = await db.salvar('sessoes', {
+      ...sessao,
+      status: 'ENCERRADA',
+      fim: agora(),
+      geoFim: geoFim.geoStatus === 'INDISPONIVEL' ? sessao.geoFim : geoFim
+    });
+
+    geo.parar();
+    telaAcesa?.liberar();
+    telaAcesa = null;
+    fb.sinalizarAcao();
+
+    await mostrarRelatorio(sessao.id);
+    sync.sincronizarEmSegundoPlano();
+  });
+
+  el.btnPdf.addEventListener('click', async () => {
+    if (!relatorioAtual) return;
+    el.btnPdf.disabled = true;
+    el.btnPdf.textContent = 'Gerando…';
+    try {
+      await exportarPDF(relatorioAtual);
+    } finally {
+      el.btnPdf.disabled = false;
+      el.btnPdf.textContent = 'Baixar PDF';
+    }
+  });
+
+  el.btnCsv.addEventListener('click', () => {
+    if (relatorioAtual) exportarCSV(relatorioAtual);
+  });
+
+  el.btnNova.addEventListener('click', () => {
+    sessao = null;
+    relatorioAtual = null;
+    void irParaGrupos();
+  });
+
+  // Fechar modal tocando fora da caixa — saída óbvia, sem beco sem saída.
+  for (const modal of [el.modalManual, el.modalOc, el.modalEncerrar]) {
+    modal.addEventListener('click', (ev) => {
+      if (ev.target === modal) modal.hidden = true;
+    });
+  }
+
+  window.addEventListener('beforeunload', () => {
+    scanner?.parar();
+    telaAcesa?.liberar();
+  });
+}
+
+let bootPronto: Promise<void>;
+let montado = false;
+
+/**
+ * Ponto de entrada da tela. No app único quem chama é o roteador; por enquanto
+ * é a própria página, na linha logo abaixo.
+ *
+ * A ordem é obrigatória: elementos primeiro (senão `ligarEventos` não acha o
+ * formulário), `bootPronto` antes dos ouvintes (senão um `submit` muito rápido
+ * aguardaria `undefined`), e o `await` por último.
+ */
+export async function montar(): Promise<void> {
+  if (montado) return;
+  montado = true;
+  views = lerViews();
+  el = lerEls();
+  bootPronto = boot().catch((e: unknown) => {
+    console.error('boot', e);
+  });
+  ligarEventos();
+  await bootPronto;
+}
+
+// Entrada temporária: sai quando `main.ts` assumir o boot do app único.
+void montar();
