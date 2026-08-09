@@ -86,7 +86,7 @@ await prepararAparelho(d, BASE, 'diretor.html');
 vigiar(d, 'diretor');
 await fazerLogin(d, 'sandro');
 await d.waitForSelector('#conteudo:not([hidden])');
-await baixar(d, () => d.click('#btn-pdf'), 'diretor');
+await baixar(d, () => d.click('#btn-pdf-periodo'), 'diretor');
 
 await navegador.close();
 servidor.parar();

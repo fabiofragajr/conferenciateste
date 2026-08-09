@@ -51,7 +51,7 @@ await passo('aparelho sem cadastro avisa em vez de recusar a senha certa', async
 });
 
 await passo('login do operador', async () => {
-  await p.click('#btn-sair').catch(() => {});
+  await p.click('#btn-sair-operacao').catch(() => {});
   await p.waitForTimeout(200);
   await fazerLogin(p, 'ana');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 5000 });

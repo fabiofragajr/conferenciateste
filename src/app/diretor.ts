@@ -394,7 +394,7 @@ $<HTMLSelectElement>('#f-mes').addEventListener('change', async (ev) => {
   await pintarTudo();
 });
 
-$('#btn-pdf').addEventListener('click', () => void exportarPDFPeriodo());
+$('#btn-pdf-periodo').addEventListener('click', () => void exportarPDFPeriodo());
 
 const elLogin = {
   bloqueio: $('#bloqueio'),
@@ -415,13 +415,12 @@ elLogin.form.addEventListener('submit', async (ev) => {
     elLogin.erro.hidden = false;
     return;
   }
-  await abrir(r.usuario.nome);
+  await abrir();
 });
 
-async function abrir(nome: string): Promise<void> {
+async function abrir(): Promise<void> {
   elLogin.bloqueio.hidden = true;
   elLogin.conteudo.hidden = false;
-  $('#p-usuario').textContent = nome;
   await carregar();
   preencherMeses();
   await pintarTudo();
@@ -435,7 +434,7 @@ async function boot(): Promise<void> {
     elLogin.bloqueio.hidden = false;
     return;
   }
-  await abrir(u.nome);
+  await abrir();
 }
 
 // O boot decide a tela inicial e demora (seed, IndexedDB, rede). Guardar a

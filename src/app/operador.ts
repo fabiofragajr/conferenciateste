@@ -69,7 +69,7 @@ const el = {
   grupoUsuario: $('#grupo-usuario'),
   listaGrupos: $('#lista-grupos'),
   grupoVazio: $('#grupo-vazio'),
-  btnSair: $('#btn-sair'),
+  btnSair: $('#btn-sair-operacao'),
   btnPainel: $<HTMLButtonElement>('#btn-painel'),
   btnPainelBip: $<HTMLButtonElement>('#btn-painel-bip'),
   syncGrupo: $('#sync-grupo'),

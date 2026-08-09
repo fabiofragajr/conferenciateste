@@ -47,7 +47,7 @@ await passo('o diretor abre logado e cai na única tela dele', async () => {
     throw new Error('o menu não marcou "Visão do diretor" como a seção aberta');
   }
   // Controle da tela mora na tela, não na moldura.
-  for (const sel of ['#f-mes', '#btn-pdf']) {
+  for (const sel of ['#f-mes', '#btn-pdf-periodo']) {
     const dentro = await p.$eval(sel, (n) => !!n.closest('[data-secao="diretor"]'));
     if (!dentro) throw new Error(`${sel} ficou fora da seção do diretor`);
   }
