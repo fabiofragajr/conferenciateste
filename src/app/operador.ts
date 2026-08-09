@@ -17,6 +17,7 @@ import * as geo from '../lib/geo.js';
 import * as sync from '../lib/sync.js';
 import * as fb from '../lib/feedback.js';
 import { criarScanner, type Scanner } from '../lib/scanner.js';
+import { sinalSync } from '../lib/ui/index.js';
 import {
   ETIQUETAS, STATUS_INFO, classificar, derivarGrave,
   etiquetasDoMomento, normalizar, pendenciasDaCarga, prefixoRota,
@@ -165,15 +166,12 @@ async function boot(): Promise<void> {
   // da doca: o chip da fila, o do GPS, e decidir entre escolher transportadora
   // ou retomar a conferência que ficou aberta.
   sync.aoMudarSync((estado) => {
-    const texto = !estado.configurado
-      ? `${estado.pendentes} no aparelho`
-      : estado.pendentes === 0
-        ? 'Tudo sincronizado'
-        : `${estado.pendentes} na fila${estado.online ? ' • enviando' : ' • offline'}`;
+    const s = sinalSync(estado);
+    const texto = `${s.icone} ${s.texto}`;
     el.chipSync.textContent = texto;
     el.syncGrupo.textContent = texto;
-    el.chipSync.classList.toggle('sync-pendente', estado.pendentes > 0);
-    el.chipSync.classList.toggle('sync-ok', estado.pendentes === 0 && estado.configurado);
+    el.chipSync.className = `chip chip-sync ui-sync-${s.tom}`;
+    el.syncGrupo.className = `chip chip-sync ui-sync-${s.tom}`;
   });
 
   geo.aoMudar((p) => {

@@ -205,3 +205,14 @@ input, select, textarea { font-size: max(16px, var(--t-corpo)); }
     background: var(--superficie); color: var(--tinta); font-size: var(--t-secundario);
   }
 }
+
+/* ---------------------------------------------------------- sinal sync --- */
+.ui-chip-sync, .chip-sync {
+  font-size: var(--t-label); padding: 3px 9px; border-radius: 999px;
+  border: 1px solid var(--linha); background: var(--fundo); color: var(--tinta-2);
+  white-space: nowrap;
+}
+.ui-sync-ok { background: rgba(22,163,74,.12); border-color: var(--bom); color: var(--tinta); }
+.ui-sync-enviando { background: rgba(16,153,118,.12); border-color: var(--marca-forte); color: var(--tinta); }
+.ui-sync-offline, .ui-sync-pendente { background: var(--atencao-superficie); border-color: var(--atencao); color: var(--tinta); }
+.ui-sync-falha { background: var(--alarme-superficie); border-color: var(--alarme); color: var(--alarme); }

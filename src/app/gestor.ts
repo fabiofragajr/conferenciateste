@@ -19,6 +19,7 @@ import {
 } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/painel-shell.js';
+import { sinalSync } from '../lib/ui/index.js';
 import type { Ambiente } from './ambiente.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
@@ -131,13 +132,11 @@ async function boot(): Promise<void> {
   // Cadastro local, sincronização e login são do `main.ts`. Aqui fica só o que
   // é do painel: o chip da barra e a caixa de estado da fila.
   sync.aoMudarSync((estado) => {
-    const chip = document.querySelector('#chip-sync-painel');
+    const chip = document.querySelector<HTMLElement>('#chip-sync-painel');
     if (chip) {
-      chip.textContent = !estado.configurado
-        ? `${estado.pendentes} só no aparelho`
-        : estado.pendentes === 0 ? 'Tudo sincronizado' : `${estado.pendentes} na fila`;
-      chip.classList.toggle('sync-pendente', estado.pendentes > 0);
-      chip.classList.toggle('sync-ok', estado.pendentes === 0 && estado.configurado);
+      const s = sinalSync(estado);
+      chip.textContent = `${s.icone} ${s.texto}`;
+      chip.className = `chip chip-sync ui-sync-${s.tom}`;
     }
     pintarFila(estado.ultimoErro, estado.pendentes, estado.configurado, estado.ultimoEnvio);
   });

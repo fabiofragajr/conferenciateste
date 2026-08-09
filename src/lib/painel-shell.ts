@@ -77,7 +77,7 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
       <span class="p-titulo-secao"></span>
       <span class="p-espaco"></span>
       <span class="p-badge p-badge-topo" data-badge-topo hidden></span>
-      <span id="chip-sync-painel" class="chip chip-sync">Fila</span>
+      <span id="chip-sync-painel" class="chip chip-sync">—</span>
     </header>
 
     <div class="p-fundo-gaveta" hidden></div>

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { plural, vazio, badge, alerta, kpis, secao, pageHeader, status } from '../src/lib/ui/basico.ts';
 import { tabela } from '../src/lib/ui/tabela.ts';
 import { botao, campo, selecao, filtros } from '../src/lib/ui/forma.ts';
+import { sinalSync } from '../src/lib/ui/sinal-sync.ts';
 
 /* ----------------------------------------------------------- plural ------ */
 // "1 volume(s)" é texto de sistema. A tela é de produto.
@@ -123,5 +124,35 @@ assert.ok(filtros([c], '30 dias').includes('30 dias'));
 // Escape em tudo que vem do cadastro.
 assert.ok(!botao({ rotulo: '<b>x</b>' }).includes('<b>x</b>'));
 assert.ok(!selecao({ id: 'a', rotulo: 'A', opcoes: [{ valor: '<b>', rotulo: '<b>x</b>' }] }).includes('<b>x</b>'));
+
+/* --------------------------------------------------------- sinalSync ---- */
+const e = (p = {}) => ({
+  pendentes: 0, online: true, configurado: true, enviando: false,
+  ultimoEnvio: null, ultimaDescida: null, ultimoErro: null, usuarioAtual: '', ...p
+});
+
+assert.equal(sinalSync(e()).texto, 'Sincronizado');
+assert.equal(sinalSync(e()).tom, 'ok');
+
+assert.equal(sinalSync(e({ enviando: true, pendentes: 3 })).texto, 'Sincronizando');
+assert.equal(sinalSync(e({ online: false, pendentes: 3 })).texto, 'Offline');
+assert.equal(sinalSync(e({ pendentes: 8 })).texto, '8 leituras pendentes');
+assert.equal(sinalSync(e({ pendentes: 1 })).texto, '1 leitura pendente');
+
+// Erro ganha de tudo: falha silenciosa é pior que fila cheia.
+assert.equal(sinalSync(e({ ultimoErro: 'timeout', pendentes: 3 })).texto, 'Falha ao sincronizar');
+assert.equal(sinalSync(e({ ultimoErro: 'timeout', online: false })).tom, 'falha');
+
+// Aparelho sem projeto configurado guarda tudo local, e isso não é falha.
+assert.equal(sinalSync(e({ configurado: false, pendentes: 5 })).texto, '5 leituras pendentes');
+assert.equal(sinalSync(e({ configurado: false, pendentes: 0 })).texto, 'Nada pendente');
+
+// Nunca vocabulário de sistema na tela.
+for (const p of [{}, { pendentes: 8 }, { online: false }, { ultimoErro: 'x' }, { configurado: false }]) {
+  const t2 = sinalSync(e(p)).texto.toLowerCase();
+  for (const proibido of ['fila', 'indexeddb', 'queue', 'payload', 'sync']) {
+    assert.ok(!t2.includes(proibido), `"${t2}" usa vocabulário de sistema: ${proibido}`);
+  }
+}
 
 console.log('UI_OK');

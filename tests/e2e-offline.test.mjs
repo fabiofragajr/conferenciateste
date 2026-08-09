@@ -52,12 +52,35 @@ await passo('bipagem completa offline', async () => {
 });
 
 await passo('fila local acumula tudo como pendente', async () => {
+  // Sem rede o chip diz "Offline", e só. A contagem saiu dali de propósito: a
+  // informação que muda o que a pessoa faz é não haver rede, não quantos
+  // registros esperam. Então o número se confere onde ele de fato mora — nos
+  // registros marcados PENDENTE.
+  await p.waitForFunction(
+    () => /offline/i.test(document.querySelector('#chip-sync')?.textContent ?? ''),
+    null,
+    { timeout: 8000 }
+  );
+
   // A recontagem tem folga proposital de 1,5 s para não custar uma contagem no
   // IndexedDB por leitura; o teste espera esse tempo, não instantaneidade.
-  await p.waitForFunction(() => {
-    const texto = document.querySelector('#chip-sync')?.textContent ?? '';
-    const n = Number(texto.match(/\d+/)?.[0] ?? 0);
-    return /na fila|no aparelho/.test(texto) && n >= 26;
+  await p.waitForFunction(async () => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok, falhou) => {
+      req.onsuccess = () => ok(req.result);
+      req.onerror = () => falhou(req.error);
+    });
+    let total = 0;
+    for (const store of Array.from(bd.objectStoreNames)) {
+      const os = bd.transaction(store, 'readonly').objectStore(store);
+      if (!os.indexNames.contains('sync')) continue;
+      total += await new Promise((ok) => {
+        const q = os.index('sync').count('PENDENTE');
+        q.onsuccess = () => ok(q.result);
+      });
+    }
+    bd.close();
+    return total >= 26;
   }, null, { timeout: 8000 });
 });
 
