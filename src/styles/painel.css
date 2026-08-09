@@ -181,15 +181,17 @@ body:not(.painel) > .sh-barra { display: none; }
 .p-corpo { max-width: 1500px; margin: 0 auto; }
 
 .p-secao { margin-bottom: 34px; }
-.p-secao > h2 {
-  font-size: 13px;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--texto-2);
-  border-bottom: 1px solid var(--borda);
-  padding-bottom: 8px;
-  margin-bottom: 16px;
-}
+/* O título de seção era desenhado de dois jeitos: nove seções tinham um <h2>
+   solto virando etiqueta em caixa alta sobre régua, e quatro usavam
+   `ui-page-header` com título grande e subtítulo ao lado. Mesmo nível da
+   hierarquia, duas aparências — era isso que fazia o painel parecer montado em
+   vez de desenhado. Ficou `ui-page-header` para todas, e esta regra saiu junto:
+   deixá-la aqui reabriria a divergência no primeiro <h2> que alguém escrevesse.
+
+   O título NÃO foi removido em favor da trilha, e isso é de propósito. Trilha
+   na moldura e título no conteúdo é o padrão de ERP, e o <h2> é o cabeçalho por
+   onde um leitor de tela navega uma seção densa — apagá-lo deixaria o miolo sem
+   âncora nenhuma para quem não enxerga a trilha. */
 /* Escopado ao cartão de propósito: solto, `.p-secao h3` vencia o
    `.ui-secao > h3` do design system por vir depois, e todo título de seção
    nova saía verde e grande em vez do rótulo pequeno sobre a régua. */

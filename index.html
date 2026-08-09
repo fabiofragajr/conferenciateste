@@ -153,7 +153,10 @@
 
       <!-- Conferências --------------------------------------------------- -->
       <section class="p-secao" data-secao="conferencias" hidden>
-        <h2>Conferências do período</h2>
+        <header class="ui-page-header">
+          <h2>Conferências</h2>
+          <span>No período filtrado</span>
+        </header>
 
         <div class="p-filtros">
           <div class="p-campo">
@@ -195,7 +198,10 @@
 
       <!-- Desempenho ----------------------------------------------------- -->
       <section class="p-secao" data-secao="desempenho" hidden>
-        <h2>Desempenho <span style="text-transform:none;letter-spacing:0">(período filtrado em Conferências)</span></h2>
+        <header class="ui-page-header">
+          <h2>Desempenho</h2>
+          <span>No período filtrado em Conferências</span>
+        </header>
         <div class="p-grade p-grade-2">
           <div class="p-cartao">
             <h3>Por pessoa</h3>
@@ -210,7 +216,9 @@
 
       <!-- Pessoas -------------------------------------------------------- -->
       <section class="p-secao" data-secao="pessoas" hidden>
-        <h2>Pessoas</h2>
+        <header class="ui-page-header">
+          <h2>Pessoas</h2>
+        </header>
         <div class="p-cartao">
           <h3 id="u-titulo">Acessos</h3>
           <p class="p-vazio" style="padding-top:0">
@@ -243,7 +251,9 @@
 
       <!-- Transportadoras ------------------------------------------------ -->
       <section class="p-secao" data-secao="transportadoras" hidden>
-        <h2>Transportadoras</h2>
+        <header class="ui-page-header">
+          <h2>Transportadoras</h2>
+        </header>
         <div class="p-cartao">
           <h3>Transportadoras</h3>
           <p class="p-vazio" style="padding-top:0">
@@ -264,7 +274,9 @@
 
       <!-- Códigos de rota ------------------------------------------------ -->
       <section class="p-secao" data-secao="rotas" hidden>
-        <h2>Códigos de rota</h2>
+        <header class="ui-page-header">
+          <h2>Códigos de rota</h2>
+        </header>
         <div class="p-cartao">
           <h3>Códigos de rota</h3>
           <p class="p-vazio" style="padding-top:0">
@@ -289,7 +301,10 @@
 
       <!-- Sincronização --------------------------------------------------- -->
       <section class="p-secao" data-secao="sincronizacao" hidden>
-        <h2>Sincronização com o Supabase</h2>
+        <header class="ui-page-header">
+          <h2>Sincronização</h2>
+          <span>com o Supabase</span>
+        </header>
         <div class="p-grade p-grade-2">
           <div class="p-cartao">
             <h3>Conexão</h3>
@@ -336,13 +351,17 @@
 
       <!-- Preenchida por src/app/painel/mapa.ts. -->
       <section class="p-secao" data-secao="mapa" hidden>
-        <h2>Mapa</h2>
+        <header class="ui-page-header">
+          <h2>Mapa</h2>
+        </header>
         <p class="p-vazio">Carregando…</p>
       </section>
 
       <!-- Preenchida por src/app/painel/relatorios.ts. -->
       <section class="p-secao" data-secao="relatorios" hidden>
-        <h2>Relatórios</h2>
+        <header class="ui-page-header">
+          <h2>Relatórios</h2>
+        </header>
         <p class="p-vazio">Carregando…</p>
       </section>
 
@@ -357,7 +376,10 @@
         </div>
 
       <section class="p-secao">
-        <h2>Indicadores do mês <span id="rot-comparacao" style="text-transform:none;letter-spacing:0"></span></h2>
+        <header class="ui-page-header">
+          <h2>Indicadores</h2>
+          <span>do mês <span id="rot-comparacao"></span></span>
+        </header>
         <div id="kpis" class="p-kpis"></div>
         <div id="cobertura-form" class="p-cartao" style="margin-top:12px"></div>
       </section>
