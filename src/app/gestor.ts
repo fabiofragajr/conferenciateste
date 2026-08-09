@@ -19,6 +19,7 @@ import {
 } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/painel-shell.js';
+import type { Ambiente } from './ambiente.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -49,13 +50,16 @@ let base: Base = {
 let dispositivos: Dispositivo[] = [];
 let relatorioAberto: DadosRelatorio | null = null;
 let shell: Shell | null = null;
+let ambiente: Ambiente | null = null;
 
 const MENU: ItemMenu[] = [
-  { id: 'hoje', rotulo: 'Hoje', grupo: 'Operação' },
+  { id: 'inicio', rotulo: 'Início', grupo: 'Operação' },
   { id: 'conferencias', rotulo: 'Conferências', grupo: 'Operação' },
   { id: 'ocorrencias', rotulo: 'Ocorrências', grupo: 'Operação' },
   { id: 'desempenho', rotulo: 'Desempenho', grupo: 'Análise' },
-  { id: 'diretor', rotulo: 'Visão do diretor', grupo: 'Análise', href: 'diretor.html' },
+  // Deixou de ser link para outra página: a leitura agregada virou seção deste
+  // mesmo painel, e a palavra "diretor" some da interface.
+  { id: 'indicadores', rotulo: 'Indicadores', grupo: 'Análise' },
   { id: 'pessoas', rotulo: 'Pessoas', grupo: 'Cadastros' },
   { id: 'transportadoras', rotulo: 'Transportadoras', grupo: 'Cadastros' },
   { id: 'rotas', rotulo: 'Códigos de rota', grupo: 'Cadastros' },
@@ -120,32 +124,13 @@ const dentro = (iso: string, de: string, ate: string): boolean => iso >= de && i
 
 /* --------------------------------------------------------------- login --- */
 
-// Resolvidos só quando a tela é montada. `$()` lança se o elemento não existe
-// (util.ts), e no app único este módulo passa a ser importado antes de a região
-// do painel estar no DOM — no escopo do módulo, isso derrubaria o app inteiro
-// com exceção, em vez de quebrar um botão.
-function lerElLogin() {
-  return {
-  bloqueio: $('#bloqueio'),
-  conteudo: $('#conteudo'),
-  form: $<HTMLFormElement>('#form-login'),
-  login: $<HTMLInputElement>('#in-login'),
-  senha: $<HTMLInputElement>('#in-senha'),
-  erro: $('#login-erro')
-  };
-}
-let elLogin!: ReturnType<typeof lerElLogin>;
-
 
 /* ---------------------------------------------------------------- boot --- */
 
 async function boot(): Promise<void> {
-  await sync.garantirCadastroLocal();
-  sync.iniciarAuto();
-
+  // Cadastro local, sincronização e login são do `main.ts`. Aqui fica só o que
+  // é do painel: o chip da barra e a caixa de estado da fila.
   sync.aoMudarSync((estado) => {
-    // O chip vive na barra do shell, que só nasce depois do login: antes disso
-    // não há onde escrever, e sync não pode explodir por causa da tela.
     const chip = document.querySelector('#chip-sync');
     if (chip) {
       chip.textContent = !estado.configurado
@@ -157,15 +142,6 @@ async function boot(): Promise<void> {
     pintarFila(estado.ultimoErro, estado.pendentes, estado.configurado, estado.ultimoEnvio);
   });
 
-  usuario = await auth.usuarioLogado();
-  if (!usuario) {
-    elLogin.bloqueio.hidden = false;
-    return;
-  }
-  if (!usuario.gestor) {
-    location.href = 'index.html';
-    return;
-  }
   await iniciarPainel();
 }
 
@@ -173,16 +149,11 @@ async function iniciarPainel(): Promise<void> {
   shell = montarShell(MENU, {
     titulo: 'Painel do gestor',
     usuario: usuario ? `${usuario.nome} • gestor` : '',
-    inicial: 'hoje'
+    inicial: 'inicio'
   });
 
-  $('#btn-sair').addEventListener('click', () => {
-    auth.sair();
-    location.reload();
-  });
+  $('#btn-sair').addEventListener('click', () => ambiente?.sair());
 
-  elLogin.bloqueio.hidden = true;
-  elLogin.conteudo.hidden = false;
 
   const hoje = new Date();
   const trintaDias = new Date(hoje.getTime() - 29 * 86400000);
@@ -225,11 +196,11 @@ function pintarAgora(): void {
   // badge e a faixa do shell recolocam o alarme nas demais seções — inclusive em
   // Cadastros, onde ninguém iria procurar por ele. Em Hoje a faixa do shell se
   // cala: o alarme já está aqui, com os volumes na frente do gestor.
-  shell?.definirBadge('hoje', divergentes.length);
+  shell?.definirBadge('inicio', divergentes.length);
   shell?.definirAlerta(divergentes.length
     ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
        Não podem embarcar — <a href="#hoje">ver quais são</a>.`
-    : null, { redundanteEm: 'hoje' });
+    : null, { redundanteEm: 'inicio' });
 
   // A divergência vem antes de tudo, sem filtro, sem clique.
   $('#faixa-divergencia').innerHTML = divergentes.length
@@ -892,23 +863,6 @@ function pintarFila(erro: string | null, pendentes: number, configurado: boolean
  * região do painel existir no DOM.
  */
 function ligarEventos(): void {
-  elLogin.form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    await bootPronto; // senão o boot termina depois e rebloqueia quem acabou de entrar
-    const r = await auth.entrar(elLogin.login.value, elLogin.senha.value);
-    if (!r.ok) {
-      elLogin.erro.textContent = r.erro;
-      elLogin.erro.hidden = false;
-      return;
-    }
-    if (!r.usuario.gestor) {
-      // Erro não é beco sem saída: quem não tem painel tem bipagem.
-      location.href = 'index.html';
-      return;
-    }
-    usuario = r.usuario;
-    await iniciarPainel();
-  });
 
   for (const id of ['#oc-momento', '#oc-etiqueta', '#oc-dias']) {
     $<HTMLSelectElement>(id).addEventListener('change', pintarOcorrencias);
@@ -1069,28 +1023,25 @@ function ligarEventos(): void {
   });
 }
 
-let bootPronto: Promise<void>;
 let montado = false;
 
 /**
- * Ponto de entrada da tela. No app único quem chama é o roteador; por enquanto
- * é a própria página, na linha logo abaixo.
- *
- * A ordem é obrigatória: elementos primeiro (senão `ligarEventos` não acha o
- * formulário), `bootPronto` antes dos ouvintes (senão um `submit` muito rápido
- * aguardaria `undefined`), e o `await` por último.
+ * Ponto de entrada do painel. Quem chama é o `main.ts`, que já resolveu quem
+ * está logado e se essa pessoa tem acesso — aqui não se decide papel.
  */
-export async function montar(): Promise<void> {
+export async function montar(amb: Ambiente): Promise<void> {
+  ambiente = amb;
+  usuario = amb.usuario;
   if (montado) return;
   montado = true;
-  elLogin = lerElLogin();
   gaveta = $('#gaveta');
-  bootPronto = boot().catch((e: unknown) => {
-    console.error('boot', e);
-  });
   ligarEventos();
-  await bootPronto;
+  await boot().catch((e: unknown) => {
+    console.error('painel', e);
+  });
 }
 
-// Entrada temporária: sai quando `main.ts` assumir o boot do app único.
-void montar();
+/** Mostra uma seção do painel. Chamado pelo roteador a cada navegação. */
+export function mostrarSecao(id: string): void {
+  shell?.irPara(id);
+}

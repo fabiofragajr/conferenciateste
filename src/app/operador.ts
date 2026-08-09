@@ -12,7 +12,7 @@ import type {
 } from '../types.js';
 import * as db from '../lib/db.js';
 import { novoSync } from '../lib/db.js';
-import * as auth from '../lib/auth.js';
+import type { Ambiente } from './ambiente.js';
 import * as geo from '../lib/geo.js';
 import * as sync from '../lib/sync.js';
 import * as fb from '../lib/feedback.js';
@@ -33,6 +33,7 @@ import {
 /* ------------------------------------------------------------- estado ---- */
 
 let usuario: Usuario | null = null;
+let ambiente: Ambiente | null = null;
 let transportadoras: Transportadora[] = [];
 let sessao: Sessao | null = null;
 /** Cadastro de rotas em memória: a validação da bipagem não toca em disco nem em rede. */
@@ -57,7 +58,6 @@ const ocorrenciasPorLeitura = new Map<string, number>();
 // com exceção, em vez de quebrar um botão.
 function lerViews() {
   return {
-  login: $('#view-login'),
   grupo: $('#view-grupo'),
   bipagem: $('#view-bipagem'),
   relatorio: $('#view-relatorio')
@@ -68,11 +68,6 @@ let views!: ReturnType<typeof lerViews>;
 function lerEls() {
   return {
   flash: $('#flash-overlay'),
-  formLogin: $<HTMLFormElement>('#form-login'),
-  inLogin: $<HTMLInputElement>('#in-login'),
-  inSenha: $<HTMLInputElement>('#in-senha'),
-  loginErro: $('#login-erro'),
-  dicaSeed: $('#dica-seed'),
 
   grupoUsuario: $('#grupo-usuario'),
   listaGrupos: $('#lista-grupos'),
@@ -151,16 +146,6 @@ function erroEm(node: HTMLElement, msg: string | null): void {
 }
 
 /**
- * Cada um começa onde trabalha: gestor no painel, operador na bipagem.
- *
- * Conferência aberta ganha das duas regras — ninguém é tirado do meio de uma
- * carga por causa do papel que tem no cadastro.
- */
-function levarParaOPainel(): void {
-  location.href = 'gestor.html';
-}
-
-/**
  * Só quem é gestor tem painel para voltar — e precisa ver o botão em
  * qualquer tela que alcançar, não só na que o boot escolheria por padrão.
  * Sessão retomada e F5 no meio da conferência pulam `irParaGrupos()`; sem
@@ -176,15 +161,9 @@ function definirAcessoAoPainel(): void {
 /* --------------------------------------------------------------- boot ---- */
 
 async function boot(): Promise<void> {
-  // Aparelho novo não tem cadastro: ele desce da base. Enquanto não descer, a
-  // tela diz o que fazer em vez de ficar recusando a senha certa.
-  if (!(await sync.garantirCadastroLocal())) {
-    el.dicaSeed.hidden = false;
-    el.dicaSeed.textContent =
-      'Este aparelho ainda não recebeu o cadastro. Conecte-se à internet uma vez para baixá-lo.';
-  }
-
-  sync.iniciarAuto();
+  // Cadastro local, sincronização e login são do `main.ts`. Aqui fica o que é
+  // da doca: o chip da fila, o do GPS, e decidir entre escolher transportadora
+  // ou retomar a conferência que ficou aberta.
   sync.aoMudarSync((estado) => {
     const texto = !estado.configurado
       ? `${estado.pendentes} no aparelho`
@@ -207,34 +186,16 @@ async function boot(): Promise<void> {
         : p.geoStatus === 'NEGADO' ? 'Sem permissão de local' : 'Sem sinal de GPS';
   });
 
-  usuario = await auth.usuarioLogado();
-  if (!usuario) {
-    mostrarView('login');
-    el.inLogin.focus();
-    return;
-  }
+  if (!usuario) return;
   definirAcessoAoPainel();
 
-  // Conferência aberta no aparelho: volta direto para a bipagem.
+  // Conferência aberta neste aparelho: retoma em vez de recomeçar.
   const abertas = (await db.porIndice('sessoes', 'usuarioId', usuario.id))
     .filter((s) => s.status === 'ABERTA')
     .sort((a, b) => b.inicio.localeCompare(a.inicio));
 
   if (abertas.length) {
     await retomarSessao(abertas[0]);
-    return;
-  }
-
-  // "Abrir bipagem" no painel manda #bipar: é o gestor pedindo pra bipar agora,
-  // não o app reabrindo do zero. A recarga perde o clique — por isso a intenção
-  // viaja na URL, onde ela sobrevive até a aba nova. Consumido uma vez: sem
-  // limpar, o atalho gruda na URL e anula o roteamento por papel para sempre
-  // (ex.: depois de "Nova conferência", ou em qualquer reload seguinte).
-  const pediuBipagem = location.hash === '#bipar';
-  if (pediuBipagem) history.replaceState(null, '', location.pathname + location.search);
-
-  if (usuario.gestor && !pediuBipagem) {
-    levarParaOPainel();
     return;
   }
 
@@ -681,36 +642,13 @@ function ligarEventos(): void {
     });
   });
 
-  el.formLogin.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    fb.prepararAudio(); // gesto do usuário: é aqui que o som fica liberado
-    erroEm(el.loginErro, null);
-    await bootPronto;
 
-    const r = await auth.entrar(el.inLogin.value, el.inSenha.value);
-    if (!r.ok) {
-      erroEm(el.loginErro, r.erro);
-      return;
-    }
-    usuario = r.usuario;
-    el.inSenha.value = '';
-    definirAcessoAoPainel();
-    if (usuario.gestor) {
-      levarParaOPainel();
-      return;
-    }
-    await irParaGrupos();
-  });
+  el.btnSair.addEventListener('click', () => ambiente?.sair());
 
-  el.btnSair.addEventListener('click', () => {
-    auth.sair();
-    usuario = null;
-    mostrarView('login');
-  });
-
-  // Voltar ao painel não encerra nada: a sessão fica ABERTA e o boot a retoma.
+  // Voltar ao painel não encerra nada: a sessão fica ABERTA e a regra de
+  // entrada a retoma. Sem recarga, o clique não precisa mais viajar na URL.
   for (const b of [el.btnPainel, el.btnPainelBip]) {
-    b.addEventListener('click', levarParaOPainel);
+    b.addEventListener('click', () => ambiente?.irPara({ tela: 'painel', secao: 'inicio' }));
   }
 
   el.btnRecamera.addEventListener('click', () => void abrirCamera());
@@ -885,28 +823,21 @@ function ligarEventos(): void {
   });
 }
 
-let bootPronto: Promise<void>;
 let montado = false;
 
 /**
- * Ponto de entrada da tela. No app único quem chama é o roteador; por enquanto
- * é a própria página, na linha logo abaixo.
- *
- * A ordem é obrigatória: elementos primeiro (senão `ligarEventos` não acha o
- * formulário), `bootPronto` antes dos ouvintes (senão um `submit` muito rápido
- * aguardaria `undefined`), e o `await` por último.
+ * Ponto de entrada da operação. Quem chama é o `main.ts`, que já resolveu quem
+ * está logado — aqui não se decide papel nem se lê cadastro.
  */
-export async function montar(): Promise<void> {
+export async function montar(amb: Ambiente): Promise<void> {
+  ambiente = amb;
+  usuario = amb.usuario;
   if (montado) return;
   montado = true;
   views = lerViews();
   el = lerEls();
-  bootPronto = boot().catch((e: unknown) => {
-    console.error('boot', e);
-  });
   ligarEventos();
-  await bootPronto;
+  await boot().catch((e: unknown) => {
+    console.error('operacao', e);
+  });
 }
-
-// Entrada temporária: sai quando `main.ts` assumir o boot do app único.
-void montar();

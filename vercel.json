@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    { "source": "/gestor.html", "destination": "/painel", "permanent": true },
+    { "source": "/diretor.html", "destination": "/painel/indicadores", "permanent": true },
+    { "source": "/index.html", "destination": "/", "permanent": true }
+  ],
+  "rewrites": [
+    { "source": "/((?!assets/|.*\\.[a-z0-9]+$).*)", "destination": "/index.html" }
+  ]
+}

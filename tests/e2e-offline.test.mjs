@@ -17,7 +17,7 @@ const passo = async (nome, fn) => {
   catch (e) { falhou = true; console.log('FALHA -', nome, '\n     ', e.message); }
 };
 
-await prepararAparelho(p, BASE, 'index.html');
+await prepararAparelho(p, BASE, '/entrar');
 await fazerLogin(p, 'ana');
 await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])');
 

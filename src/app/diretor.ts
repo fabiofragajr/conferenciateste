@@ -11,8 +11,6 @@ import '../styles/relatorio.css';
 
 import type { Leitura, Ocorrencia, Sessao } from '../types.js';
 import * as db from '../lib/db.js';
-import * as auth from '../lib/auth.js';
-import * as sync from '../lib/sync.js';
 import { EMPRESA, FOREST, DIV, cabecalhoPDF, rodapePDF } from '../lib/marca.js';
 import { etiquetaTexto, pedidosIncompletos, MOMENTO_ROTULO } from '../lib/model.js';
 import { graficoMensal, mapaCalor, ranking } from '../lib/graficos.js';
@@ -389,22 +387,6 @@ function preencherMeses(): void {
   sel.value = mesSelecionado;
 }
 
-// Resolvido só quando a tela é montada. `$()` lança se o elemento não existe
-// (util.ts), e no app único este módulo passa a ser importado antes de a região
-// do painel estar no DOM — no escopo do módulo, isso derrubaria o app inteiro
-// com exceção, em vez de quebrar um botão.
-function lerElLogin() {
-  return {
-    bloqueio: $('#bloqueio'),
-    conteudo: $('#conteudo'),
-    form: $<HTMLFormElement>('#form-login'),
-    login: $<HTMLInputElement>('#in-login'),
-    senha: $<HTMLInputElement>('#in-senha'),
-    erro: $('#login-erro')
-  };
-}
-let elLogin!: ReturnType<typeof lerElLogin>;
-
 function ligarEventos(): void {
   $<HTMLSelectElement>('#f-mes').addEventListener('change', async (ev) => {
     mesSelecionado = (ev.target as HTMLSelectElement).value;
@@ -412,64 +394,28 @@ function ligarEventos(): void {
   });
 
   $('#btn-pdf-periodo').addEventListener('click', () => void exportarPDFPeriodo());
-
-  elLogin.form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    await bootPronto; // senão o boot termina depois e rebloqueia quem acabou de entrar
-    const r = await auth.entrar(elLogin.login.value, elLogin.senha.value);
-    if (!r.ok || !r.usuario.gestor) {
-      if (r.ok) auth.sair();
-      elLogin.erro.textContent = r.ok ? 'Este usuário não tem acesso ao painel.' : r.erro;
-      elLogin.erro.hidden = false;
-      return;
-    }
-    await abrir();
-  });
 }
 
 async function abrir(): Promise<void> {
-  elLogin.bloqueio.hidden = true;
-  elLogin.conteudo.hidden = false;
   await carregar();
   preencherMeses();
   await pintarTudo();
 }
 
 async function boot(): Promise<void> {
-  await sync.garantirCadastroLocal();
-  sync.iniciarAuto();
-  const u = await auth.usuarioLogado();
-  if (!u?.gestor) {
-    elLogin.bloqueio.hidden = false;
-    return;
-  }
+  // Cadastro local, sincronização e login são do `main.ts`. Aqui só o que é
+  // desta tela: carregar a base e desenhar.
   await abrir();
 }
 
-// O boot decide a tela inicial e demora (seed, IndexedDB, rede). Guardar a
-// promessa deixa o login esperar por ele em vez de disputar a tela.
-let bootPronto: Promise<void>;
-
 let montado = false;
 
-/**
- * Ponto de entrada da tela. No app único quem chama é o roteador; por enquanto
- * é a própria página, na linha logo abaixo.
- *
- * A ordem é obrigatória: elementos primeiro (senão `ligarEventos` não acha o
- * formulário), `bootPronto` antes dos ouvintes (senão um `submit` muito rápido
- * aguardaria `undefined`), e o `await` por último.
- */
+/** Ponto de entrada da seção Indicadores. Quem chama é o `main.ts`. */
 export async function montar(): Promise<void> {
   if (montado) return;
   montado = true;
-  elLogin = lerElLogin();
-  bootPronto = boot().catch((e: unknown) => {
-    console.error('boot', e);
-  });
   ligarEventos();
-  await bootPronto;
+  await boot().catch((e: unknown) => {
+    console.error('indicadores', e);
+  });
 }
-
-// Entrada temporária: sai quando `main.ts` assumir o boot do app único.
-void montar();
