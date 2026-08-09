@@ -517,6 +517,37 @@ await passo('o gestor abre a bipagem sem recarregar a página', async () => {
   await ctx.close();
 });
 
+await passo('trocar de seção não leva o filtro da anterior junto', async () => {
+  const { ctx, p } = await aparelho();
+  await entrar(p, 'sandro');
+  await p.waitForURL(`${BASE}/painel`, { timeout: 8000 });
+
+  // Filtro na URL de uma seção não pode grudar na próxima: o `de` de
+  // Conferências não significa nada em Pessoas, e um valor herdado em silêncio
+  // é pior que nenhum — a tabela filtra e não diz por quê.
+  await p.goto(`${BASE}/painel/conferencias?de=2026-08-01`);
+  await p.waitForSelector('[data-secao="conferencias"]:not([hidden])', { timeout: 8000 });
+  await p.click('.p-item[href="/painel/pessoas"]');
+  await p.waitForSelector('[data-secao="pessoas"]:not([hidden])', { timeout: 4000 });
+  if (p.url() !== `${BASE}/painel/pessoas`) throw new Error(`o filtro veio junto: ${p.url()}`);
+  await ctx.close();
+});
+
+await passo('F5 preserva o filtro da própria seção', async () => {
+  const { ctx, p } = await aparelho();
+  await entrar(p, 'sandro');
+  await p.waitForURL(`${BASE}/painel`, { timeout: 8000 });
+
+  // O outro lado da regra acima: a query daquela entrada do histórico sobrevive
+  // à normalização de abertura. É o que faz um filtro colado de um e-mail valer.
+  await p.goto(`${BASE}/painel/conferencias?de=2026-08-01`);
+  await p.waitForSelector('[data-secao="conferencias"]:not([hidden])', { timeout: 8000 });
+  await p.reload();
+  await p.waitForSelector('[data-secao="conferencias"]:not([hidden])', { timeout: 8000 });
+  if (!p.url().endsWith('?de=2026-08-01')) throw new Error(`o filtro sumiu no F5: ${p.url()}`);
+  await ctx.close();
+});
+
 await passo('os .html antigos ainda abrem', async () => {
   const { ctx, p } = await aparelho();
   await entrar(p, 'sandro');

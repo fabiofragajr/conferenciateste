@@ -178,8 +178,14 @@ export function telaDoClique(c: CliqueBruto, l: LinkBruto, origem: string, atual
 }
 
 export interface Roteador {
-  /** Navega sem recarregar. `substituir` troca a entrada atual do histórico. */
-  ir: (r: Tela, substituir?: boolean) => void;
+  /**
+   * Navega sem recarregar. `substituir` troca a entrada atual do histórico.
+   *
+   * `sufixo` é a query e a âncora que acompanham ESTE destino (`?de=...#topo`),
+   * normalmente vindas do próprio link clicado. Sem ele, a URL nova sai limpa —
+   * que é o certo: filtro é de uma seção só.
+   */
+  ir: (t: Tela, substituir?: boolean, sufixo?: string) => void;
   atual: () => Tela;
   /** Remove os listeners. Sem isto, recriar o roteador (o HMR do Vite faz isso em dev) empilha handler a cada troca de arquivo. */
   destruir: () => void;
@@ -200,18 +206,26 @@ export function criarRoteador(
 
   const atual = (): Tela => resolver(location.pathname, situacao());
 
-  // Recompõe caminho + query + âncora atuais, só trocando o caminho — trocar
-  // de tela nunca derruba filtro (querystring) nem âncora que já estavam na
-  // URL. CLAUDE.md §9 pede filtro persistente no painel; filtro que some a
-  // cada navegação não se manda por link nem se cola num e-mail.
-  const comBusca = (caminho: string): string => caminho + location.search + location.hash;
+  // Mantém a query e a âncora que JÁ estão na barra, trocando só o caminho.
+  //
+  // Serve para os dois casos em que a URL é corrigida sem ninguém ter pedido
+  // outra tela: a normalização de abertura e a reconciliação do `popstate`.
+  // Nos dois, a query é daquela mesma entrada do histórico — preservá-la é o
+  // que faz um filtro colado de um e-mail sobreviver ao boot (CLAUDE.md §9).
+  //
+  // NÃO serve para `ir()`. Lá o caminho está mudando de tela, e a query da tela
+  // velha não tem nada que fazer na nova: sair de
+  // `/painel/conferencias?de=2026-08-01` para Pessoas produziria
+  // `/painel/pessoas?de=2026-08-01`, com o filtro de uma seção grudado na outra.
+  const comBuscaAtual = (caminho: string): string => caminho + location.search + location.hash;
 
-  const ir = (r: Tela, substituir = false): void => {
-    const destino = resolver(caminhoDe(r), situacao());
-    const caminho = caminhoDe(destino);
-    if (caminho !== location.pathname) {
-      const url = comBusca(caminho);
-      if (substituir) history.replaceState(null, '', url);
+  const ir = (t: Tela, substituir = false, sufixo = ''): void => {
+    const destino = resolver(caminhoDe(t), situacao());
+    const url = caminhoDe(destino) + sufixo;
+    if (url !== location.pathname + location.search + location.hash) {
+      // `history.state` é preservado no replace: é lá que mora `pretendido`, e
+      // o `ir(..., true)` do pós-login não pode apagá-lo antes de alguém ler.
+      if (substituir) history.replaceState(history.state, '', url);
       else history.pushState(null, '', url);
     }
     aoNavegar(destino);
@@ -224,7 +238,7 @@ export function criarRoteador(
     // /painel/rotas sai, o app empilha /entrar, a pessoa aperta Voltar: a URL
     // volta a /painel/rotas mas quem não está mais logado resolve pra
     // /entrar. Sem corrigir aqui, o endereço mostrado mente até um F5.
-    if (caminho !== location.pathname) history.replaceState(history.state, '', comBusca(caminho));
+    if (caminho !== location.pathname) history.replaceState(history.state, '', comBuscaAtual(caminho));
     aoNavegar(t);
   }, { signal });
 
@@ -245,7 +259,10 @@ export function criarRoteador(
     if (!destino) return;
 
     ev.preventDefault();
-    ir(destino);
+    // A query e a âncora vêm do link clicado, não da barra: `/painel/rotas#form`
+    // tem que chegar em `#form`, e não herdar a âncora da tela de onde saiu.
+    const alvo = new URL(a.href, location.origin);
+    ir(destino, false, alvo.search + alvo.hash);
   }, { capture: true, signal });
 
   // Normaliza a URL de abertura: quem entrou por `/` sai com `/painel` na
@@ -254,7 +271,7 @@ export function criarRoteador(
   // ninguém lê isso ainda — é só pra não fechar a porta pra um deep link
   // pós-login numa task futura, não pra abri-la agora.
   const inicial = atual();
-  history.replaceState({ pretendido: limpar(location.pathname) }, '', comBusca(caminhoDe(inicial)));
+  history.replaceState({ pretendido: limpar(location.pathname) }, '', comBuscaAtual(caminhoDe(inicial)));
   aoNavegar(inicial);
 
   return { ir, atual, destruir: () => controlador.abort() };
