@@ -9,6 +9,7 @@ import type {
   Dispositivo, EstadoSync, Leitura, Ocorrencia, Rota, Sessao, Transportadora, Usuario
 } from '../types.js';
 import * as db from './db.js';
+import { idsParaRemover } from './reconciliar.js';
 import { agora } from './util.js';
 import { obterCliente, obterConfig, estaConfigurado } from './supabase.js';
 
@@ -259,39 +260,103 @@ const daLinhaRota = (l: LinhaRota): Rota => ({
   atualizadoEm: l.atualizado_em
 });
 
+/** As três tabelas de cadastro — as que descem do servidor para o aparelho. */
+type StoreCadastro = 'usuarios' | 'transportadoras' | 'rotas';
+
 /**
- * Baixa o cadastro alterado desde a última descida.
+ * Apaga do aparelho o cadastro que não existe mais no servidor.
+ *
+ * A descida é incremental (`atualizado_em > desde`), e uma linha apagada não
+ * tem `atualizado_em` novo — ela simplesmente deixa de vir. Sem esta varredura
+ * o aparelho guarda para sempre o que o gestor excluiu, e a tela do operador
+ * mostra transportadora que não existe mais. Não é só feio: `sessoes.
+ * transportadora_id` tem chave estrangeira no servidor, então uma conferência
+ * aberta sobre uma dessas fantasmas bate em violação de FK no envio e fica
+ * presa no celular — a carga foi conferida e a base nunca fica sabendo.
+ *
+ * Duas travas, e as duas existem porque o custo de errar aqui é alto:
+ *
+ * 1. **Só remove o que já subiu.** Registro `PENDENTE` é coisa criada ou
+ *    editada neste aparelho que o servidor ainda não viu — ele não está lá
+ *    porque ainda não chegou, não porque foi excluído. Apagar seria destruir o
+ *    trabalho de alguém.
+ * 2. **Lista vazia não apaga nada.** "O servidor não tem nenhum" é
+ *    indistinguível de "a consulta foi filtrada por uma política de acesso", e
+ *    o segundo caso limparia o cadastro inteiro de um aparelho que estava
+ *    funcionando — inclusive os usuários, deixando ninguém capaz de entrar.
+ *    Esvaziar uma tabela de propósito continua possível pelo painel, item a
+ *    item, que apaga na base e no aparelho.
+ */
+async function reconciliarCadastro(store: StoreCadastro, idsNoServidor: Set<string>): Promise<number> {
+  const remover = idsParaRemover(await db.todos(store), idsNoServidor);
+  for (const id of remover) await db.remover(store, id);
+  return remover.length;
+}
+
+/**
+ * Baixa o cadastro alterado desde a última descida, e tira o que foi excluído.
  *
  * A senha NUNCA desce (nem sobe): o hash fica só no aparelho onde a pessoa o
  * definiu. Um usuário criado pelo gestor chega aqui sem senha e a define no
  * primeiro acesso deste aparelho — ver `auth.entrar`.
  */
-async function baixarCadastro(): Promise<{ baixados: number; erro: string | null }> {
+async function baixarCadastro(): Promise<{ baixados: number; removidos: number; erro: string | null }> {
   const cliente = await obterCliente();
-  if (!cliente) return { baixados: 0, erro: 'Supabase não configurado.' };
+  if (!cliente) return { baixados: 0, removidos: 0, erro: 'Supabase não configurado.' };
 
   const desde = await db.configGet<string>(CHAVE_ULTIMA_DESCIDA, '1970-01-01T00:00:00.000Z');
   const marcoNovo = agora();
   let baixados = 0;
+  let removidos = 0;
+
+  /**
+   * Os ids que o servidor tem AGORA, para a varredura de exclusão.
+   *
+   * Vem em consulta própria porque a outra é incremental e traz só o que mudou.
+   * Custa pouco: cadastro é pequeno por natureza (pessoas, transportadoras e
+   * códigos de rota de uma operação), e só o `id` desce.
+   */
+  const idsDe = async (tabela: string): Promise<{ ids: Set<string> } | { erro: string }> => {
+    const r = await cliente.from(tabela).select('id');
+    if (r.error) return { erro: `${tabela}: ${r.error.message}` };
+    return { ids: new Set(((r.data ?? []) as { id: string }[]).map((x) => x.id)) };
+  };
 
   const transp = await cliente.from(TABELAS.transportadoras).select('*').gt('atualizado_em', desde);
-  if (transp.error) return { baixados, erro: `transportadoras: ${transp.error.message}` };
+  if (transp.error) return { baixados, removidos, erro: `transportadoras: ${transp.error.message}` };
   const listaTransp = (transp.data ?? []) as LinhaTransportadora[];
   await db.salvarDoServidor('transportadoras', listaTransp.map(daLinhaTransportadora));
   baixados += listaTransp.length;
 
   const rotas = await cliente.from(TABELAS.rotas).select('*').gt('atualizado_em', desde);
-  if (rotas.error) return { baixados, erro: `rotas: ${rotas.error.message}` };
+  if (rotas.error) return { baixados, removidos, erro: `rotas: ${rotas.error.message}` };
   const listaRotas = (rotas.data ?? []) as LinhaRota[];
   await db.salvarDoServidor('rotas', listaRotas.map(daLinhaRota));
   baixados += listaRotas.length;
 
   const usuarios = await cliente.from(TABELAS.usuarios).select('*').gt('atualizado_em', desde);
-  if (usuarios.error) return { baixados, erro: `usuarios: ${usuarios.error.message}` };
+  if (usuarios.error) return { baixados, removidos, erro: `usuarios: ${usuarios.error.message}` };
   baixados += await aplicarUsuarios((usuarios.data ?? []) as LinhaUsuario[]);
 
+  // A varredura vem DEPOIS de gravar o que desceu: fazê-la antes apagaria uma
+  // linha que a mesma sincronização estava trazendo de volta com id novo.
+  //
+  // `rotas` antes de `transportadoras` só por clareza de leitura no painel —
+  // o IndexedDB não tem chave estrangeira, então a ordem não muda o resultado.
+  for (const [store, tabela] of [
+    ['rotas', TABELAS.rotas],
+    ['transportadoras', TABELAS.transportadoras],
+    ['usuarios', TABELAS.usuarios]
+  ] as [StoreCadastro, string][]) {
+    const r = await idsDe(tabela);
+    // Falha ao listar não apaga nada: sem a lista completa não há como saber o
+    // que sumiu, e chutar aqui é apagar cadastro bom.
+    if ('erro' in r) return { baixados, removidos, erro: r.erro };
+    removidos += await reconciliarCadastro(store, r.ids);
+  }
+
   await db.configSet(CHAVE_ULTIMA_DESCIDA, marcoNovo);
-  return { baixados, erro: null };
+  return { baixados, removidos, erro: null };
 }
 
 /**
