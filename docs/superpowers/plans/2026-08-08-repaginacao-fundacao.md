@@ -2842,7 +2842,9 @@ Reúne as exportações que hoje estão espalhadas: CSV do período (de `confere
 
 - [ ] **Step 5: Ajustar `tests/diretor.test.mjs`**
 
-O teste mede a altura da moldura do painel do diretor no celular. Com o shell único, a moldura passa a ser a mesma do resto — o teste vira uma asserção sobre `/painel/indicadores`: sem rolagem horizontal em 320px e 390px, e altura da barra do topo abaixo de 64px. Renomear o arquivo para `tests/indicadores.test.mjs` e ajustar o comentário do topo, que ainda fala em "painel do diretor".
+**Este teste já nasce vermelho, e isso não é regressão sua.** Verificado na Task 2: ele procura `.p-hamburguer`, `.p-lateral`, `.p-item` e `[data-secao]` dentro de `diretor.html`, que não tem nenhum deles — foi escrito à frente da implementação, contra o shell que o painel do gestor ganhou e o do diretor nunca recebeu. Também não está em nenhum script do `package.json`, então nunca rodou no `test:e2e`. Quatro dos sete passos falham.
+
+O teste mede a altura da moldura do painel do diretor no celular. Com o shell único, a moldura passa a ser a mesma do resto — o teste vira uma asserção sobre `/painel/indicadores`: sem rolagem horizontal em 320px e 390px, e altura da barra do topo abaixo de 64px. Renomear o arquivo para `tests/indicadores.test.mjs`, ajustar o comentário do topo (que ainda fala em "painel do diretor") e **registrá-lo no script `test:e2e`** — teste que ninguém roda não protege nada.
 
 - [ ] **Step 6: Rodar e commitar**
 
