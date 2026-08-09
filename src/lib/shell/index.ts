@@ -8,9 +8,11 @@
 // qualquer seção, e faixa fixa acima do conteúdo de todas elas. A faixa se cala
 // só onde ela seria redundante com o conteúdo logo abaixo.
 
-import { $$ } from '../util.js';
+import { $$, esc } from '../util.js';
 import { montarTopo, definirTituloSecao, type ModoShell } from './topo.js';
 import { montarLateral, type ItemMenu } from './lateral.js';
+import { montarBarra, itensDaFolha, htmlDaFolha } from './barra-inferior.js';
+import { criarFolha } from '../ui/folha.js';
 
 export type { ItemMenu, ModoShell };
 
@@ -45,7 +47,23 @@ export function montarShell(op: OpcoesShell): Shell {
   const topo = montarTopo(op.modo);
   document.body.prepend(topo);
 
-  if (op.modo === 'painel') document.body.prepend(montarLateral(op.itens, op.usuario));
+  if (op.modo === 'painel') {
+    document.body.prepend(montarLateral(op.itens, op.usuario));
+
+    const barra = montarBarra(op.itens);
+    document.body.append(barra);
+
+    const folha = criarFolha('Mais seções');
+    // `esc` porque o nome vem do cadastro, e cadastro aceita qualquer coisa.
+    const rodape = `<div class="p-lateral-rodape">
+      <span class="p-usuario">${esc(op.usuario)}</span>
+      <a class="btn btn-secundario" href="/bipagem">Abrir bipagem</a>
+      <button class="btn btn-fantasma" data-sair type="button">Sair</button>
+    </div>`;
+    barra.querySelector('[data-aba="mais"]')?.addEventListener('click', () => {
+      folha.abrir(htmlDaFolha(itensDaFolha(op.itens)) + rodape);
+    });
+  }
 
   const alerta = document.createElement('div');
   alerta.className = 'p-alerta-fixo';
@@ -70,6 +88,9 @@ export function montarShell(op: OpcoesShell): Shell {
       item.classList.toggle('ativo', ativo);
       if (ativo) item.setAttribute('aria-current', 'page');
       else item.removeAttribute('aria-current');
+    }
+    for (const aba of $$<HTMLElement>('.sh-aba')) {
+      aba.classList.toggle('ativa', aba.dataset.aba === id);
     }
     definirTituloSecao(topo, op.itens.find((i) => i.id === id)?.rotulo ?? '');
     // O conteúdo troca inteiro: continuar na rolagem da seção anterior confunde.

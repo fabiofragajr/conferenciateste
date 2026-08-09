@@ -159,7 +159,13 @@ async function iniciarPainel(): Promise<void> {
   // divergência no banco. É a única superfície pública do shell.
   (window as unknown as { __shell: Shell }).__shell = shell;
 
-  $('#btn-sair').addEventListener('click', () => ambiente?.sair());
+  // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
+  // folha "Mais", que é remontada a cada abertura — um listener preso ao
+  // elemento morreria junto com o HTML anterior.
+  document.addEventListener('click', (ev) => {
+    if (!(ev.target as HTMLElement).closest('#btn-sair, [data-sair]')) return;
+    ambiente?.sair();
+  });
 
 
   const hoje = new Date();

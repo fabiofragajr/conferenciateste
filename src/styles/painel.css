@@ -19,7 +19,14 @@ body.painel {
 }
 body.painel > .sh-topo { grid-area: topo; }
 body.painel > .p-lateral { grid-area: lateral; }
-body.painel > #tela-painel { grid-area: corpo; min-width: 0; padding: 20px 24px 40px; }
+/* `min-width: 0` e `width: 100%` juntos, e os dois são obrigatórios: sem o
+   primeiro o conteúdo se recusa a encolher abaixo da tabela mais larga; sem o
+   segundo o `margin: 0 auto` que centraliza o corpo faz dele uma caixa de
+   largura livre, que volta a ser medida pela tabela. É essa dupla que fazia o
+   painel vazar centenas de pixels para o lado no celular. */
+body.painel > #tela-painel {
+  grid-area: corpo; min-width: 0; width: 100%; padding: 20px 24px 40px;
+}
 
 /* A moldura mora no <body>, fora de #tela-painel, porque é ela quem forma a
    grade. Então ela não some junto com a tela, e precisa sumir por conta —
@@ -37,11 +44,17 @@ body:not(.painel) > .sh-barra { display: none; }
   top: 0;
   z-index: 50;
   display: flex; align-items: center; gap: 12px;
+  min-width: 0;
   padding: 10px 20px calc(10px + env(safe-area-inset-top));
   background: var(--superficie); border-bottom: 1px solid var(--linha);
 }
 .sh-espaco { flex: 1; }
-.sh-titulo-secao { font-size: var(--t-corpo); font-weight: 700; color: var(--tinta); }
+/* O título encolhe com reticências em vez de empurrar a barra: numa tela de
+   320px é ele que decide se a página rola para o lado. */
+.sh-titulo-secao {
+  font-size: var(--t-corpo); font-weight: 700; color: var(--tinta);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
 .sh-sync { flex: none; }
 .p-usuario { font-size: var(--t-secundario); color: var(--tinta-2); }
 
@@ -299,3 +312,62 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 }
 .p-alerta-fixo[hidden] { display: none; }
 .p-alerta-fixo a { color: var(--alarme); font-weight: 700; }
+
+/* --------------------------------------------- celular: barra inferior --- */
+.sh-barra { display: none; }
+.ui-folha-fundo { display: none; }
+
+@media (max-width: 1023px) {
+  body.painel {
+    /* `minmax(0, 1fr)` e não `1fr`: o mínimo de um `1fr` é o min-content, e o
+       min-content da barra do topo (título + chip, que não quebram linha)
+       esticava a coluna para 340px numa tela de 320px — a página inteira
+       rolava para o lado por causa da barra. */
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "topo" "corpo";
+  }
+  body.painel > .p-lateral { display: none; }
+  body.painel > #tela-painel {
+    padding: 16px 16px calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .sh-barra {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 120;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    background: var(--superficie); border-top: 1px solid var(--linha);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .sh-aba {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    padding: 7px 2px 9px; font-size: 10px; color: var(--tinta-2);
+    text-decoration: none; background: transparent; border: 0; cursor: pointer;
+    position: relative; min-height: 56px; justify-content: center;
+  }
+  .sh-aba i { font-size: 17px; line-height: 1; opacity: .65; }
+  .sh-aba.ativa { color: var(--marca); font-weight: 700; }
+  .sh-aba.ativa i { opacity: 1; }
+  .sh-aba .ui-badge { position: absolute; top: 4px; right: 22%; }
+
+  .ui-folha-fundo { display: block; position: fixed; inset: 0; z-index: 150; background: rgba(22,33,29,.45); }
+  .ui-folha-fundo[hidden] { display: none; }
+}
+
+/* ------------------------------------------------------------- folha ----- */
+.ui-folha {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 160;
+  background: var(--superficie); border-radius: 18px 18px 0 0;
+  padding: 8px 0 calc(14px + env(safe-area-inset-bottom));
+  transform: translateY(101%); transition: transform .18s ease-out;
+  max-height: 82vh; overflow-y: auto;
+}
+.ui-folha.aberta { transform: translateY(0); }
+.ui-folha-alca { width: 34px; height: 4px; background: var(--linha); border-radius: 999px; margin: 0 auto 10px; }
+
+/* ------------------------------------------------------------- toast ----- */
+.ui-toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(90px + env(safe-area-inset-bottom)); z-index: 300;
+  background: var(--tinta); color: #fff; padding: 10px 16px; border-radius: 999px;
+  font-size: var(--t-secundario); box-shadow: 0 6px 20px rgba(0,0,0,.22);
+}
+.ui-toast-erro { background: var(--alarme); }

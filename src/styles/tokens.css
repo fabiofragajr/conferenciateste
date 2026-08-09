@@ -52,6 +52,9 @@ body.painel {
     --t-pagina: 18px;
     --t-indicador: 22px;
     --t-corpo: 15px;
+    /* 40px é alvo de mouse. Aqui o gestor confere de pé na doca, com o polegar
+       e sem apoiar o aparelho — abaixo de 44px o toque erra de item. */
+    --toque: 48px;
   }
 }
 

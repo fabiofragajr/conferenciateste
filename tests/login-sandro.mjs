@@ -33,15 +33,18 @@ const novoAparelho = async (arquivo, viewport = { width: 1440, height: 900 }) =>
 };
 
 /**
- * No celular o menu do painel é gaveta, e "Abrir bipagem" mora no rodapé dela:
- * o caminho até a câmera passa por abrir o menu.
+ * No desktop "Abrir bipagem" está no rodapé da lateral. No celular não há
+ * lateral: a navegação é a barra inferior, e o botão mora no rodapé da folha
+ * "Mais" — sem id, para não repetir o `#btn-bipar` da lateral.
  */
 const abrirBipagem = async (p) => {
-  if (!(await p.isVisible('#btn-bipar'))) {
-    await p.click('.p-hamburguer');
-    await p.waitForSelector('.p-lateral.aberta', { timeout: 8000 });
+  if (await p.isVisible('#btn-bipar')) {
+    await p.click('#btn-bipar');
+    return;
   }
-  await p.click('#btn-bipar');
+  await p.click('.sh-aba[data-aba="mais"]');
+  await p.waitForSelector('.ui-folha.aberta', { timeout: 8000 });
+  await p.click('.ui-folha a[href="/bipagem"]');
 };
 
 await passo('sandro entra no painel do gestor', async () => {

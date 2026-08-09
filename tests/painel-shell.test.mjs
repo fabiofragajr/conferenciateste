@@ -183,39 +183,72 @@ await passo('sem hash, abre em Hoje', async () => {
   await ctx.close();
 });
 
-await passo('no celular a lateral é gaveta, e ela abre e fecha ao escolher', async () => {
+await passo('no celular a navegação é a barra inferior, não gaveta', async () => {
   const { ctx, p } = await painelAberto({ width: 390, height: 844 });
-  if (await p.isVisible('.p-lateral')) throw new Error('gaveta já nasce aberta no celular');
-  await p.click('.p-hamburguer');
-  await p.waitForSelector('.p-lateral.aberta', { timeout: 4000 });
-  await p.click('.p-item[href="/painel/sincronizacao"]');
-  await p.waitForSelector('[data-secao="sincronizacao"]:not([hidden])', { timeout: 4000 });
-  // Escolher um item fecha a gaveta: ninguém quer tocar duas vezes.
-  if (await p.isVisible('.p-lateral.aberta')) throw new Error('a gaveta ficou aberta depois de escolher');
+  if (await p.isVisible('.p-lateral')) throw new Error('a lateral do desktop apareceu no celular');
+  if (!(await p.isVisible('.sh-barra'))) throw new Error('não há barra inferior');
+  const abas = await p.$$eval('.sh-aba', (ns) => ns.map((n) => n.dataset.aba));
+  const esperado = ['inicio', 'divergencias', 'conferencias', 'mapa', 'mais'];
+  if (JSON.stringify(abas) !== JSON.stringify(esperado)) throw new Error(`abas: ${JSON.stringify(abas)}`);
   await ctx.close();
 });
 
-await passo('tocar no fundo escurecido fecha a gaveta', async () => {
+await passo('a aba navega e marca a ativa', async () => {
   const { ctx, p } = await painelAberto({ width: 390, height: 844 });
-  await p.click('.p-hamburguer');
-  await p.waitForSelector('.p-lateral.aberta', { timeout: 4000 });
-  // Quem abriu o menu por engano sai dele pelo caminho mais óbvio: tocar fora.
-  await p.click('.p-fundo-gaveta', { position: { x: 370, y: 700 } });
-  await p.waitForSelector('.p-lateral:not(.aberta)', { timeout: 4000 });
-  if (await p.isVisible('.p-fundo-gaveta')) throw new Error('o fundo escurecido continuou por cima do conteúdo');
+  await p.click('.sh-aba[data-aba="conferencias"]');
+  await p.waitForSelector('[data-secao="conferencias"]:not([hidden])', { timeout: 4000 });
+  if (!p.url().endsWith('/painel/conferencias')) throw new Error(`URL: ${p.url()}`);
+  const ativa = await p.getAttribute('.sh-aba.ativa', 'data-aba');
+  if (ativa !== 'conferencias') throw new Error(`aba ativa: ${ativa}`);
   await ctx.close();
 });
 
-await passo('os itens do menu têm alvo de toque de 44 px', async () => {
+await passo('"Mais" abre a folha com os oito restantes e fecha ao escolher', async () => {
   const { ctx, p } = await painelAberto({ width: 390, height: 844 });
-  await p.click('.p-hamburguer');
-  await p.waitForSelector('.p-lateral.aberta', { timeout: 4000 });
-  const baixos = await p.$$eval('.p-item', (ns) => ns
+  await p.click('.sh-aba[data-aba="mais"]');
+  await p.waitForSelector('.ui-folha.aberta', { timeout: 4000 });
+  const n = await p.$$eval('.ui-folha .p-item', (ns) => ns.length);
+  if (n !== 9) throw new Error(`a folha traz ${n} itens, não 9`);
+  await p.click('.ui-folha .p-item[href="/painel/rotas"]');
+  await p.waitForSelector('[data-secao="rotas"]:not([hidden])', { timeout: 4000 });
+  if (await p.isVisible('.ui-folha.aberta')) throw new Error('a folha ficou aberta depois de escolher');
+  await ctx.close();
+});
+
+await passo('o badge da divergência aparece na aba, sem abrir nada', async () => {
+  const { ctx, p } = await painelAberto({ width: 390, height: 844 });
+  await p.evaluate(() => window.__shell.definirBadge('divergencias', 3));
+  await p.click('.sh-aba[data-aba="conferencias"]');
+  await p.waitForSelector('[data-secao="conferencias"]:not([hidden])', { timeout: 4000 });
+  if (!(await p.isVisible('.sh-aba[data-aba="divergencias"] .ui-badge'))) {
+    throw new Error('o badge sumiu da barra');
+  }
+  await ctx.close();
+});
+
+await passo('os itens da folha têm alvo de toque de 44 px', async () => {
+  const { ctx, p } = await painelAberto({ width: 390, height: 844 });
+  await p.click('.sh-aba[data-aba="mais"]');
+  await p.waitForSelector('.ui-folha.aberta', { timeout: 4000 });
+  const baixos = await p.$$eval('.ui-folha .p-item', (ns) => ns
     .map((n) => ({ t: n.textContent.trim(), h: Math.round(n.getBoundingClientRect().height) }))
     .filter((i) => i.h < 44));
   if (baixos.length) throw new Error(`itens abaixo de 44px: ${JSON.stringify(baixos)}`);
   await ctx.close();
 });
+
+/** Navega pela barra ou pela folha, conforme a aba exista ou não. */
+const irNoCelular = async (p, id) => {
+  const aba = `.sh-aba[data-aba="${id}"]`;
+  if (await p.isVisible(aba)) {
+    await p.click(aba);
+  } else {
+    await p.click('.sh-aba[data-aba="mais"]');
+    await p.waitForSelector('.ui-folha.aberta', { timeout: 4000 });
+    await p.click(`.ui-folha .p-item[href="${id === 'inicio' ? '/painel' : `/painel/${id}`}"]`);
+  }
+  await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
+};
 
 for (const tela of CELULARES) {
   await passo(`o painel não rola na horizontal em ${tela.nome}`, async () => {
@@ -228,10 +261,7 @@ for (const tela of CELULARES) {
     // Toda seção precisa passar: a tabela densa de Conferências é a mais larga,
     // e é ela que costuma empurrar a página inteira.
     for (const id of ['inicio', ...SECOES]) {
-      await p.click(`.p-hamburguer`);
-      await p.waitForSelector('.p-lateral.aberta', { timeout: 4000 });
-      await p.click(`.p-item[href="${id === 'inicio' ? '/painel' : `/painel/${id}`}"]`);
-      await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
+      await irNoCelular(p, id);
       const sobra = await medir();
       if (sobra > 1) throw new Error(`${id}: sobram ${sobra}px de rolagem horizontal`);
     }
@@ -241,25 +271,18 @@ for (const tela of CELULARES) {
   await passo(`o topo cabe em 64 px em ${tela.nome}`, async () => {
     const { ctx, p } = await painelAberto({ width: tela.width, height: tela.height });
     const altura = await p.evaluate(() =>
-      Math.round(document.querySelector('.p-topo').getBoundingClientRect().height));
+      Math.round(document.querySelector('.sh-topo').getBoundingClientRect().height));
     if (altura > 64) throw new Error(`o topo voltou a crescer: ${altura}px`);
     await ctx.close();
   });
 
-  await passo(`badge e chip de sincronização aparecem com a gaveta fechada em ${tela.nome}`, async () => {
+  await passo(`o chip de sincronização aparece sem abrir nada em ${tela.nome}`, async () => {
     const { ctx, p } = await painelAberto({ width: tela.width, height: tela.height });
+    await p.evaluate(() => window.__shell.definirBadge('divergencias', 9));
 
-    // Quem preenche o badge com a contagem de divergências é a seção Hoje, ainda
-    // por vir. O que se prova aqui é o lugar dele: no topo, fora da gaveta, e
-    // dentro da tela — senão a divergência só existiria para quem abre o menu.
-    await p.evaluate(() => {
-      const b = document.querySelector('[data-badge-topo]');
-      b.textContent = '9';
-      b.hidden = false;
-    });
-
-    for (const sel of ['[data-badge-topo]', '#chip-sync-painel']) {
-      if (!(await p.isVisible(sel))) throw new Error(`${sel} invisível com a gaveta fechada`);
+    // O lugar do alarme: na barra e no topo, dentro da tela, sem nenhum toque.
+    for (const sel of ['.sh-aba[data-aba="divergencias"] .ui-badge', '#chip-sync-painel']) {
+      if (!(await p.isVisible(sel))) throw new Error(`${sel} invisível sem abrir nada`);
       const dentro = await p.evaluate((s) => {
         const r = document.querySelector(s).getBoundingClientRect();
         return r.left >= 0 && r.right <= window.innerWidth + 1 && r.width > 0;
