@@ -31,10 +31,10 @@ const passo = async (nome, fn) => {
 const diretorAberto = async (viewport = { width: 1440, height: 900 }) => {
   const ctx = await navegador.newContext({ viewport, locale: 'pt-BR' });
   const p = await ctx.newPage();
-  await prepararAparelho(p, BASE, 'diretor.html');
+  await prepararAparelho(p, BASE, '/entrar');
   await entrar(p, 'sandro');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
-  // `#conteudo` aparece antes de os blocos pintarem, e é o conteúdo pintado que
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
+  // `#tela-painel` aparece antes de os blocos pintarem, e é o conteúdo pintado que
   // empurra a página para o lado. Medir a caixa vazia não mede nada.
   await p.waitForSelector('#tendencias svg', { timeout: 10000 });
   return { ctx, p };
@@ -88,7 +88,7 @@ await passo('no celular a lateral é gaveta, e ela abre e fecha', async () => {
 
 await passo('o menu do diretor é o mesmo do gestor, e leva até lá', async () => {
   const { ctx, p } = await diretorAberto();
-  await p.click('.p-item[href="gestor.html#hoje"]');
+  await p.click('.p-item[href="/painel"]');
   await p.waitForURL(/gestor\.html/, { timeout: 8000 });
   await ctx.close();
 });

@@ -10,7 +10,7 @@ export const BASE = `http://127.0.0.1:${PORTA}`;
 
 async function respondendo() {
   try {
-    const r = await fetch(`${BASE}/index.html`);
+    const r = await fetch(`${BASE}/`);
     return r.ok;
   } catch {
     return false;

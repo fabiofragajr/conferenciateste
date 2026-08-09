@@ -33,7 +33,7 @@ const passo = async (nome, fn) => {
 // O aparelho recebe o cadastro da base — é assim que ele passa a existir, e
 // FNOR/FSUL já nascem com donas diferentes. É essa diferença que o operador vai
 // descobrir ao bipar uma caixa de FSUL na carga da LOGDIS.
-await prepararAparelho(p, BASE, 'index.html');
+await prepararAparelho(p, BASE, '/entrar');
 vigiarErros(p, 'operador');
 
 await passo('aparelho sem cadastro avisa em vez de recusar a senha certa', async () => {
@@ -43,7 +43,7 @@ await passo('aparelho sem cadastro avisa em vez de recusar a senha certa', async
   const zerado = await navegador.newContext({ viewport: { width: 420, height: 900 }, locale: 'pt-BR' });
   await isolarDaProducao(zerado);
   const v = await zerado.newPage();
-  await v.goto(`${BASE}/index.html`);
+  await v.goto(`${BASE}/`);
   await v.waitForSelector('#dica-seed:not([hidden])', { timeout: 8000 });
   const dica = await v.textContent('#dica-seed');
   if (!/ainda não recebeu o cadastro/.test(dica)) throw new Error(`dica: ${dica}`);
@@ -165,20 +165,20 @@ vigiarErros(g, 'gestor');
 // A ana (não-gestora) segue logada neste contexto, da bipagem lá em cima. Quem
 // não é gestor não trava mais no painel — o boot manda pro app. Para testar o
 // login do sandro, o teste precisa sair primeiro, senão nem chega no bloqueio.
-await g.goto(`${BASE}/index.html`);
+await g.goto(`${BASE}/`);
 await g.evaluate(() => localStorage.removeItem('logdis.usuarioLogado'));
-await g.goto(`${BASE}/gestor.html`);
+await g.goto(`${BASE}/painel`);
 
 /** O painel virou seções: chegar a um cartão é escolher o item do menu antes. */
 const secao = async (pagina, id) => {
-  await pagina.click(`.p-item[href="#${id}"]`);
+  await pagina.click(`.p-item[href="${id === 'inicio' ? '/painel' : `/painel/${id}`}"]`);
   await pagina.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 5000 });
 };
 
 await passo('painel do gestor exige gestor e mostra divergência do dia', async () => {
-  await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
+  await g.waitForSelector('#view-login:not([hidden])', { timeout: 5000 });
   await fazerLogin(g, 'sandro');
-  await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+  await g.waitForSelector('#tela-painel:not([hidden])', { timeout: 5000 });
   // Espera a pintura, não a visibilidade: a seção de Pessoas nasce escondida.
   await g.waitForSelector('#lista-usuarios button[data-editar]', { state: 'attached', timeout: 10000 });
   const faixa = await g.innerHTML('#faixa-divergencia');
@@ -207,7 +207,7 @@ await passo('detalhe da sessão abre com mapa', async () => {
   await g.click('#gaveta-fechar');
   await g.waitForTimeout(200);
   // A foto do painel é a de Hoje: é a tela que o gestor abre de manhã.
-  await secao(g, 'hoje');
+  await secao(g, 'inicio');
   await g.screenshot({ path: 'tests/saida/tela-gestor.png', fullPage: true });
 });
 
@@ -260,7 +260,7 @@ await passo('gestor cria acesso sem senha e sem e-mail', async () => {
 await passo('quem foi cadastrado hoje entra hoje', async () => {
   const ctxMarcos = await navegador.newContext({ viewport: { width: 420, height: 900 }, locale: 'pt-BR' });
   const m = await ctxMarcos.newPage();
-  await prepararAparelho(m, BASE, 'index.html');
+  await prepararAparelho(m, BASE, '/entrar');
   // O aparelho do Marcos não conhece o login novo: entrega como a base entregaria.
   await m.evaluate(async (novo) => {
     const req = indexedDB.open('logdis');
@@ -330,14 +330,14 @@ await passo('gestor troca a própria senha na tela', async () => {
   await g.waitForTimeout(500);
 
   await g.click('#btn-sair');
-  await g.waitForSelector('#bloqueio:not([hidden])', { timeout: 5000 });
+  await g.waitForSelector('#view-login:not([hidden])', { timeout: 5000 });
 
   await fazerLogin(g, 'sandro', SENHA_ANTIGA);
   await g.waitForSelector('#login-erro:not([hidden])', { timeout: 5000 });
-  if (await g.isVisible('#conteudo:not([hidden])')) throw new Error('a senha antiga ainda entra');
+  if (await g.isVisible('#tela-painel:not([hidden])')) throw new Error('a senha antiga ainda entra');
 
   await fazerLogin(g, 'sandro', 'nova-senha-do-sandro');
-  await g.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
+  await g.waitForSelector('#tela-painel:not([hidden])', { timeout: 5000 });
 });
 
 await passo('gestor não consegue tirar o próprio acesso', async () => {
@@ -365,12 +365,12 @@ await passo('rota lida sem cadastro vira fila de decisão do gestor', async () =
 // ---- painel do diretor
 const d = await ctx.newPage();
 await d.setViewportSize({ width: 1440, height: 900 });
-vigiarErros(d, 'diretor');
-await d.goto(`${BASE}/diretor.html`);
+vigiarErros(d, 'indicadores');
+await d.goto(`${BASE}/painel/indicadores`);
 
 await passo('painel do diretor mostra indicadores e tendência', async () => {
-  await d.waitForSelector('#conteudo:not([hidden])', { timeout: 5000 });
-  // `#conteudo` aparece antes de os blocos pintarem: espera o conteúdo, não a
+  await d.waitForSelector('#tela-painel:not([hidden])', { timeout: 5000 });
+  // `#tela-painel` aparece antes de os blocos pintarem: espera o conteúdo, não a
   // caixa vazia. Sem isto o teste falha uma vez a cada tantas rodadas.
   await d.waitForFunction(
     () => (document.querySelector('#kpis')?.textContent ?? '').includes('Taxa de divergência'),

@@ -45,46 +45,46 @@ const abrirBipagem = async (p) => {
 };
 
 await passo('sandro entra no painel do gestor', async () => {
-  const { ctx, p } = await novoAparelho('gestor.html');
+  const { ctx, p } = await novoAparelho('/entrar');
   await entrar(p, 'sandro');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
   const quem = await p.textContent('#p-usuario');
   if (!/Sandro/.test(quem)) throw new Error(`usuário logado: ${quem}`);
   await ctx.close();
 });
 
 await passo('a senha do primeiro acesso passa a valer', async () => {
-  const { ctx, p } = await novoAparelho('gestor.html');
+  const { ctx, p } = await novoAparelho('/entrar');
   await entrar(p, 'sandro');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
 
   await p.click('#btn-sair');
-  await p.waitForSelector('#bloqueio:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#view-login:not([hidden])', { timeout: 8000 });
   await entrar(p, 'sandro', `${SENHA}-errada`);
   await p.waitForSelector('#login-erro:not([hidden])', { timeout: 8000 });
-  if (await p.isVisible('#conteudo:not([hidden])')) throw new Error('entrou com senha errada');
+  if (await p.isVisible('#tela-painel:not([hidden])')) throw new Error('entrou com senha errada');
 
   await entrar(p, 'sandro');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
   await ctx.close();
 });
 
 await passo('sandro abre o painel do diretor', async () => {
-  const { ctx, p } = await novoAparelho('diretor.html');
+  const { ctx, p } = await novoAparelho('/entrar');
   await entrar(p, 'sandro');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
   await ctx.close();
 });
 
 await passo('sandro entra pelo app e cai no painel, não na tela de transportadora', async () => {
-  const { ctx, p } = await novoAparelho('index.html', { width: 420, height: 900 });
+  const { ctx, p } = await novoAparelho('/entrar', { width: 420, height: 900 });
   await entrar(p, 'sandro');
-  await p.waitForURL(/gestor\.html/, { timeout: 8000 });
+  await p.waitForURL(/\/painel$/, { timeout: 8000 });
   await ctx.close();
 });
 
 await passo('ana entra pelo app e vai bipar', async () => {
-  const { ctx, p } = await novoAparelho('index.html', { width: 420, height: 900 });
+  const { ctx, p } = await novoAparelho('/entrar', { width: 420, height: 900 });
   await entrar(p, 'ana');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
   if (/gestor\.html/.test(p.url())) throw new Error('conferente foi parar no painel');
@@ -93,9 +93,9 @@ await passo('ana entra pelo app e vai bipar', async () => {
 });
 
 await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
-  const { ctx, p } = await novoAparelho('index.html', { width: 420, height: 900 });
+  const { ctx, p } = await novoAparelho('/entrar', { width: 420, height: 900 });
   await entrar(p, 'sandro');
-  await p.waitForURL(/gestor\.html/, { timeout: 8000 });
+  await p.waitForURL(/\/painel$/, { timeout: 8000 });
 
   await abrirBipagem(p);
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
@@ -106,7 +106,7 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   // (o botão da tela de bipagem é #btn-painel-bip; #btn-painel vive na tela
   // de transportadora e fica hidden enquanto a câmera está aberta)
   await p.click('#btn-painel-bip');
-  await p.waitForURL(/gestor\.html/, { timeout: 8000 });
+  await p.waitForURL(/\/painel$/, { timeout: 8000 });
   const abertas = await p.evaluate(async () => {
     const req = indexedDB.open('logdis');
     const bd = await new Promise((ok, falhou) => {
@@ -131,10 +131,10 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   await ctx.close();
 });
 
-await passo('quem não é gestor abre gestor.html e é mandado para a bipagem', async () => {
-  const { ctx, p } = await novoAparelho('gestor.html');
+await passo('quem não é gestor pede /painel e é mandado para a bipagem', async () => {
+  const { ctx, p } = await novoAparelho('/entrar');
   await entrar(p, 'ana');
-  await p.waitForURL(/index\.html/, { timeout: 8000 });
+  await p.waitForURL(/\/bipagem$/, { timeout: 8000 });
   await ctx.close();
 });
 

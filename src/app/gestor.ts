@@ -19,6 +19,7 @@ import {
 } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/painel-shell.js';
+import type { Ambiente } from './ambiente.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -49,13 +50,16 @@ let base: Base = {
 let dispositivos: Dispositivo[] = [];
 let relatorioAberto: DadosRelatorio | null = null;
 let shell: Shell | null = null;
+let ambiente: Ambiente | null = null;
 
 const MENU: ItemMenu[] = [
-  { id: 'hoje', rotulo: 'Hoje', grupo: 'Operação' },
+  { id: 'inicio', rotulo: 'Início', grupo: 'Operação' },
   { id: 'conferencias', rotulo: 'Conferências', grupo: 'Operação' },
   { id: 'ocorrencias', rotulo: 'Ocorrências', grupo: 'Operação' },
   { id: 'desempenho', rotulo: 'Desempenho', grupo: 'Análise' },
-  { id: 'diretor', rotulo: 'Visão do diretor', grupo: 'Análise', href: 'diretor.html' },
+  // Deixou de ser link para outra página: a leitura agregada virou seção deste
+  // mesmo painel, e a palavra "diretor" some da interface.
+  { id: 'indicadores', rotulo: 'Indicadores', grupo: 'Análise' },
   { id: 'pessoas', rotulo: 'Pessoas', grupo: 'Cadastros' },
   { id: 'transportadoras', rotulo: 'Transportadoras', grupo: 'Cadastros' },
   { id: 'rotas', rotulo: 'Códigos de rota', grupo: 'Cadastros' },
@@ -120,42 +124,13 @@ const dentro = (iso: string, de: string, ate: string): boolean => iso >= de && i
 
 /* --------------------------------------------------------------- login --- */
 
-const elLogin = {
-  bloqueio: $('#bloqueio'),
-  conteudo: $('#conteudo'),
-  form: $<HTMLFormElement>('#form-login'),
-  login: $<HTMLInputElement>('#in-login'),
-  senha: $<HTMLInputElement>('#in-senha'),
-  erro: $('#login-erro')
-};
-
-elLogin.form.addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  await bootPronto; // senão o boot termina depois e rebloqueia quem acabou de entrar
-  const r = await auth.entrar(elLogin.login.value, elLogin.senha.value);
-  if (!r.ok) {
-    elLogin.erro.textContent = r.erro;
-    elLogin.erro.hidden = false;
-    return;
-  }
-  if (!r.usuario.gestor) {
-    // Erro não é beco sem saída: quem não tem painel tem bipagem.
-    location.href = 'index.html';
-    return;
-  }
-  usuario = r.usuario;
-  await iniciarPainel();
-});
 
 /* ---------------------------------------------------------------- boot --- */
 
 async function boot(): Promise<void> {
-  await sync.garantirCadastroLocal();
-  sync.iniciarAuto();
-
+  // Cadastro local, sincronização e login são do `main.ts`. Aqui fica só o que
+  // é do painel: o chip da barra e a caixa de estado da fila.
   sync.aoMudarSync((estado) => {
-    // O chip vive na barra do shell, que só nasce depois do login: antes disso
-    // não há onde escrever, e sync não pode explodir por causa da tela.
     const chip = document.querySelector('#chip-sync');
     if (chip) {
       chip.textContent = !estado.configurado
@@ -167,15 +142,6 @@ async function boot(): Promise<void> {
     pintarFila(estado.ultimoErro, estado.pendentes, estado.configurado, estado.ultimoEnvio);
   });
 
-  usuario = await auth.usuarioLogado();
-  if (!usuario) {
-    elLogin.bloqueio.hidden = false;
-    return;
-  }
-  if (!usuario.gestor) {
-    location.href = 'index.html';
-    return;
-  }
   await iniciarPainel();
 }
 
@@ -183,16 +149,11 @@ async function iniciarPainel(): Promise<void> {
   shell = montarShell(MENU, {
     titulo: 'Painel do gestor',
     usuario: usuario ? `${usuario.nome} • gestor` : '',
-    inicial: 'hoje'
+    inicial: 'inicio'
   });
 
-  $('#btn-sair').addEventListener('click', () => {
-    auth.sair();
-    location.reload();
-  });
+  $('#btn-sair').addEventListener('click', () => ambiente?.sair());
 
-  elLogin.bloqueio.hidden = true;
-  elLogin.conteudo.hidden = false;
 
   const hoje = new Date();
   const trintaDias = new Date(hoje.getTime() - 29 * 86400000);
@@ -235,11 +196,11 @@ function pintarAgora(): void {
   // badge e a faixa do shell recolocam o alarme nas demais seções — inclusive em
   // Cadastros, onde ninguém iria procurar por ele. Em Hoje a faixa do shell se
   // cala: o alarme já está aqui, com os volumes na frente do gestor.
-  shell?.definirBadge('hoje', divergentes.length);
+  shell?.definirBadge('inicio', divergentes.length);
   shell?.definirAlerta(divergentes.length
     ? `<b>${divergentes.length} volume(s) de outra rota hoje.</b>
        Não podem embarcar — <a href="#hoje">ver quais são</a>.`
-    : null, { redundanteEm: 'hoje' });
+    : null, { redundanteEm: 'inicio' });
 
   // A divergência vem antes de tudo, sem filtro, sem clique.
   $('#faixa-divergencia').innerHTML = divergentes.length
@@ -445,11 +406,6 @@ function pintarOcorrencias(): void {
   hidratarFotos(alvo, lista);
 }
 
-for (const id of ['#oc-momento', '#oc-etiqueta', '#oc-dias']) {
-  $<HTMLSelectElement>(id).addEventListener('change', pintarOcorrencias);
-}
-$<HTMLInputElement>('#oc-busca').addEventListener('input', pintarOcorrencias);
-$('#btn-oc-csv').addEventListener('click', () => exportarCSVOcorrencias(ocorrenciasFiltradas()));
 
 function pintarRecorrentes(): void {
   const desde = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -590,29 +546,7 @@ async function liberarCarga(sessaoId: string): Promise<void> {
   await recarregarTudo();
 }
 
-$('#btn-filtrar').addEventListener('click', pintarHistorico);
 
-$('#btn-csv-periodo').addEventListener('click', () => {
-  const sessoes = sessoesFiltradas();
-  const ids = new Set(sessoes.map((s) => s.id));
-  const linhas = base.leituras
-    .filter((l) => ids.has(l.sessaoId))
-    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    .map((l) => {
-      const s = base.sessoes.find((x) => x.id === l.sessaoId);
-      const ocs = (base.ocPorSessao.get(l.sessaoId) ?? []).filter((o) => o.leituraId === l.id);
-      return [
-        s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '', (s?.rotas ?? []).join('|'),
-        l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
-        l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
-        ocs.map((o) => o.texto).join(' | '), l.rawData
-      ];
-    });
-  const cab = ['sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas', 'codigo_volume', 'rota',
-    'pedido', 'volume', 'status', 'origem', 'horario', 'lat', 'lng', 'precisao_m', 'geo_status',
-    'ocorrencias', 'raw_qr'];
-  baixarArquivo(paraCSV(cab, linhas), 'conferencias_periodo.csv', 'text/csv;charset=utf-8');
-});
 
 /* ------------------------------------------------- 3. desempenho --------- */
 
@@ -672,7 +606,7 @@ function pintarDesempenho(sessoes: Sessao[]): void {
 
 /* ---------------------------------------------------------- gaveta ------- */
 
-const gaveta = $('#gaveta');
+let gaveta!: HTMLElement;
 
 async function abrirGaveta(sessaoId: string): Promise<void> {
   relatorioAberto = await montarRelatorio(sessaoId);
@@ -685,10 +619,6 @@ async function abrirGaveta(sessaoId: string): Promise<void> {
   gaveta.hidden = false;
 }
 
-$('#gaveta-fechar').addEventListener('click', () => { gaveta.hidden = true; });
-gaveta.addEventListener('click', (ev) => { if (ev.target === gaveta) gaveta.hidden = true; });
-$('#gaveta-pdf').addEventListener('click', () => { if (relatorioAberto) void exportarPDF(relatorioAberto); });
-$('#gaveta-csv').addEventListener('click', () => { if (relatorioAberto) exportarCSV(relatorioAberto); });
 
 /* ------------------------------------------------------- 4. cadastros --- */
 
@@ -895,90 +825,9 @@ function entrarEmEdicao(u: Usuario): void {
   $<HTMLInputElement>('#u-nome').focus();
 }
 
-$('#u-cancelar').addEventListener('click', () => limparFormUsuario());
 
-$<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
 
-  const campos = {
-    nome: $<HTMLInputElement>('#u-nome').value,
-    login: $<HTMLInputElement>('#u-login').value,
-    funcao: $<HTMLInputElement>('#u-funcao').value,
-    placa: $<HTMLInputElement>('#u-placa').value,
-    telefone: $<HTMLInputElement>('#u-telefone').value,
-    gestor: $<HTMLSelectElement>('#u-gestor').value === 'sim'
-  };
-  const senha = $<HTMLInputElement>('#u-senha').value;
 
-  try {
-    if (editando) {
-      // Tirar o próprio acesso ao painel deixa o gestor do lado de fora.
-      if (editando === usuario?.id && !campos.gestor) {
-        throw new Error('Você não pode tirar o próprio acesso ao painel.');
-      }
-      const salvo = await auth.atualizarUsuario(editando, campos, senha || undefined);
-      limparFormUsuario();
-      await recarregarTudo();
-      avisoUsuario(`${salvo.nome} atualizado.`);
-    } else {
-      const novo = await auth.criarUsuario({ ...campos, senha: senha || undefined });
-      limparFormUsuario();
-      await recarregarTudo();
-      avisoUsuario(senha
-        ? `${novo.nome} cadastrado. Passe a senha para a pessoa; ela já pode entrar.`
-        : `${novo.nome} cadastrado. Na primeira entrada, ela escolhe a própria senha.`);
-    }
-  } catch (e) {
-    avisoUsuario(e instanceof Error ? e.message : 'Não foi possível salvar.', true);
-  }
-});
-
-$<HTMLFormElement>('#form-transportadora').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const msg = $('#t-msg');
-  const nome = $<HTMLInputElement>('#t-nome').value.trim();
-  if (!nome) {
-    msg.textContent = 'Informe o nome da transportadora.';
-    msg.hidden = false;
-    return;
-  }
-
-  await db.salvar('transportadoras', {
-    ...novoSync(),
-    nome,
-    cnpj: $<HTMLInputElement>('#t-cnpj').value.trim(),
-    responsavel: $<HTMLInputElement>('#t-resp').value.trim(),
-    telefone: $<HTMLInputElement>('#t-tel').value.trim(),
-    email: '',
-    ativo: true
-  });
-
-  $<HTMLFormElement>('#form-transportadora').reset();
-  msg.hidden = true;
-  await recarregarTudo();
-});
-
-$<HTMLFormElement>('#form-rota').addEventListener('submit', async (ev) => {
-  ev.preventDefault();
-  const msg = $('#r-msg');
-
-  const r = await cadastrarRota({
-    codigo: $<HTMLInputElement>('#r-codigo').value,
-    nome: $<HTMLInputElement>('#r-nome').value,
-    transportadoraId: $<HTMLSelectElement>('#r-transportadora').value,
-    descricao: $<HTMLInputElement>('#r-descricao').value
-  });
-
-  if (!r.ok) {
-    msg.textContent = r.erro;
-    msg.hidden = false;
-    return;
-  }
-
-  $<HTMLFormElement>('#form-rota').reset();
-  msg.hidden = true;
-  await recarregarTudo();
-});
 
 /* --------------------------------------------------- 5. sincronização --- */
 
@@ -1000,41 +849,199 @@ function pintarFila(erro: string | null, pendentes: number, configurado: boolean
     ${erro ? `<p class="erro">${esc(erro)}</p>` : ''}`;
 }
 
-$('#btn-sync').addEventListener('click', async () => {
-  await sync.sincronizar();
-  await recarregarTudo();
-});
 
-$('#btn-retry').addEventListener('click', async () => {
-  await sync.tentarNovamente();
-  await recarregarTudo();
-});
 
-$('#btn-salvar-sup').addEventListener('click', async () => {
-  await salvarConfig({
-    url: $<HTMLInputElement>('#s-url').value,
-    anonKey: $<HTMLInputElement>('#s-key').value,
-    bucket: $<HTMLInputElement>('#s-bucket').value
-  });
-  const msg = $('#s-msg');
-  msg.className = 'sucesso';
-  msg.textContent = 'Configuração salva neste aparelho.';
-  msg.hidden = false;
-  await sync.atualizarContagem();
-});
 
-$('#btn-testar-sup').addEventListener('click', async () => {
-  const msg = $('#s-msg');
-  msg.textContent = 'Testando…';
-  msg.className = 'sucesso';
-  msg.hidden = false;
-  const r = await testarConexao();
-  msg.className = r.ok ? 'sucesso' : 'erro';
-  msg.textContent = r.mensagem;
-});
 
 // O boot decide a tela inicial e demora (seed, IndexedDB, rede). Guardar a
 // promessa deixa o login esperar por ele em vez de disputar a tela.
-const bootPronto = boot().catch((e: unknown) => {
-  console.error('boot', e);
-});
+/**
+ * Registra tudo que antes rodava no `import`.
+ *
+ * Precisa de `elLogin` e `gaveta` já resolvidos: `$()` lança quando não acha
+ * (util.ts), e no app único este módulo passa a ser importado antes de a
+ * região do painel existir no DOM.
+ */
+function ligarEventos(): void {
+
+  for (const id of ['#oc-momento', '#oc-etiqueta', '#oc-dias']) {
+    $<HTMLSelectElement>(id).addEventListener('change', pintarOcorrencias);
+  }
+
+  $<HTMLInputElement>('#oc-busca').addEventListener('input', pintarOcorrencias);
+
+  $('#btn-oc-csv').addEventListener('click', () => exportarCSVOcorrencias(ocorrenciasFiltradas()));
+
+  $('#btn-filtrar').addEventListener('click', pintarHistorico);
+
+  $('#btn-csv-periodo').addEventListener('click', () => {
+    const sessoes = sessoesFiltradas();
+    const ids = new Set(sessoes.map((s) => s.id));
+    const linhas = base.leituras
+      .filter((l) => ids.has(l.sessaoId))
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      .map((l) => {
+        const s = base.sessoes.find((x) => x.id === l.sessaoId);
+        const ocs = (base.ocPorSessao.get(l.sessaoId) ?? []).filter((o) => o.leituraId === l.id);
+        return [
+          s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '', (s?.rotas ?? []).join('|'),
+          l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
+          l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
+          ocs.map((o) => o.texto).join(' | '), l.rawData
+        ];
+      });
+    const cab = ['sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas', 'codigo_volume', 'rota',
+      'pedido', 'volume', 'status', 'origem', 'horario', 'lat', 'lng', 'precisao_m', 'geo_status',
+      'ocorrencias', 'raw_qr'];
+    baixarArquivo(paraCSV(cab, linhas), 'conferencias_periodo.csv', 'text/csv;charset=utf-8');
+  });
+
+  $('#gaveta-fechar').addEventListener('click', () => { gaveta.hidden = true; });
+
+  gaveta.addEventListener('click', (ev) => { if (ev.target === gaveta) gaveta.hidden = true; });
+
+  $('#gaveta-pdf').addEventListener('click', () => { if (relatorioAberto) void exportarPDF(relatorioAberto); });
+
+  $('#gaveta-csv').addEventListener('click', () => { if (relatorioAberto) exportarCSV(relatorioAberto); });
+
+  $('#u-cancelar').addEventListener('click', () => limparFormUsuario());
+
+  $<HTMLFormElement>('#form-usuario').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+
+    const campos = {
+      nome: $<HTMLInputElement>('#u-nome').value,
+      login: $<HTMLInputElement>('#u-login').value,
+      funcao: $<HTMLInputElement>('#u-funcao').value,
+      placa: $<HTMLInputElement>('#u-placa').value,
+      telefone: $<HTMLInputElement>('#u-telefone').value,
+      gestor: $<HTMLSelectElement>('#u-gestor').value === 'sim'
+    };
+    const senha = $<HTMLInputElement>('#u-senha').value;
+
+    try {
+      if (editando) {
+        // Tirar o próprio acesso ao painel deixa o gestor do lado de fora.
+        if (editando === usuario?.id && !campos.gestor) {
+          throw new Error('Você não pode tirar o próprio acesso ao painel.');
+        }
+        const salvo = await auth.atualizarUsuario(editando, campos, senha || undefined);
+        limparFormUsuario();
+        await recarregarTudo();
+        avisoUsuario(`${salvo.nome} atualizado.`);
+      } else {
+        const novo = await auth.criarUsuario({ ...campos, senha: senha || undefined });
+        limparFormUsuario();
+        await recarregarTudo();
+        avisoUsuario(senha
+          ? `${novo.nome} cadastrado. Passe a senha para a pessoa; ela já pode entrar.`
+          : `${novo.nome} cadastrado. Na primeira entrada, ela escolhe a própria senha.`);
+      }
+    } catch (e) {
+      avisoUsuario(e instanceof Error ? e.message : 'Não foi possível salvar.', true);
+    }
+  });
+
+  $<HTMLFormElement>('#form-transportadora').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('#t-msg');
+    const nome = $<HTMLInputElement>('#t-nome').value.trim();
+    if (!nome) {
+      msg.textContent = 'Informe o nome da transportadora.';
+      msg.hidden = false;
+      return;
+    }
+
+    await db.salvar('transportadoras', {
+      ...novoSync(),
+      nome,
+      cnpj: $<HTMLInputElement>('#t-cnpj').value.trim(),
+      responsavel: $<HTMLInputElement>('#t-resp').value.trim(),
+      telefone: $<HTMLInputElement>('#t-tel').value.trim(),
+      email: '',
+      ativo: true
+    });
+
+    $<HTMLFormElement>('#form-transportadora').reset();
+    msg.hidden = true;
+    await recarregarTudo();
+  });
+
+  $<HTMLFormElement>('#form-rota').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const msg = $('#r-msg');
+
+    const r = await cadastrarRota({
+      codigo: $<HTMLInputElement>('#r-codigo').value,
+      nome: $<HTMLInputElement>('#r-nome').value,
+      transportadoraId: $<HTMLSelectElement>('#r-transportadora').value,
+      descricao: $<HTMLInputElement>('#r-descricao').value
+    });
+
+    if (!r.ok) {
+      msg.textContent = r.erro;
+      msg.hidden = false;
+      return;
+    }
+
+    $<HTMLFormElement>('#form-rota').reset();
+    msg.hidden = true;
+    await recarregarTudo();
+  });
+
+  $('#btn-sync').addEventListener('click', async () => {
+    await sync.sincronizar();
+    await recarregarTudo();
+  });
+
+  $('#btn-retry').addEventListener('click', async () => {
+    await sync.tentarNovamente();
+    await recarregarTudo();
+  });
+
+  $('#btn-salvar-sup').addEventListener('click', async () => {
+    await salvarConfig({
+      url: $<HTMLInputElement>('#s-url').value,
+      anonKey: $<HTMLInputElement>('#s-key').value,
+      bucket: $<HTMLInputElement>('#s-bucket').value
+    });
+    const msg = $('#s-msg');
+    msg.className = 'sucesso';
+    msg.textContent = 'Configuração salva neste aparelho.';
+    msg.hidden = false;
+    await sync.atualizarContagem();
+  });
+
+  $('#btn-testar-sup').addEventListener('click', async () => {
+    const msg = $('#s-msg');
+    msg.textContent = 'Testando…';
+    msg.className = 'sucesso';
+    msg.hidden = false;
+    const r = await testarConexao();
+    msg.className = r.ok ? 'sucesso' : 'erro';
+    msg.textContent = r.mensagem;
+  });
+}
+
+let montado = false;
+
+/**
+ * Ponto de entrada do painel. Quem chama é o `main.ts`, que já resolveu quem
+ * está logado e se essa pessoa tem acesso — aqui não se decide papel.
+ */
+export async function montar(amb: Ambiente): Promise<void> {
+  ambiente = amb;
+  usuario = amb.usuario;
+  if (montado) return;
+  montado = true;
+  gaveta = $('#gaveta');
+  ligarEventos();
+  await boot().catch((e: unknown) => {
+    console.error('painel', e);
+  });
+}
+
+/** Mostra uma seção do painel. Chamado pelo roteador a cada navegação. */
+export function mostrarSecao(id: string): void {
+  shell?.irPara(id);
+}

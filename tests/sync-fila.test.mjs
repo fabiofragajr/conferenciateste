@@ -83,7 +83,7 @@ const ctx = await navegador.newContext({
 });
 const p = await ctx.newPage();
 
-await prepararAparelho(p, BASE, 'index.html');
+await prepararAparelho(p, BASE, '/entrar');
 
 // Aponta o aparelho para a base que recusa, e deixa uma rota na fila para ser
 // recusada — é ela que antes travava tudo o que vinha depois.
@@ -153,11 +153,11 @@ await passo('o erro aparece para o gestor em vez de ficar escondido', async () =
   // A ana (não-gestora) segue logada neste contexto. Quem não é gestor não
   // trava mais no painel — o boot manda pro app; o teste precisa sair antes
   // de logar como sandro, senão nunca chega no formulário de login.
-  await g.goto(`${BASE}/index.html`);
+  await g.goto(`${BASE}/`);
   await g.evaluate(() => localStorage.removeItem('logdis.usuarioLogado'));
-  await g.goto(`${BASE}/gestor.html`);
+  await g.goto(`${BASE}/painel`);
   await fazerLogin(g, 'sandro');
-  await g.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+  await g.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
   await g.waitForFunction(
     () => /rotas_codigo_key|duplicate key/.test(document.querySelector('#fila-status')?.textContent ?? ''),
     null,
@@ -225,7 +225,7 @@ await passo('a senha definida num aparelho vale no outro, já na 1ª tentativa',
   // Segundo aparelho: tem o Sandro com a senha velha e nunca ouviu falar da nova.
   const ctx2 = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: 'pt-BR' });
   const p2 = await ctx2.newPage();
-  await cadastro.prepararAparelho(p2, BASE, 'gestor.html');
+  await cadastro.prepararAparelho(p2, BASE, '/entrar');
   await p2.evaluate(async ({ porta, hashAntigo }) => {
     const req = indexedDB.open('logdis');
     const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
@@ -269,7 +269,7 @@ await passo('a senha definida num aparelho vale no outro, já na 1ª tentativa',
   await p2.fill('#in-login', 'sandro');
   await p2.fill('#in-senha', 'senha-da-base');
   await p2.click('#form-login button[type=submit]');
-  await p2.waitForSelector('#conteudo:not([hidden])', { timeout: 15000 });
+  await p2.waitForSelector('#tela-painel:not([hidden])', { timeout: 15000 });
   await ctx2.close();
 });
 

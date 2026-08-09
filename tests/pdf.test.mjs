@@ -52,7 +52,7 @@ const vigiar = (pagina, quem) => {
     if (m.type() === 'error') erros.push(`[console ${quem}] ${m.text()}`);
   });
 };
-await prepararAparelho(p, BASE, 'index.html');
+await prepararAparelho(p, BASE, '/entrar');
 vigiar(p, 'operador');
 await fazerLogin(p, 'ana');
 await p.waitForSelector('#view-grupo:not([hidden]), #view-bipagem:not([hidden])');
@@ -82,10 +82,10 @@ await baixar(p, () => p.click('#btn-pdf'), 'sessao');
 // ---- diretor: PDF do período
 const ctx2 = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: 'pt-BR', acceptDownloads: true });
 const d = await ctx2.newPage();
-await prepararAparelho(d, BASE, 'diretor.html');
+await prepararAparelho(d, BASE, '/entrar');
 vigiar(d, 'diretor');
 await fazerLogin(d, 'sandro');
-await d.waitForSelector('#conteudo:not([hidden])');
+await d.waitForSelector('#tela-painel:not([hidden])');
 await baixar(d, () => d.click('#btn-pdf-periodo'), 'diretor');
 
 await navegador.close();

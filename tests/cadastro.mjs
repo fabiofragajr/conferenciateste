@@ -88,11 +88,11 @@ export async function isolarDaProducao(contexto) {
  *    cadastro de lá antes de o teste gravar o dele — e `FNOR` chegaria duas
  *    vezes, com ids diferentes, contra um índice único.
  */
-export async function prepararAparelho(pagina, base, arquivo = 'index.html') {
+export async function prepararAparelho(pagina, base, rota = '/entrar') {
   const contexto = pagina.context();
   await isolarDaProducao(contexto);
 
-  await pagina.goto(`${base}/${arquivo}`);
+  await pagina.goto(`${base}${rota}`);
   await pagina.waitForFunction(() => indexedDB.databases().then((l) => l.some((d) => d.name === 'logdis')));
 
   await pagina.evaluate(async (cadastro) => {

@@ -1,22 +1,12 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import { fileURLToPath } from 'node:url';
-
-const raiz = (arquivo: string) => fileURLToPath(new URL(arquivo, import.meta.url));
-
 export default defineConfig({
-  // caminhos relativos: o app pode ser servido de subpasta (GitHub Pages, IIS interno...)
-  base: './',
+  // Raiz absoluta, não relativa: com rota de dois níveis (/painel/conferencias)
+  // um `./assets/app.js` viraria `/painel/assets/app.js` e o app não carregaria.
+  base: '/',
 
   build: {
-    target: 'es2022',
-    rollupOptions: {
-      input: {
-        operador: raiz('./index.html'),
-        gestor: raiz('./gestor.html'),
-        diretor: raiz('./diretor.html')
-      }
-    }
+    target: 'es2022'
   },
 
   server: {
@@ -38,8 +28,8 @@ export default defineConfig({
         description: 'Conferência de volumes por bipagem na expedição da Milfarma.',
         lang: 'pt-BR',
         dir: 'ltr',
-        start_url: './index.html',
-        scope: './',
+        start_url: '/',
+        scope: '/',
         display: 'standalone',
         orientation: 'portrait',
         categories: ['business', 'productivity', 'utilities'],
@@ -59,8 +49,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         cleanupOutdatedCaches: true,
+        // Toda rota cai no index.html: o app é um documento só, e /painel/rotas
+        // precisa abrir offline igual à raiz.
         navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/gestor\.html/, /diretor\.html/],
         // requisições ao Supabase nunca podem ser servidas de cache
         navigationPreload: false,
         runtimeCaching: []

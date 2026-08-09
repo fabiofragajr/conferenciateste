@@ -29,10 +29,10 @@ const passo = async (nome, fn) => {
 const painelAberto = async (viewport = { width: 1440, height: 900 }, semear = null) => {
   const ctx = await navegador.newContext({ viewport, locale: 'pt-BR' });
   const p = await ctx.newPage();
-  await prepararAparelho(p, BASE, 'gestor.html');
+  await prepararAparelho(p, BASE, '/entrar');
   if (semear) await semear(p);
   await entrar(p, 'sandro');
-  await p.waitForSelector('#conteudo:not([hidden])', { timeout: 8000 });
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
   return { ctx, p };
 };
 
@@ -117,7 +117,7 @@ const semearDivergencia = async (pagina) => {
 };
 
 const irParaSecao = async (p, id) => {
-  await p.click(`.p-item[href="#${id}"]`);
+  await p.click(`.p-item[href="${id === 'inicio' ? '/painel' : `/painel/${id}`}"]`);
   await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
 };
 
@@ -143,21 +143,24 @@ await passo('o badge de divergência acompanha toda seção, inclusive Hoje', as
   await p.waitForSelector('#faixa-divergencia .p-faixa-alerta', { timeout: 8000 });
 
   // O badge é a contagem, não a repetição do aviso: ele fica mesmo em Hoje.
-  for (const id of ['hoje', 'transportadoras', 'sincronizacao']) {
+  for (const id of ['inicio', 'transportadoras', 'sincronizacao']) {
     await irParaSecao(p, id);
-    if (!(await p.isVisible('[data-badge="hoje"]'))) throw new Error(`${id}: badge escondido`);
-    const n = (await p.textContent('[data-badge="hoje"]')).trim();
+    if (!(await p.isVisible('[data-badge="inicio"]'))) throw new Error(`${id}: badge escondido`);
+    const n = (await p.textContent('[data-badge="inicio"]')).trim();
     if (n !== String(DIVERGENCIAS)) throw new Error(`${id}: badge diz ${n}, e são ${DIVERGENCIAS}`);
   }
   await ctx.close();
 });
 
-await passo('cada item do menu mostra sua seção e escreve o hash', async () => {
+await passo('cada item do menu mostra sua seção e escreve o caminho', async () => {
   const { ctx, p } = await painelAberto();
   for (const id of SECOES) {
-    await p.click(`.p-item[href="#${id}"]`);
+    await p.click(`.p-item[href="${id === 'inicio' ? '/painel' : `/painel/${id}`}"]`);
     await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
-    if (!p.url().endsWith(`#${id}`)) throw new Error(`hash não acompanhou: ${p.url()}`);
+    // O caminho é que acompanha, não o hash: quem é dono da URL agora é o
+    // roteador. Duas coisas escrevendo o endereço se desfaziam mutuamente.
+    const esperado = id === 'inicio' ? '/painel' : `/painel/${id}`;
+    if (!p.url().endsWith(esperado)) throw new Error(`caminho não acompanhou: ${p.url()}`);
     const visiveis = await p.$$eval('[data-secao]', (ns) => ns.filter((n) => !n.hidden).length);
     if (visiveis !== 1) throw new Error(`${visiveis} seções visíveis ao mesmo tempo`);
   }
@@ -166,7 +169,7 @@ await passo('cada item do menu mostra sua seção e escreve o hash', async () =>
 
 await passo('recarregar a página cai na mesma seção', async () => {
   const { ctx, p } = await painelAberto();
-  await p.click('.p-item[href="#transportadoras"]');
+  await p.click('.p-item[href="/painel/transportadoras"]');
   await p.waitForSelector('[data-secao="transportadoras"]:not([hidden])', { timeout: 4000 });
   await p.reload();
   await p.waitForSelector('[data-secao="transportadoras"]:not([hidden])', { timeout: 8000 });
@@ -175,7 +178,7 @@ await passo('recarregar a página cai na mesma seção', async () => {
 
 await passo('sem hash, abre em Hoje', async () => {
   const { ctx, p } = await painelAberto();
-  await p.waitForSelector('[data-secao="hoje"]:not([hidden])', { timeout: 4000 });
+  await p.waitForSelector('[data-secao="inicio"]:not([hidden])', { timeout: 4000 });
   await ctx.close();
 });
 
@@ -184,7 +187,7 @@ await passo('no celular a lateral é gaveta, e ela abre e fecha ao escolher', as
   if (await p.isVisible('.p-lateral')) throw new Error('gaveta já nasce aberta no celular');
   await p.click('.p-hamburguer');
   await p.waitForSelector('.p-lateral.aberta', { timeout: 4000 });
-  await p.click('.p-item[href="#sincronizacao"]');
+  await p.click('.p-item[href="/painel/sincronizacao"]');
   await p.waitForSelector('[data-secao="sincronizacao"]:not([hidden])', { timeout: 4000 });
   // Escolher um item fecha a gaveta: ninguém quer tocar duas vezes.
   if (await p.isVisible('.p-lateral.aberta')) throw new Error('a gaveta ficou aberta depois de escolher');
@@ -223,10 +226,10 @@ for (const tela of CELULARES) {
 
     // Toda seção precisa passar: a tabela densa de Conferências é a mais larga,
     // e é ela que costuma empurrar a página inteira.
-    for (const id of ['hoje', ...SECOES]) {
+    for (const id of ['inicio', ...SECOES]) {
       await p.click(`.p-hamburguer`);
       await p.waitForSelector('.p-lateral.aberta', { timeout: 4000 });
-      await p.click(`.p-item[href="#${id}"]`);
+      await p.click(`.p-item[href="${id === 'inicio' ? '/painel' : `/painel/${id}`}"]`);
       await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
       const sobra = await medir();
       if (sobra > 1) throw new Error(`${id}: sobram ${sobra}px de rolagem horizontal`);

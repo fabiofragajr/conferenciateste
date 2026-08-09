@@ -11,6 +11,7 @@
 // contagem não é aviso repetido.
 
 import { $, $$, esc } from './util.js';
+import { caminhoDe, type Secao } from './router.js';
 
 export interface ItemMenu {
   /** Vira o hash da URL e o `data-secao` da seção correspondente. */
@@ -46,7 +47,6 @@ export interface Shell {
 }
 
 export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
-  const secoes = itens.filter((i) => !i.href);
   const grupos = [...new Set(itens.map((i) => i.grupo))];
   const ouvintes: ((id: string) => void)[] = [];
 
@@ -54,7 +54,7 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
     <div class="p-lateral-grupo">
       <h2>${esc(g)}</h2>
       ${itens.filter((i) => i.grupo === g).map((i) => `
-        <a class="p-item" href="${i.href ? esc(i.href) : `#${esc(i.id)}`}" data-item="${esc(i.id)}">
+        <a class="p-item" href="${i.href ? esc(i.href) : caminhoDe({ tela: 'painel', secao: esc(i.id) as Secao })}" data-item="${esc(i.id)}">
           <span>${esc(i.rotulo)}</span>
           <span class="p-badge" data-badge="${esc(i.id)}" hidden></span>
         </a>`).join('')}
@@ -86,7 +86,7 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
       ${lista}
       <div class="p-lateral-rodape">
         <span id="p-usuario" class="p-usuario">${esc(op.usuario)}</span>
-        <a class="btn btn-secundario" id="btn-bipar" href="index.html#bipar">Abrir bipagem</a>
+        <a class="btn btn-secundario" id="btn-bipar" href="/bipagem">Abrir bipagem</a>
         <button id="btn-sair" class="btn btn-fantasma" type="button">Sair</button>
       </div>
     </nav>`);
@@ -114,7 +114,6 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
   });
   fundo.addEventListener('click', fecharGaveta);
 
-  const ehSecao = (id: string): boolean => secoes.some((s) => s.id === id);
 
   // Quem decide se a faixa aparece é a seção visível, não quem chama
   // `definirAlerta` — o painel repinta a cada 15s e trocaria de seção no meio.
@@ -145,27 +144,15 @@ export function montarShell(itens: ItemMenu[], op: OpcoesShell): Shell {
     for (const fn of ouvintes) fn(id);
   };
 
-  // Hash que não é seção é âncora dentro da página — os avisos de "Precisa de
-  // atenção" apontam para um cartão, não para um item de menu. Trocar a seção
-  // (ou rolar para o topo) aí levaria o gestor para longe do que ele clicou.
-  window.addEventListener('hashchange', () => {
-    const id = location.hash.slice(1);
-    if (ehSecao(id)) mostrar(id);
-  });
-
-  const atual = (): string => {
-    const id = location.hash.slice(1);
-    return ehSecao(id) ? id : op.inicial;
-  };
-
-  mostrar(atual());
+  // O shell não escreve mais na URL. Duas coisas donas do endereço — o roteador
+  // no caminho e o shell no hash — se desfaziam mutuamente: o clique no menu
+  // trocava o hash, o roteador relia o caminho e devolvia a seção para a
+  // inicial. Agora o caminho manda, e o shell só desenha o que mandarem.
+  mostrar(op.inicial);
 
   return {
     aoTrocarSecao: (fn) => { ouvintes.push(fn); },
-    irPara: (id) => {
-      if (location.hash.slice(1) === id) mostrar(id);
-      else location.hash = id;
-    },
+    irPara: (id) => mostrar(id),
     secaoAtual: () => visivel,
     definirBadge: (id, n) => {
       const b = document.querySelector<HTMLElement>(`[data-badge="${id}"]`);
