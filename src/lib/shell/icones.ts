@@ -58,6 +58,23 @@ const TRACOS: Record<string, string> = {
   // setas em ciclo — a fila subindo e o cadastro descendo
   sincronizacao: '<path d="M20.7 11.4a8.7 8.7 0 0 0-14.9-5.5L2.4 9.2"/><path d="M2.4 4.3v4.9h4.9"/><path d="M3.3 12.6a8.7 8.7 0 0 0 14.9 5.5l3.4-3.3"/><path d="M21.6 19.7v-4.9h-4.9"/>',
 
+  // ------------------------------------------------------------ operação ---
+  // A doca usa o MESMO conjunto do painel, e não um próprio: quem é gestor
+  // circula entre as duas telas o dia todo, e duas gramáticas de ícone no mesmo
+  // app é a pessoa tendo que aprender duas vezes.
+
+  // seta para a esquerda — a saída da bipagem, que antes não existia
+  voltar: '<path d="M20 12H4.2"/><path d="m10.4 5.6-6.2 6.4 6.2 6.4"/>',
+
+  // lanterna
+  lanterna: '<path d="M6.4 2.8h11.2v3.4a2 2 0 0 1-.5 1.3l-2.2 2.6a2 2 0 0 0-.5 1.3v8a1.8 1.8 0 0 1-1.8 1.8h-1.2a1.8 1.8 0 0 1-1.8-1.8v-8a2 2 0 0 0-.5-1.3L6.9 7.5a2 2 0 0 1-.5-1.3Z"/><path d="M6.4 6.4h11.2"/><path d="M12 13.6v2.2"/>',
+
+  // teclado — a entrada manual, o caminho de quando o QR está rasgado
+  teclado: '<rect x="2.4" y="5.6" width="19.2" height="12.8" rx="2.2"/><path d="M6.4 9.6h.01"/><path d="M10 9.6h.01"/><path d="M13.6 9.6h.01"/><path d="M17.2 9.6h.01"/><path d="M6.4 12.8h.01"/><path d="M17.2 12.8h.01"/><path d="M9.4 15.6h5.2"/>',
+
+  // bandeira de chegada — encerrar a conferência
+  encerrar: '<path d="M5 21.4V3.2"/><path d="M5 4.2h11.6l-1.9 3.6 1.9 3.6H5"/>',
+
   // mira com a linha de leitura — o botão que sai do painel e abre a câmera.
   // Não pode ser a prancheta de `conferencias`: o mesmo desenho para "ver as
   // conferências" e "ir bipar agora" é o defeito que os glifos já tinham.

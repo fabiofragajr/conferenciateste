@@ -130,3 +130,17 @@ export async function entrar(pagina, login, senha = SENHA) {
   await pagina.fill('#in-senha', senha);
   await pagina.click('#form-login button[type=submit]');
 }
+
+/**
+ * Abre a folha "Mais ações" e encerra a conferência.
+ *
+ * Encerrar saiu da barra fixa da bipagem: era um botão vermelho permanente ao
+ * lado dos de uso diário, sendo a única ação irreversível da tela. Agora são
+ * dois toques de propósito, e o caminho mora aqui para não se repetir em
+ * quatro testes.
+ */
+export async function encerrarConferencia(pagina) {
+  await pagina.click('#btn-mais-bip');
+  await pagina.waitForSelector('#modal-mais:not([hidden])', { timeout: 4000 });
+  await pagina.click('#mais-encerrar');
+}

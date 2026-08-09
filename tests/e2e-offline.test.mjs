@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
-import { prepararAparelho, entrar as fazerLogin } from './cadastro.mjs';
+import { prepararAparelho, entrar as fazerLogin, encerrarConferencia } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -92,7 +92,7 @@ await passo('recarregar no meio da conferência retoma a sessão aberta', async 
 });
 
 await passo('relatório offline com pedidos incompletos', async () => {
-  await p.click('#btn-encerrar');
+  await encerrarConferencia(p);
   await p.click('#enc-confirmar');
   await p.waitForSelector('#view-relatorio:not([hidden])', { timeout: 8000 });
   const html = await p.innerHTML('#relatorio-area');

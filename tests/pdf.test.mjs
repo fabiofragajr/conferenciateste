@@ -10,7 +10,7 @@ import { stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
-import { prepararAparelho, entrar as fazerLogin } from './cadastro.mjs';
+import { prepararAparelho, entrar as fazerLogin, encerrarConferencia } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -74,7 +74,7 @@ await p.fill('#oc-texto', 'Cheguei 7h, só me atenderam 9h20. Doca 3 fechada.');
 await p.click('#oc-salvar');
 await p.waitForTimeout(300);
 
-await p.click('#btn-encerrar');
+await encerrarConferencia(p);
 await p.click('#enc-confirmar');
 await p.waitForSelector('#view-relatorio:not([hidden])');
 await baixar(p, () => p.click('#btn-pdf'), 'sessao');

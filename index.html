@@ -82,23 +82,40 @@
 
   <!-- ---------------------------------------------------------- BIPAGEM -->
   <section id="view-bipagem" class="view" hidden>
-    <div class="bip-topo">
-      <img class="bip-marca" src="./logdis-simbolo.png" alt="" width="30" height="30" />
+    <!-- Uma linha de topo, e não três. Aqui a pessoa está de pé com caixa na
+         mão: cada pixel gasto acima da câmera é pixel que não é leitura. A
+         marca saiu — quem está bipando já sabe em que app está. -->
+    <header class="bip-topo">
+      <button id="btn-voltar-bip" class="bip-icone" type="button"></button>
       <div class="bip-carga">
         <strong id="bip-grupo">—</strong>
         <span id="bip-rotas">—</span>
       </div>
-      <div class="bip-topo-acoes">
-        <button id="btn-painel-bip" class="chip-btn" hidden>Painel</button>
-        <button id="btn-tocha" class="chip-btn" hidden aria-pressed="false">Luz</button>
-        <span id="chip-geo" class="chip chip-geo">GPS</span>
-        <span id="chip-sync" class="chip chip-sync">—</span>
-      </div>
+      <button id="btn-mais-bip" class="bip-icone" type="button" aria-label="Mais ações"></button>
+    </header>
+
+    <!-- Evidência, não operação: fica pequeno e fora do caminho. -->
+    <div class="bip-estado">
+      <span id="chip-sync" class="chip chip-sync">—</span>
+      <span id="chip-geo" class="chip chip-geo">GPS</span>
     </div>
 
     <div id="camera-area">
       <video id="video" playsinline muted></video>
       <div class="mira"></div>
+
+      <!-- A luz mora sobre a câmera, no canto do polegar: é onde todo app de
+           câmera a põe, e assim ela não custa uma faixa de altura. -->
+      <button id="btn-tocha" class="bip-luz" hidden aria-pressed="false"></button>
+
+      <!-- O resultado da leitura fica SOBRE a câmera e não sai mais de lá: sem
+           faixa própria, a câmera cresce; e sem sumir sozinho, nenhuma leitura
+           passa sem status na tela. Enquanto não há leitura, ele é a dica. -->
+      <div id="banner" class="banner st-neutro">
+        <span id="banner-status">Aponte para a etiqueta</span>
+        <span id="banner-codigo">Leitura automática</span>
+      </div>
+
       <div id="camera-erro" class="camera-erro" hidden>
         <div>
           <p id="camera-erro-txt"></p>
@@ -107,27 +124,42 @@
       </div>
     </div>
 
-    <div id="banner" class="banner st-neutro">
-      <span id="banner-status">Aponte para a etiqueta</span>
-      <span id="banner-codigo"></span>
-    </div>
-
-    <div class="contadores">
-      <div class="cont"><b id="c-total">0</b><small>Total</small></div>
-      <div class="cont st-ok"><b id="c-ok">0</b><small>Liberados</small></div>
-      <div class="cont st-div"><b id="c-div">0</b><small>Separar</small></div>
-      <div class="cont st-dup"><b id="c-dup">0</b><small>Duplicados</small></div>
-      <div class="cont st-inv"><b id="c-inv">0</b><small>Inválidos</small></div>
+    <!-- Quatro, não cinco. Duplicado e inválido são o mesmo problema para quem
+         está carregando: some da conta principal e aparece ao tocar. -->
+    <div class="contadores" role="group" aria-label="Contagem da carga">
+      <button class="cont" type="button" data-filtro="TODOS" aria-pressed="true"><b id="c-total">0</b><small>Lidos</small></button>
+      <button class="cont st-ok" type="button" data-filtro="OK"><b id="c-ok">0</b><small>Liberados</small></button>
+      <button class="cont st-div" type="button" data-filtro="SEPARAR"><b id="c-div">0</b><small>Separar</small></button>
+      <button class="cont st-prob" type="button" data-filtro="PROBLEMAS"><b id="c-prob">0</b><small>Problemas</small></button>
     </div>
 
     <div id="lista-leituras" class="leituras"></div>
 
     <div class="barra-inferior">
-      <button id="btn-manual" class="btn btn-secundario">Digitar código</button>
-      <button id="btn-oc-entrega" class="btn btn-secundario">Ocorrência da entrega</button>
-      <button id="btn-encerrar" class="btn btn-perigo">Encerrar</button>
+      <button id="btn-manual" class="btn btn-secundario"></button>
+      <button id="btn-oc-entrega" class="btn btn-secundario"></button>
     </div>
   </section>
+
+  <!-- ----------------------------------------- mais ações da bipagem --- -->
+  <!-- Tudo o que não é apontar e bipar mora aqui. Encerrar veio para cá: era
+       um botão vermelho permanente ao lado dos de uso diário, e é a única ação
+       irreversível da tela. -->
+  <div id="modal-mais" class="modal" hidden>
+    <div class="modal-caixa">
+      <h2 class="bip-folha-titulo">Mais ações</h2>
+      <div class="bip-folha-lista">
+        <button id="mais-rotas" class="bip-folha-item" type="button"></button>
+        <button id="mais-manual" class="bip-folha-item" type="button"></button>
+        <button id="mais-ocorrencia" class="bip-folha-item" type="button"></button>
+        <button id="mais-sync" class="bip-folha-item" type="button"></button>
+        <button id="mais-encerrar" class="bip-folha-item bip-folha-perigo" type="button"></button>
+      </div>
+      <div class="modal-acoes">
+        <button id="mais-fechar" class="btn btn-secundario">Fechar</button>
+      </div>
+    </div>
+  </div>
 
   <!-- -------------------------------------------------------- RELATÓRIO -->
   <section id="view-relatorio" class="view" hidden>

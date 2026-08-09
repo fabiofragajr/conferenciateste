@@ -143,7 +143,7 @@ Login → Escolher transportadora → Bipar volumes → Encerrar → Relatório
 
 **Duas telas até a câmera abrir. Esse é o teto.** Cada passo a mais é um passo feito de pé, com caixa na mão.
 
-**Cada um começa onde trabalha.** Quem tem `gestor: true` entra no painel; quem não tem entra na bipagem. Conferência aberta ganha das duas regras — ninguém é tirado do meio de uma carga, e voltar ao painel com sessão aberta não encerra nada: a sessão fica `ABERTA` e é retomada. O gestor também bipa, então ele tem um botão **Painel** grande no topo da bipagem, não um link de rodapé. E ninguém apanha da tela errada: usuário sem acesso ao painel que chegar nele vai para a bipagem, em vez de tomar "acesso negado" sem saída.
+**Cada um começa onde trabalha.** Quem tem `gestor: true` entra no painel; quem não tem entra na bipagem. Conferência aberta ganha das duas regras — ninguém é tirado do meio de uma carga, e voltar ao painel com sessão aberta não encerra nada: a sessão fica `ABERTA` e é retomada. **Toda tela de bipagem tem uma saída que não encerra a carga:** o `←` do topo. O destino muda com quem está usando — painel para quem tem painel, escolha de transportadora para quem não tem — e o rótulo acessível diz qual é, porque uma seta sozinha não conta para onde aponta. Antes só o gestor tinha saída (um botão "Painel"); para todo o resto a única forma de deixar a tela era **Encerrar**, que é irreversível — quem entrasse na carga errada precisava encerrar uma conferência de verdade para escapar. Voltar avisa a fila pendente por *toast*, nunca por diálogo: sair não põe leitura nenhuma em risco, então ali há informação, não decisão. E ninguém apanha da tela errada: usuário sem acesso ao painel que chegar nele vai para a bipagem, em vez de tomar "acesso negado" sem saída.
 
 1. **Login** — simples, local. Sem OAuth, sem backend externo nesta versão. Manter a sessão logada no aparelho; ninguém digita senha toda manhã.
 2. **Transportadora** — escolhe a transportadora terceira que está carregando agora. Botões grandes, não `<select>`. Se só existe uma cadastrada, pular a tela e já abrir a câmera. Trocar de transportadora com conferência aberta exige encerrar antes — misturar bipagem de duas transportadoras invalida a conferência.
@@ -153,8 +153,11 @@ Login → Escolher transportadora → Bipar volumes → Encerrar → Relatório
    - Lista rolável das últimas leituras
    - Permitir **entrada manual** do código como fallback (QR danificado, luz ruim)
    - **Sem confirmação por leitura.** Bipou, mostrou, próximo. Diálogo a cada caixa mata o ritmo.
+   - **A câmera é a maior coisa da tela, e isso é medido** — no mínimo 40% da altura, com teste que falha se encolher. Ela é elástica, não uma fatia fixa: o topo tem uma linha só (52 px), o status da leitura flutua sobre a imagem em vez de ocupar faixa própria, e a lista de leituras não reserva espaço enquanto está vazia.
+   - **Contadores são quatro, não cinco:** Lidos, Liberados, Separar, Problemas. Duplicado e inválido somam em "Problemas" porque, para quem está com a caixa na mão, a reação é a mesma — bipe de novo ou siga. **"Separar" nunca se junta a outra coluna:** é a única que manda tirar a caixa do caminhão. Tocar numa coluna filtra a lista; é ali que a distinção agrupada reaparece.
+   - **Só o que é apontar e bipar fica na tela.** O resto — ver rotas, digitar código, registrar ocorrência, status da sincronização, encerrar — mora na folha do `⋯`. Encerrar foi para lá de propósito: era um botão vermelho permanente ao lado dos de uso diário, sendo a única ação irreversível da tela.
    - **Registrar ocorrência** no volume lido — ver seção 6
-4. **Encerrar sessão** — trava novas leituras e libera o relatório. Confirmar apenas aqui, porque é irreversível. A confirmação mostra as **pendências da carga** (divergência, rota não cadastrada, pedido incompleto) antes de encerrar.
+4. **Encerrar sessão** — trava novas leituras e libera o relatório. Fica na folha do `⋯`, a dois toques, e confirma — é a única ação irreversível da tela. A confirmação mostra as **pendências da carga** (divergência, rota não cadastrada, pedido incompleto) antes de encerrar.
 5. **Liberação da carga** — ação do **gestor**, no painel, depois de encerrada. O sistema avisa as pendências e registra se a liberação saiu com ressalva; ele não decide sozinho parar um caminhão.
 
 ---

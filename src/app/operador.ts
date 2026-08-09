@@ -17,14 +17,15 @@ import * as geo from '../lib/geo.js';
 import * as sync from '../lib/sync.js';
 import * as fb from '../lib/feedback.js';
 import { criarScanner, type Scanner } from '../lib/scanner.js';
-import { sinalSync } from '../lib/ui/index.js';
+import { sinalSync, toast } from '../lib/ui/index.js';
+import { icone } from '../lib/shell/icones.js';
 import {
   ETIQUETAS, STATUS_INFO, classificar, derivarGrave,
   etiquetasDoMomento, normalizar, pendenciasDaCarga, prefixoRota,
   type PrimeiraLeitura
 } from '../lib/model.js';
 import {
-  $, agora, comprimirImagem, esc, hora, manterTelaAcesa
+  $, $$, agora, comprimirImagem, esc, hora, manterTelaAcesa
 } from '../lib/util.js';
 import {
   exportarCSV, exportarPDF, hidratarFotos, montarRelatorio, renderizarHTML,
@@ -75,7 +76,8 @@ function lerEls() {
   grupoVazio: $('#grupo-vazio'),
   btnSair: $('#btn-sair-operacao'),
   btnPainel: $<HTMLButtonElement>('#btn-painel'),
-  btnPainelBip: $<HTMLButtonElement>('#btn-painel-bip'),
+  btnVoltarBip: $<HTMLButtonElement>('#btn-voltar-bip'),
+  btnMaisBip: $<HTMLButtonElement>('#btn-mais-bip'),
   syncGrupo: $('#sync-grupo'),
 
   bipGrupo: $('#bip-grupo'),
@@ -93,12 +95,18 @@ function lerEls() {
   cTotal: $('#c-total'),
   cOk: $('#c-ok'),
   cDiv: $('#c-div'),
-  cDup: $('#c-dup'),
-  cInv: $('#c-inv'),
+  cProb: $('#c-prob'),
   listaLeituras: $('#lista-leituras'),
   btnManual: $('#btn-manual'),
   btnOcEntrega: $('#btn-oc-entrega'),
-  btnEncerrar: $('#btn-encerrar'),
+
+  modalMais: $('#modal-mais'),
+  maisRotas: $('#mais-rotas'),
+  maisManual: $('#mais-manual'),
+  maisOcorrencia: $('#mais-ocorrencia'),
+  maisSync: $('#mais-sync'),
+  maisEncerrar: $('#mais-encerrar'),
+  maisFechar: $('#mais-fechar'),
 
   relSync: $('#rel-sync'),
   btnNova: $('#btn-nova'),
@@ -147,16 +155,52 @@ function erroEm(node: HTMLElement, msg: string | null): void {
 }
 
 /**
- * Só quem é gestor tem painel para voltar — e precisa ver o botão em
- * qualquer tela que alcançar, não só na que o boot escolheria por padrão.
- * Sessão retomada e F5 no meio da conferência pulam `irParaGrupos()`; sem
- * chamar isto nesses caminhos também, o gestor fica sem saída visível a não
- * ser "Encerrar", que é irreversível.
+ * Onde o `←` da bipagem leva, e o que ele NÃO faz.
+ *
+ * Antes a única saída da tela era "Encerrar", que é irreversível: quem entrasse
+ * na carga errada, ou só quisesse consultar outra coisa, tinha que encerrar uma
+ * conferência de verdade para escapar. O gestor tinha um botão "Painel"; quem
+ * não é gestor não tinha nada.
+ *
+ * Voltar não encerra: a sessão fica `ABERTA` e a regra de entrada a retoma.
+ * O destino muda com quem está usando — painel para quem tem painel, escolha de
+ * transportadora para quem não tem —, e o rótulo acessível diz qual é, porque
+ * uma seta sozinha não conta para onde aponta.
  */
+function destinoDoVoltar(): 'painel' | 'grupos' {
+  return usuario?.gestor ? 'painel' : 'grupos';
+}
+
 function definirAcessoAoPainel(): void {
   if (!usuario) return;
   el.btnPainel.hidden = !usuario.gestor;
-  el.btnPainelBip.hidden = !usuario.gestor;
+  el.btnVoltarBip.setAttribute(
+    'aria-label',
+    destinoDoVoltar() === 'painel' ? 'Voltar ao painel' : 'Voltar para a escolha da transportadora'
+  );
+}
+
+/**
+ * Sai da bipagem sem encerrar a conferência.
+ *
+ * O aviso de fila pendente é um toast, e não um diálogo: sair não põe leitura
+ * nenhuma em risco — a fila continua subindo de qualquer tela — então o que
+ * existe aqui é informação, não uma decisão a tomar. Diálogo neste caminho
+ * seria um passo a mais na tela onde o padrão é não acrescentar passo.
+ */
+async function voltarDaBipagem(): Promise<void> {
+  const pendentes = await sync.atualizarContagem();
+  if (pendentes > 0) {
+    toast(`${pendentes} ${pendentes === 1 ? 'leitura ainda subindo' : 'leituras ainda subindo'} — a conferência segue aberta.`);
+  }
+
+  if (destinoDoVoltar() === 'painel') {
+    ambiente?.irPara({ tela: 'painel', secao: 'inicio' });
+    return;
+  }
+  // A conferência continua ABERTA e some da tela; a faixa em `view-grupo` é o
+  // que impede alguém de esquecer uma carga rodando.
+  await irParaGrupos();
 }
 
 /* --------------------------------------------------------------- boot ---- */
@@ -270,12 +314,70 @@ function zerarContadores(): void {
   pintarContadores();
 }
 
+/**
+ * Quatro colunas, não cinco.
+ *
+ * Duplicado e inválido viraram "Problemas" juntos porque, para quem está com a
+ * caixa na mão, são a mesma reação: bipe de novo ou siga. Separá-los custava
+ * uma coluna de 20% da largura para uma distinção que só interessa ao gestor —
+ * e ela continua a um toque, na lista filtrada.
+ *
+ * "Separar" continua sozinha: é a única que manda TIRAR a caixa do caminhão, e
+ * misturá-la com duplicado apagaria a única contagem que impede um embarque
+ * errado.
+ */
 function pintarContadores(): void {
   el.cTotal.textContent = String(contadores.total);
   el.cOk.textContent = String(contadores.OK);
   el.cDiv.textContent = String(contadores.ROTA_DIVERGENTE + contadores.DESTINO_NAO_MAPEADO);
-  el.cDup.textContent = String(contadores.DUPLICADO);
-  el.cInv.textContent = String(contadores.INVALIDO);
+  el.cProb.textContent = String(contadores.DUPLICADO + contadores.INVALIDO);
+}
+
+/** Status que cada coluna mostra quando é tocada. */
+const FILTROS: Record<string, StatusLeitura[] | null> = {
+  TODOS: null,
+  OK: ['OK'],
+  SEPARAR: ['ROTA_DIVERGENTE', 'DESTINO_NAO_MAPEADO'],
+  PROBLEMAS: ['DUPLICADO', 'INVALIDO']
+};
+
+let filtroAtual = 'TODOS';
+
+/**
+ * Filtra a lista pelo status da coluna tocada.
+ *
+ * Esconde as linhas em vez de redesenhar: o ouvinte de "Ocorrência" de cada
+ * leitura está preso ao elemento, e recriar a lista o mataria — a pessoa
+ * tocaria em "Ocorrência" e nada aconteceria.
+ */
+function aplicarFiltro(chave: string): void {
+  filtroAtual = chave;
+  const aceitos = FILTROS[chave] ?? null;
+
+  for (const b of $$<HTMLButtonElement>('.cont')) {
+    b.setAttribute('aria-pressed', String(b.dataset.filtro === chave));
+  }
+
+  let visiveis = 0;
+  for (const item of $$<HTMLElement>('.leitura', el.listaLeituras)) {
+    const mostra = !aceitos || aceitos.includes(item.dataset.status as StatusLeitura);
+    item.hidden = !mostra;
+    if (mostra) visiveis++;
+  }
+
+  // Filtro que esvazia a lista sem dizer nada parece defeito. Some sozinho ao
+  // voltar para "Lidos", que é o botão que a própria mensagem indica.
+  const vazio = el.listaLeituras.querySelector('.leituras-vazio');
+  if (visiveis === 0 && el.listaLeituras.children.length) {
+    if (!vazio) {
+      const p = document.createElement('p');
+      p.className = 'leituras-vazio';
+      p.textContent = 'Nenhum volume nesta contagem. Toque em Lidos para ver todos.';
+      el.listaLeituras.append(p);
+    }
+  } else {
+    vazio?.remove();
+  }
 }
 
 async function iniciarSessao(transportadora: Transportadora): Promise<void> {
@@ -349,12 +451,16 @@ async function entrarNaBipagem(): Promise<void> {
   if (!sessao) return;
 
   el.bipGrupo.textContent = sessao.transportadoraNome;
+  // Contagem, e não a lista inteira: com seis rotas o topo virava um parágrafo
+  // que empurrava a câmera para baixo da dobra. Quem quiser os códigos abre
+  // "Ver rotas" no menu — e quem está bipando não precisa deles na tela.
   el.bipRotas.textContent = sessao.rotas.length
-    ? `Rotas ${sessao.rotas.join(' • ')}`
-    : 'Sem rota cadastrada para esta transportadora';
+    ? `${sessao.rotas.length} ${sessao.rotas.length === 1 ? 'rota' : 'rotas'}`
+    : 'sem rota cadastrada';
   el.banner.className = 'banner st-neutro';
   el.bannerStatus.textContent = 'Aponte para a etiqueta';
-  el.bannerCodigo.textContent = '';
+  el.bannerCodigo.textContent = 'Leitura automática';
+  aplicarFiltro('TODOS');
   mostrarView('bipagem');
 
   telaAcesa = await manterTelaAcesa();
@@ -474,6 +580,9 @@ function adicionarNaLista(l: Leitura): void {
   const item = document.createElement('div');
   item.className = `leitura ${info.classe}`;
   item.dataset.id = l.id;
+  // O filtro dos contadores lê daqui: sem o status no elemento, filtrar
+  // exigiria recriar a lista e matar os ouvintes de "Ocorrência".
+  item.dataset.status = l.status;
   item.innerHTML = `
     <div class="leitura-dados">
       <div class="leitura-cod">${esc(l.codigoVolume ?? (l.rawData.slice(0, 24) || 'sem código'))}</div>
@@ -488,6 +597,11 @@ function adicionarNaLista(l: Leitura): void {
 
   const qtdOc = ocorrenciasPorLeitura.get(l.id) ?? 0;
   if (qtdOc > 0) marcarComOcorrencia(item, qtdOc);
+
+  // Respeita o filtro em vigor: uma linha nova aparecendo dentro de "Separar"
+  // por não ser nenhum dos dois seria a tela se contradizendo.
+  const aceitos = FILTROS[filtroAtual] ?? null;
+  if (aceitos && !aceitos.includes(l.status)) item.hidden = true;
 
   el.listaLeituras.prepend(item);
 
@@ -643,10 +757,41 @@ function ligarEventos(): void {
 
   el.btnSair.addEventListener('click', () => ambiente?.sair());
 
-  // Voltar ao painel não encerra nada: a sessão fica ABERTA e a regra de
-  // entrada a retoma. Sem recarga, o clique não precisa mais viajar na URL.
-  for (const b of [el.btnPainel, el.btnPainelBip]) {
-    b.addEventListener('click', () => ambiente?.irPara({ tela: 'painel', secao: 'inicio' }));
+  // Os ícones entram por JS porque vêm do mesmo módulo do painel: um desenho
+  // por conceito no app inteiro, em vez de um emoji aqui e um glifo ali.
+  el.btnVoltarBip.innerHTML = icone('voltar', { tamanho: 24, traco: 2 });
+  el.btnMaisBip.innerHTML = icone('mais', { tamanho: 24 });
+  el.btnTocha.innerHTML = icone('lanterna', { tamanho: 24, traco: 1.75 });
+  el.btnManual.innerHTML = `${icone('teclado', { tamanho: 20 })}<span>Código</span>`;
+  el.btnOcEntrega.innerHTML = `${icone('ocorrencias', { tamanho: 20 })}<span>Ocorrência</span>`;
+  for (const [b, ic, texto] of [
+    [el.maisRotas, 'rotas', 'Ver rotas da carga'],
+    [el.maisManual, 'teclado', 'Digitar código'],
+    [el.maisOcorrencia, 'ocorrencias', 'Registrar ocorrência'],
+    [el.maisSync, 'sincronizacao', 'Status da sincronização'],
+    [el.maisEncerrar, 'encerrar', 'Encerrar conferência']
+  ] as [HTMLElement, string, string][]) {
+    b.innerHTML = `${icone(ic, { tamanho: 22 })}<span>${texto}</span>`;
+  }
+
+  el.btnPainel.addEventListener('click', () => ambiente?.irPara({ tela: 'painel', secao: 'inicio' }));
+  el.btnVoltarBip.addEventListener('click', () => void voltarDaBipagem());
+
+  el.btnMaisBip.addEventListener('click', () => abrirModal(el.modalMais));
+  el.maisFechar.addEventListener('click', () => fecharModal(el.modalMais));
+
+  el.maisRotas.addEventListener('click', () => {
+    fecharModal(el.modalMais);
+    toast(sessao?.rotas.length ? sessao.rotas.join(' • ') : 'Nenhuma rota cadastrada para esta transportadora.');
+  });
+  el.maisSync.addEventListener('click', () => {
+    fecharModal(el.modalMais);
+    toast(el.chipSync.textContent?.trim() || 'Sem informação de sincronização.');
+  });
+
+  // Toca a coluna, filtra a lista. É o detalhe que "Problemas" agrupou.
+  for (const b of $$<HTMLButtonElement>('.cont')) {
+    b.addEventListener('click', () => aplicarFiltro(b.dataset.filtro ?? 'TODOS'));
   }
 
   el.btnRecamera.addEventListener('click', () => void abrirCamera());
@@ -655,7 +800,19 @@ function ligarEventos(): void {
     if (!scanner) return;
     const ligar = el.btnTocha.getAttribute('aria-pressed') !== 'true';
     const ok = await scanner.alternarTocha(ligar);
-    if (ok) el.btnTocha.setAttribute('aria-pressed', String(ligar));
+    if (ok) {
+      el.btnTocha.setAttribute('aria-pressed', String(ligar));
+      el.btnTocha.setAttribute('aria-label', ligar ? 'Apagar a luz' : 'Acender a luz');
+    }
+  });
+
+  el.maisManual.addEventListener('click', () => {
+    fecharModal(el.modalMais);
+    el.btnManual.click();
+  });
+  el.maisOcorrencia.addEventListener('click', () => {
+    fecharModal(el.modalMais);
+    el.btnOcEntrega.click();
   });
 
   el.btnManual.addEventListener('click', () => {
@@ -742,8 +899,9 @@ function ligarEventos(): void {
     sync.agendarContagem();
   });
 
-  el.btnEncerrar.addEventListener('click', async () => {
+  el.maisEncerrar.addEventListener('click', async () => {
     if (!sessao) return;
+    fecharModal(el.modalMais);
 
     // A conta das pendências é a mesma do relatório e do painel — uma regra só,
     // para os três não discordarem na frente do motorista.

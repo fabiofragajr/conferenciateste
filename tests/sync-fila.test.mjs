@@ -15,7 +15,7 @@
 import { createServer } from 'node:http';
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
-import { prepararAparelho, entrar as fazerLogin } from './cadastro.mjs';
+import { prepararAparelho, entrar as fazerLogin, encerrarConferencia } from './cadastro.mjs';
 
 const PORTA_BASE_FALSA = 4199;
 const recebido = new Map();   // tabela -> nº de linhas que chegaram
@@ -125,7 +125,7 @@ for (let i = 1; i <= 3; i++) {
   await p.waitForTimeout(200);
 }
 
-await p.click('#btn-encerrar');
+await encerrarConferencia(p);
 await p.click('#enc-confirmar');
 await p.waitForSelector('#view-relatorio:not([hidden])', { timeout: 8000 });
 

@@ -112,60 +112,95 @@
 /* ----------------------------------------------------------- bipagem --- */
 #view-bipagem { overflow: hidden; }
 
+/* Uma linha só, 52px. Antes eram marca + carga + quatro chips em duas ou três
+   linhas de altura variável — o topo comia um quinto da tela de 568px, e nada
+   ali ajudava a bipar a próxima caixa. */
 .bip-topo {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 4px 6px;
+  min-height: 52px;
   background: var(--fundo-2);
   border-bottom: 1px solid var(--borda);
 }
-.bip-marca { width: 30px; height: 30px; flex: none; display: block; }
-.bip-carga { flex: 1; min-width: 0; }
-.bip-carga strong { display: block; font-size: 17px; color: var(--logdis-forest); }
-.bip-carga span { color: var(--texto-2); font-size: 13px; }
-.bip-topo-acoes { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.bip-carga { flex: 1; min-width: 0; text-align: center; }
+.bip-carga strong {
+  display: block; font-size: 17px; line-height: 1.15; color: var(--logdis-forest);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.bip-carga span {
+  display: block; color: var(--texto-2); font-size: 12.5px; line-height: 1.2;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* 48px de alvo mesmo com o ícone medindo 22: é toque de polegar, com luva. */
+.bip-icone {
+  flex: none;
+  width: 48px; height: 48px;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 12px;
+  background: transparent; color: var(--texto);
+  cursor: pointer;
+}
+.bip-icone:active { background: var(--fundo-3); }
+.bip-icone:focus-visible { outline: 2px solid var(--logdis-green); outline-offset: -2px; }
+
+/* Sincronização e GPS são evidência, não operação: linha rasa, texto pequeno,
+   fora do caminho do olho que procura a etiqueta. */
+.bip-estado {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 12px;
+  background: var(--fundo-2);
+  border-bottom: 1px solid var(--borda);
+}
+.bip-estado .chip { font-size: 11.5px; padding: 2px 8px; }
 .chip-geo.geo-ok { background: rgba(22, 163, 74, .16); border-color: var(--ok); color: var(--texto); }
 .chip-geo.geo-impreciso { background: rgba(217, 119, 6, .16); border-color: var(--dup); color: var(--texto); }
 .chip-geo.geo-ruim { background: var(--fundo-3); border-color: var(--inv); color: var(--texto-2); }
-.chip-btn {
-  min-height: 44px;
-  padding: 0 14px;
-  border-radius: 999px;
-  border: 1px solid var(--borda);
-  background: var(--fundo-2);
-  color: var(--texto);
-  font-size: 14px;
-  font-weight: 700;
-}
-/* estado selecionado = verde da marca (é escolha do operador, não status) */
-.chip-btn[aria-pressed="true"] {
-  background: var(--logdis-green);
-  color: #fff;
-  border-color: var(--logdis-green);
-}
 
+/* A câmera fica com o que sobra da tela, em vez de uma fatia fixa de 32vh.
+   `min-height: 0` é o que permite ela ENCOLHER num aparelho baixo sem empurrar
+   os contadores para fora — sem isso, o mínimo de um item flex é o conteúdo. */
 #camera-area {
   position: relative;
-  flex: 0 0 32vh;
-  min-height: 190px;
+  flex: 1 1 auto;
+  min-height: 0;
   background: #000;
   overflow: hidden;
 }
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* Maior que a antiga (62%) e sem exigir enquadramento perfeito: caixa
+   consecutiva se bipa de qualquer jeito, com uma mão. */
 .mira {
   position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 62%;
+  left: 50%; top: 46%;
+  width: 78%;
+  max-width: 340px;
   aspect-ratio: 1;
   transform: translate(-50%, -50%);
-  border: 3px solid rgba(255, 255, 255, .8);
-  border-radius: 18px;
-  box-shadow: 0 0 0 2000px rgba(0, 0, 0, .28);
+  border: 2px solid rgba(255, 255, 255, .55);
+  border-radius: 20px;
+  box-shadow: 0 0 0 2000px rgba(0, 0, 0, .22);
   pointer-events: none;
 }
+
+/* A luz sobre a câmera, no canto do polegar: não custa altura nenhuma. */
+.bip-luz {
+  position: absolute;
+  right: 12px; top: 12px;
+  width: 52px; height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, .32);
+  background: rgba(17, 24, 22, .55);
+  color: #fff;
+  cursor: pointer;
+}
+.bip-luz[hidden] { display: none; }
+.bip-luz[aria-pressed="true"] {
+  background: #fff; color: var(--logdis-forest); border-color: #fff;
+}
+
 /* [hidden] não vence um display explícito — sem esta regra o aviso de erro
    fica por cima do vídeo mesmo com a câmera funcionando. */
 .camera-erro[hidden] { display: none; }
@@ -182,45 +217,74 @@
   color: #fff;
   font-size: 16px;
   line-height: 1.4;
+  z-index: 3;
 }
 .camera-erro .btn { margin-top: 14px; }
 
+/* O resultado da leitura, colado na base da câmera.
+   Deixou de ser faixa própria (76px de altura fixa, sempre presentes) e passou
+   a flutuar: a câmera ganhou esses pixels e o status continua do mesmo tamanho.
+   Nunca se esconde — leitura sem status na tela é falha de conferência. */
 .banner {
-  padding: 14px 16px;
-  background: var(--cor-status, var(--logdis-mint-surface));
+  position: absolute;
+  left: 8px; right: 8px; bottom: 8px;
+  z-index: 2;
+  padding: 10px 14px;
+  border-radius: 14px;
+  background: var(--cor-status, var(--logdis-forest));
   color: var(--tinta-status, #fff);
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  min-height: 76px;
-  justify-content: center;
+  gap: 1px;
   transition: background-color 120ms ease;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
 }
-/* estado de espera: superfície da marca, sem simular resultado nenhum */
+/* Espera: escuro e discreto sobre a imagem, sem simular resultado nenhum. */
 .banner.st-neutro {
-  --cor-status: var(--logdis-mint-surface);
-  --tinta-status: var(--logdis-forest);
+  --cor-status: rgba(17, 24, 22, .72);
+  --tinta-status: #fff;
 }
-#banner-status { font-size: 24px; font-weight: 800; line-height: 1.1; }
-#banner-codigo { font-size: 15px; opacity: .92; font-family: ui-monospace, Menlo, monospace; }
+/* A dica encolheu: 24px de "Aponte para a etiqueta" era a segunda maior coisa
+   da tela, competindo com o que ela mesma manda olhar. */
+.banner.st-neutro #banner-status { font-size: 15px; font-weight: 700; }
+.banner.st-neutro #banner-codigo { font-size: 12.5px; font-family: inherit; opacity: .8; }
+#banner-status { font-size: 22px; font-weight: 800; line-height: 1.15; }
+#banner-codigo { font-size: 14px; opacity: .95; font-family: ui-monospace, Menlo, monospace; }
 
 .contadores {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 1px;
   background: var(--borda);
   border-bottom: 1px solid var(--borda);
+  flex: none;
 }
-.cont { background: var(--fundo-2); padding: 8px 4px; text-align: center; }
-.cont b { display: block; font-size: 23px; font-weight: 800; color: var(--cor-status, var(--texto)); }
-.cont small { font-size: 11px; color: var(--texto-2); }
+.cont {
+  background: var(--fundo-2);
+  padding: 7px 2px;
+  text-align: center;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.cont b { display: block; font-size: 22px; font-weight: 800; color: var(--cor-status, var(--texto)); }
+.cont small { display: block; font-size: 10.5px; color: var(--texto-2); }
+/* O filtro ativo é uma régua sob a coluna: o número não pode mudar de tamanho
+   nem de cor ao ser escolhido, senão vira outro status. */
+.cont[aria-pressed="true"] { box-shadow: inset 0 -3px 0 var(--logdis-green); }
+.cont:focus-visible { outline: 2px solid var(--logdis-green); outline-offset: -2px; }
+.st-prob { --cor-status: var(--dup); }
 
 .leituras {
-  flex: 1;
+  flex: 0 1 auto;
+  max-height: 34vh;
   overflow-y: auto;
   padding: 8px 12px 12px;
   -webkit-overflow-scrolling: touch;
 }
+/* Sem leitura nenhuma a lista não reserva espaço: no começo da carga a tela
+   inteira é câmera, que é quando ela mais precisa ser. */
+.leituras:empty { display: none; }
 .leitura {
   display: flex;
   align-items: center;
@@ -232,6 +296,7 @@
   border-left: 6px solid var(--cor-status, var(--inv));
   margin-bottom: 8px;
 }
+.leitura[hidden] { display: none; }
 .leitura-dados { flex: 1; min-width: 0; }
 .leitura-cod {
   font-family: ui-monospace, Menlo, monospace;
@@ -276,15 +341,42 @@
   margin-left: 6px;
   white-space: nowrap;
 }
+.leituras-vazio { color: var(--texto-2); font-size: 14px; text-align: center; padding: 10px 0; }
 
 .barra-inferior {
   display: flex;
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
   background: var(--fundo-2);
   border-top: 1px solid var(--borda);
+  flex: none;
 }
-.barra-inferior .btn { flex: 1; font-size: 15px; padding: 0 8px; text-align: center; }
+.barra-inferior .btn {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 15px; padding: 0 8px;
+}
+
+/* ------------------------------------------------ folha "mais ações" --- */
+.bip-folha-titulo { font-size: 17px; margin: 0 0 12px; }
+.bip-folha-lista { display: flex; flex-direction: column; gap: 2px; }
+.bip-folha-item {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 56px; padding: 0 6px;
+  border: 0; background: transparent; cursor: pointer;
+  font-family: inherit; font-size: 16px; color: var(--texto); text-align: left;
+  border-radius: 10px;
+}
+.bip-folha-item:active { background: var(--fundo-3); }
+.bip-folha-item:focus-visible { outline: 2px solid var(--logdis-green); outline-offset: -2px; }
+.bip-folha-item svg { flex: none; color: var(--texto-2); }
+/* Encerrar é a única irreversível da tela: separada por régua e em vermelho,
+   para não ser tocada por engano no meio das outras quatro. */
+.bip-folha-perigo {
+  color: var(--div); font-weight: 700;
+  border-top: 1px solid var(--borda); border-radius: 0; margin-top: 6px; padding-top: 6px;
+}
+.bip-folha-perigo svg { color: var(--div); }
 
 /* --------------------------------------------------------- ocorrência --- */
 .momento-toggle { display: flex; gap: 8px; margin: 12px 0 4px; }
@@ -371,10 +463,6 @@
   flex: 1;
   overflow-y: auto;
   padding: 0 14px calc(24px + env(safe-area-inset-bottom));
-}
-
-@media (min-height: 780px) {
-  #camera-area { flex-basis: 38vh; }
 }
 
 /* resumo do encerramento: pendência é o que decide se a carga pode sair */

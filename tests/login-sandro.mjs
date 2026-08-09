@@ -95,7 +95,7 @@ await passo('ana entra pelo app e vai bipar', async () => {
   await ctx.close();
 });
 
-await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
+await passo('sandro também bipa, e volta ao painel pelo ←', async () => {
   const { ctx, p } = await novoAparelho('/entrar', { width: 420, height: 900 });
   await entrar(p, 'sandro');
   await p.waitForURL(/\/painel$/, { timeout: 8000 });
@@ -115,9 +115,14 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   if (donoDoChip !== 'view-bipagem') throw new Error(`#chip-sync resolveu para: ${donoDoChip}`);
 
   // Conferência aberta: voltar ao painel não pode encerrar nada.
-  // (o botão da tela de bipagem é #btn-painel-bip; #btn-painel vive na tela
-  // de transportadora e fica hidden enquanto a câmera está aberta)
-  await p.click('#btn-painel-bip');
+  //
+  // A saída da bipagem é o `←` do topo, e não mais um botão "Painel": quem não
+  // é gestor não tinha saída nenhuma além de "Encerrar", que é irreversível. O
+  // destino do `←` muda com a pessoa — painel para quem tem painel — e o
+  // rótulo acessível é o que diz para onde ele aponta.
+  const destino = await p.getAttribute('#btn-voltar-bip', 'aria-label');
+  if (destino !== 'Voltar ao painel') throw new Error(`o ← do gestor diz: ${destino}`);
+  await p.click('#btn-voltar-bip');
   await p.waitForURL(/\/painel$/, { timeout: 8000 });
   const abertas = await p.evaluate(async () => {
     const req = indexedDB.open('logdis');
@@ -135,11 +140,48 @@ await passo('sandro também bipa, e volta ao painel pelo botão', async () => {
   });
   if (abertas !== 1) throw new Error(`sessões abertas depois de voltar: ${abertas}`);
 
-  // A sessão continua ABERTA: o boot precisa devolver o caminho de volta ao
-  // painel, não só a câmera — senão a única saída visível vira "Encerrar".
+  // A sessão continua ABERTA: o boot precisa devolver o caminho de volta, não
+  // só a câmera — senão a única saída visível vira "Encerrar", que é
+  // irreversível. Agora o `←` está sempre lá; o que o boot tem de acertar é
+  // para ONDE ele aponta, e isso depende de quem entrou.
   await abrirBipagem(p);
   await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
-  if (!(await p.isVisible('#btn-painel-bip'))) throw new Error('gestor voltou pra bipagem sem caminho de volta');
+  if (!(await p.isVisible('#btn-voltar-bip'))) throw new Error('gestor voltou pra bipagem sem caminho de volta');
+  const destino2 = await p.getAttribute('#btn-voltar-bip', 'aria-label');
+  if (destino2 !== 'Voltar ao painel') throw new Error(`depois de retomar, o ← diz: ${destino2}`);
+  await ctx.close();
+});
+
+await passo('quem não é gestor também tem saída, e ela não encerra a carga', async () => {
+  // Antes, a única saída da bipagem para quem não é gestor era "Encerrar" — a
+  // ação irreversível. Quem entrasse na carga errada tinha que encerrar uma
+  // conferência de verdade para escapar.
+  const { ctx, p } = await novoAparelho('/entrar');
+  await entrar(p, 'ana');
+  await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
+  await p.click('.grupo-btn >> nth=0');
+  await p.waitForSelector('#view-bipagem:not([hidden])', { timeout: 8000 });
+
+  const destino = await p.getAttribute('#btn-voltar-bip', 'aria-label');
+  if (destino !== 'Voltar para a escolha da transportadora') {
+    throw new Error(`o ← de quem não é gestor diz: ${destino}`);
+  }
+
+  await p.click('#btn-voltar-bip');
+  await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
+
+  // A conferência continua ABERTA: voltar é sair da tela, não encerrar a carga.
+  const abertas = await p.evaluate(async () => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    const todas = await new Promise((ok) => {
+      const q = bd.transaction('sessoes', 'readonly').objectStore('sessoes').getAll();
+      q.onsuccess = () => ok(q.result);
+    });
+    bd.close();
+    return todas.filter((s) => s.status === 'ABERTA').length;
+  });
+  if (abertas !== 1) throw new Error(`voltar mexeu na conferência: ${abertas} abertas`);
   await ctx.close();
 });
 

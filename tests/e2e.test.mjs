@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
-import { prepararAparelho, isolarDaProducao, entrar as fazerLogin, SENHA as SENHA_ANTIGA } from './cadastro.mjs';
+import { prepararAparelho, isolarDaProducao, entrar as fazerLogin, SENHA as SENHA_ANTIGA, encerrarConferencia } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -84,7 +84,9 @@ await passo('mesmo volume de novo é duplicado', async () => {
   await manual('EMB0008314147', 'FNOR 100');
   const st = (await p.textContent('#banner-status')).trim();
   if (st !== 'Já bipado nesta conferência') throw new Error(`banner: ${st}`);
-  if ((await p.textContent('#c-dup')).trim() !== '1') throw new Error('contador duplicado errado');
+  // Duplicado e inválido somam em "Problemas": para quem está com a caixa na
+  // mão a reação é a mesma, e a distinção continua a um toque, na lista.
+  if ((await p.textContent('#c-prob')).trim() !== '1') throw new Error('contador de problemas errado');
 });
 
 await passo('rota de outra transportadora é divergente', async () => {
@@ -143,10 +145,64 @@ await passo('ocorrência no volume marca a leitura', async () => {
   if (!(await p.isVisible('.leitura.tem-oc'))) throw new Error('marcador de ocorrência não apareceu');
 });
 
+/* ---------------------------------------------- a moldura da bipagem --- */
+/* A tela é a que a pessoa usa de pé, com caixa na mão. O que se prova aqui não
+   é o cálculo da conferência (isso está acima), é que ela não prende ninguém e
+   que a câmera continua sendo a maior coisa da tela. */
+
+await passo('o resultado da leitura fica SOBRE a câmera, sem faixa própria', async () => {
+  // A faixa de status tinha 76px fixos acima dos contadores; virou um cartão
+  // flutuante na base da câmera. O que não pode mudar: a leitura nunca fica
+  // sem status na tela.
+  const dentroDaCamera = await p.evaluate(() =>
+    !!document.querySelector('#camera-area > #banner'));
+  if (!dentroDaCamera) throw new Error('o banner saiu de dentro da câmera');
+  if (!(await p.isVisible('#banner'))) throw new Error('o status da leitura não está visível');
+});
+
+await passo('a câmera é a maior coisa da tela', async () => {
+  // O motivo do retrabalho: a câmera tinha fatia fixa de 32vh e o resto da tela
+  // era topo, faixa de status e uma lista vazia. Numa tela de 568px isso deixava
+  // a leitura com menos de um terço do aparelho.
+  const parte = await p.evaluate(() => {
+    const c = document.querySelector('#camera-area').getBoundingClientRect().height;
+    return c / window.innerHeight;
+  });
+  if (parte < 0.4) throw new Error(`a câmera ficou com ${Math.round(parte * 100)}% da tela`);
+});
+
+await passo('tocar em Separar mostra só o que precisa sair do caminhão', async () => {
+  await p.click('.cont[data-filtro="SEPARAR"]');
+  const visiveis = await p.$$eval('#lista-leituras .leitura', (ns) => ns
+    .filter((n) => !n.hidden)
+    .map((n) => n.dataset.status));
+  if (!visiveis.length) throw new Error('o filtro escondeu tudo');
+  for (const st of visiveis) {
+    if (st !== 'ROTA_DIVERGENTE' && st !== 'DESTINO_NAO_MAPEADO') {
+      throw new Error(`"Separar" mostrou ${st}`);
+    }
+  }
+
+  // Voltar a "Lidos" tem que devolver a lista inteira: filtro que não solta é
+  // conferência com metade dos volumes escondidos.
+  await p.click('.cont[data-filtro="TODOS"]');
+  const todos = await p.$$eval('#lista-leituras .leitura', (ns) => ns.filter((n) => !n.hidden).length);
+  if (todos !== 4) throw new Error(`depois de limpar o filtro sobraram ${todos} leituras, esperadas 4`);
+});
+
+await passo('encerrar não é mais um botão fixo ao lado dos de uso diário', async () => {
+  // Era um botão vermelho permanente entre "Digitar código" e "Ocorrência",
+  // sendo a única ação irreversível da tela.
+  const naBarra = await p.$$eval('.barra-inferior .btn', (ns) =>
+    ns.map((n) => n.textContent.trim().toLowerCase()));
+  if (naBarra.some((t) => t.includes('encerrar'))) throw new Error('Encerrar voltou para a barra fixa');
+  if (naBarra.length !== 2) throw new Error(`a barra tem ${naBarra.length} botões, esperados 2`);
+});
+
 await p.screenshot({ path: 'tests/saida/tela-bipagem.png' });
 
 await passo('encerrar gera relatório com alerta de divergência', async () => {
-  await p.click('#btn-encerrar');
+  await encerrarConferencia(p);
   await p.click('#enc-confirmar');
   await p.waitForSelector('#view-relatorio:not([hidden])', { timeout: 5000 });
   const html = await p.innerHTML('#relatorio-area');

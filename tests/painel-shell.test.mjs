@@ -33,6 +33,12 @@ const painelAberto = async (viewport = { width: 1440, height: 900 }, semear = nu
   if (semear) await semear(p);
   await entrar(p, 'sandro');
   await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
+  // `#tela-painel` deixa de estar hidden ANTES de o shell montar: o roteador
+  // troca a tela e só então importa o painel. Quem seguia daqui direto clicava
+  // num menu que ainda não existia — e a falha aparecia num teste diferente a
+  // cada rodada, conforme a máquina estivesse mais ou menos carregada.
+  // `window.__shell` é a última coisa que `iniciarPainel` define.
+  await p.waitForFunction(() => !!window.__shell, null, { timeout: 10000 });
   return { ctx, p };
 };
 
