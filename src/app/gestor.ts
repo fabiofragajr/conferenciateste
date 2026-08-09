@@ -7,7 +7,7 @@ import '../styles/painel.css';
 import '../styles/relatorio.css';
 
 import type {
-  Dispositivo, Leitura, Momento, Ocorrencia, Rota, Sessao, StatusLeitura, Transportadora, Usuario
+  Dispositivo, Leitura, Momento, Ocorrencia, Rota, Sessao, StatusLeitura, Usuario
 } from '../types.js';
 import * as db from '../lib/db.js';
 import { novoSync } from '../lib/db.js';
@@ -21,6 +21,7 @@ import { renderMapa } from '../lib/mapa.js';
 import { montarShell, type ItemMenu, type Shell } from '../lib/shell/index.js';
 import { sinalSync } from '../lib/ui/index.js';
 import type { Ambiente } from './ambiente.js';
+import { baseVazia, dentro, type Base, type Modulo } from './painel/contexto.js';
 import {
   cardOcorrencia, exportarCSVOcorrencias, exportarPDF, exportarCSV,
   hidratarFotos, montarRelatorio, renderizarHTML, type DadosRelatorio
@@ -32,22 +33,8 @@ import {
 
 /* --------------------------------------------------------------- dados --- */
 
-interface Base {
-  usuarios: Usuario[];
-  transportadoras: Transportadora[];
-  rotas: Rota[];
-  sessoes: Sessao[];
-  leituras: Leitura[];
-  ocorrencias: Ocorrencia[];
-  porSessao: Map<string, Leitura[]>;
-  ocPorSessao: Map<string, Ocorrencia[]>;
-}
-
 let usuario: Usuario | null = null;
-let base: Base = {
-  usuarios: [], transportadoras: [], rotas: [], sessoes: [], leituras: [], ocorrencias: [],
-  porSessao: new Map(), ocPorSessao: new Map()
-};
+let base: Base = baseVazia();
 let dispositivos: Dispositivo[] = [];
 let relatorioAberto: DadosRelatorio | null = null;
 let shell: Shell | null = null;
@@ -70,6 +57,20 @@ const MENU: ItemMenu[] = [
   { id: 'rotas', rotulo: 'Códigos de rota', grupo: 'Cadastros', href: '/painel/rotas' },
   { id: 'sincronizacao', rotulo: 'Sincronização', grupo: 'Sistema', href: '/painel/sincronizacao' }
 ];
+
+/** Seções já migradas, por id do menu. Cresce nas Tasks 11 a 13. */
+const secoes = new Map<string, Modulo>();
+
+/**
+ * Repinta só a seção visível.
+ *
+ * Antes as cinco seções eram redesenhadas a cada 15 segundos, inclusive as que
+ * ninguém estava vendo — e cada repintura reconstrói tabela inteira em innerHTML.
+ */
+function pintarSecaoVisivel(): void {
+  if (!shell) return;
+  secoes.get(shell.secaoAtual())?.pintar();
+}
 
 async function carregar(): Promise<void> {
   const [usuarios, transportadoras, rotas, sessoes, leituras, ocorrencias] = await Promise.all([
@@ -125,7 +126,6 @@ function barras(itens: { rotulo: string; valor: number; texto?: string; classe?:
     </div>`).join('')}</div>`;
 }
 
-const dentro = (iso: string, de: string, ate: string): boolean => iso >= de && iso <= ate;
 
 /* --------------------------------------------------------------- login --- */
 
@@ -158,6 +158,7 @@ async function iniciarPainel(): Promise<void> {
   // O teste de ponta a ponta precisa de um jeito de forçar o badge sem inventar
   // divergência no banco. É a única superfície pública do shell.
   (window as unknown as { __shell: Shell }).__shell = shell;
+  shell.aoTrocarSecao(() => pintarSecaoVisivel());
 
   // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
   // folha "Mais", que é remontada a cada abertura — um listener preso ao
@@ -188,12 +189,14 @@ async function recarregarTudo(): Promise<void> {
   pintarAgora();
   pintarHistorico();
   pintarCadastros();
+  pintarSecaoVisivel();
   void sync.atualizarContagem();
 }
 
 async function atualizarAoVivo(): Promise<void> {
   await carregar();
   pintarAgora();
+  pintarSecaoVisivel();
 }
 
 /* -------------------------------------------------- 1. tem algo errado? -- */
