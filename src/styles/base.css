@@ -10,20 +10,24 @@
  * seja verde. Quem está na doca precisa entender sem ler.
  */
 
+@import './tokens.css';
 @import './fonte.css';
 
+/* Os nomes daqui viraram apelidos dos papéis de `tokens.css`. Ficam porque o
+   app inteiro já os usa: trocar mil chamadas de uma vez é onde se perde uma
+   cor no caminho. Quem define o valor é o token; aqui só se aponta para ele. */
 :root {
   /* ---------------------------------------------------------- marca --- */
-  --logdis-forest: #105945;
-  --logdis-green: #109976;
-  --logdis-mint: #2eb58d;
-  --logdis-mint-surface: #e8f6f2;
+  --logdis-forest: var(--marca);
+  --logdis-green: var(--marca-forte);
+  --logdis-mint: var(--marca-clara);
+  --logdis-mint-surface: var(--marca-superficie);
 
   /* ------------------------------------------------------- operação --- */
-  --ok: #16a34a;
-  --div: #dc2626;
+  --ok: var(--bom);
+  --div: var(--alarme);
   --mapa: #ea580c;
-  --dup: #d97706;
+  --dup: var(--atencao);
   --inv: #6b7280;
 
   /* Ocorrência é outra informação, não um status de rota: cor institucional
@@ -32,16 +36,19 @@
   --oc-grave: #dc2626;
 
   /* ----------------------------------------------------- superfície --- */
-  --fundo: #f7f9f8;
-  --fundo-2: #ffffff;
-  --fundo-3: #eff3f1; /* preenchimento discreto: trilho, chip, hover */
-  --borda: #dce4e1;
-  --texto: #222625;
-  --texto-2: #66706d;
-  --acento: #109976;
+  --fundo-2: var(--superficie);
+  --fundo-3: var(--linha-fraca); /* preenchimento discreto: trilho, chip, hover */
+  --borda: var(--linha);
+  --texto: var(--tinta);
+  --texto-2: var(--tinta-2);
+  --acento: var(--marca-forte);
 
-  --raio: 12px;
-  --toque: 56px; /* alvo mínimo de toque */
+  /* `--fundo` e `--raio` saíram daqui: `tokens.css` já os declara, e repetir
+     o literal depois do @import faria o token nascer morto — o valor novo
+     nunca chegaria à tela. `--toque` fica como piso: o token só o define por
+     escala (`body.painel` / `body.operacao`), e a tela de login pinta antes de
+     o roteador pôr a classe. */
+  --toque: 56px;
 }
 
 /* Tinta que fica legível sobre cada cor sólida de status (AA em texto

@@ -1,0 +1,102 @@
+/* tokens.css — a fonte da verdade de cor, espaço e tipografia.
+ *
+ * Duas escalas, não uma. "Reduzir tamanhos no mobile" vale para o painel, onde
+ * o gestor senta com teclado e tempo. Não vale para a bipagem: ali o texto
+ * precisa ser lido a um braço de distância, com luva, sob luz de galpão — e
+ * correção da conferência vem antes de densidade de tela.
+ *
+ * Quem troca a escala é a classe do <body>, posta pelo roteador.
+ */
+
+:root {
+  /* ------------------------------------------------------- papéis de cor --- */
+  /* Verde é marca, ação principal, item ativo e sucesso. Nada mais.
+     Superfície nunca é verde: cabeçalho verde alto foi o que deixou a tela
+     pesada e roubou o destaque de quem precisava dele. */
+  --marca: #105945;
+  --marca-forte: #109976;
+  --marca-clara: #2eb58d;
+  --marca-superficie: #e8f6f2;
+
+  --alarme: #dc2626;        /* divergência, erro */
+  --alarme-superficie: #fdf2f2;
+  --atencao: #d97706;       /* pendência, duplicado */
+  --atencao-superficie: #fef6e7;
+  --bom: #16a34a;
+
+  --fundo: #f4f7f6;
+  --superficie: #ffffff;
+  --linha: #dce4e1;         /* régua que separa seção — o lugar da borda agora */
+  --linha-fraca: #eef2f0;
+  --tinta: #16211d;
+  --tinta-2: #66706d;
+  --tinta-3: #97a09d;
+
+  --raio: 10px;
+  --gap: 16px;
+}
+
+/* --------------------------------------------------------- escala painel --- */
+body.painel {
+  --t-pagina: 20px;
+  --t-secao: 11px;
+  --t-indicador: 26px;
+  --t-corpo: 14px;
+  --t-secundario: 12.5px;
+  --t-label: 11px;
+  --toque: 40px;
+}
+
+@media (max-width: 1023px) {
+  body.painel {
+    --t-pagina: 18px;
+    --t-indicador: 22px;
+    --t-corpo: 15px;
+  }
+}
+
+/* ------------------------------------------------------ escala operação --- */
+/* Legível a um braço de distância, com luva, sob luz de galpão. */
+body.operacao {
+  --t-pagina: 22px;
+  --t-secao: 15px;
+  --t-indicador: 34px;
+  --t-corpo: 17px;
+  --t-secundario: 15px;
+  --t-label: 14px;
+  --toque: 56px;
+}
+
+/* Campo de formulário nunca abaixo de 16px: o iOS dá zoom ao focar, e o zoom
+   desalinha a tela inteira no meio de uma conferência. */
+input, select, textarea { font-size: max(16px, var(--t-corpo)); }
+
+/* Título de seção: caixa alta pequena sobre régua. É o "linhas, não caixas" —
+   o bloco se separa por espaço e traço, não por moldura. */
+.ui-secao > h3 {
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--linha);
+  font-size: var(--t-secao);
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--tinta-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.ui-secao { margin-bottom: 22px; }
+.ui-secao > h3 .ui-meta {
+  margin-left: auto;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--tinta-3);
+}
+
+/* No celular, onde os blocos empilham e ficam colados, a separação vem de
+   espaço e régua de largura total — nunca de virar cartão. Um padrão só. */
+@media (max-width: 1023px) {
+  .ui-secao { margin-bottom: 30px; }
+}
