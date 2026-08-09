@@ -30,7 +30,9 @@ export function sinalSync(e: EstadoSync): SinalSync {
       : { tom: 'pendente', icone: '🟠', texto: 'Nada pendente' };
   }
 
-  if (!e.online) return { tom: 'offline', icone: '🟠', texto: 'Offline' };
+  // "Offline" sozinho parece perda ou bloqueio. Na doca, o operador precisa
+  // saber que pode continuar: a leitura já está protegida no aparelho.
+  if (!e.online) return { tom: 'offline', icone: '🟠', texto: 'Offline • salvo no aparelho' };
   if (e.enviando) return { tom: 'enviando', icone: '🔵', texto: 'Sincronizando' };
 
   return {

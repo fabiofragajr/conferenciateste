@@ -484,8 +484,17 @@ async function enviarStore(store: db.NomeStore): Promise<{ enviados: number; err
       return { enviados, erro: `${TABELAS[store]}: ${error.message}` };
     }
 
-    for (const id of ids) {
-      await db.marcarSync(store, [id], 'ENVIADO', null, extrasPorId.get(id) ?? {});
+    // Um lote de 200 leituras precisa virar UMA transação local, não 200.
+    // Numa carga de 3 mil caixas, marcar uma a uma abria milhares de
+    // transações no IndexedDB depois do upload e disputava o aparelho com a
+    // câmera. Fotos são a única exceção porque cada ocorrência pode receber um
+    // caminho remoto diferente; leitura, sessão e cadastro não têm extras.
+    if (extrasPorId.size === 0) {
+      await db.marcarSync(store, ids, 'ENVIADO');
+    } else {
+      for (const id of ids) {
+        await db.marcarSync(store, [id], 'ENVIADO', null, extrasPorId.get(id) ?? {});
+      }
     }
     enviados += ids.length;
 

@@ -7,7 +7,11 @@ import type { PedidoDecodificar, RespostaDecodificar } from './decoder.worker.js
 
 const LARGURA_SCAN = 640;         // largura enviada ao decodificador
 const INTERVALO_MS = 100;         // ~10 quadros por segundo
-const PAUSA_APOS_LEITURA = 700;   // evita ler a mesma caixa duas vezes por engano
+// O bloqueio longo limitava fisicamente a operação a ~1,4 caixa/s. A repetição
+// da mesma etiqueta já tem uma trava própria de 1,5 s logo abaixo, então caixas
+// diferentes podem seguir em ritmo maior sem transformar uma câmera parada em
+// dezenas de duplicados.
+const PAUSA_APOS_LEITURA = 300;
 const IGNORAR_REPETICAO_MS = 1500;
 
 interface DetectorNativo {
@@ -38,6 +42,7 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
   let detector: DetectorNativo | null = null;
   let stream: MediaStream | null = null;
   let rodando = false;
+  let workerOcupado = false;
   let podeEnviar = true;
   let ultimoEnvio = 0;
   let seq = 0;
@@ -64,8 +69,11 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
   function prepararWorker(): void {
     worker = new Worker(new URL('./decoder.worker.ts', import.meta.url), { type: 'module' });
     worker.onmessage = (ev: MessageEvent<RespostaDecodificar>) => {
+      workerOcupado = false;
       if (ev.data.texto) entregar(ev.data.texto);
     };
+    // Um erro de quadro não pode deixar o leitor bloqueado para sempre.
+    worker.onerror = () => { workerOcupado = false; };
   }
 
   function entregar(texto: string): void {
@@ -96,7 +104,7 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
         } catch {
           // quadro isolado pode falhar; segue para o próximo
         }
-      } else if (worker && offCtx) {
+      } else if (worker && offCtx && !workerOcupado) {
         const sw = Math.min(LARGURA_SCAN, video.videoWidth);
         const sh = Math.round((video.videoHeight * sw) / video.videoWidth);
         off.width = sw;
@@ -105,8 +113,13 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
           offCtx.drawImage(video, 0, 0, sw, sh);
           const img = offCtx.getImageData(0, 0, sw, sh);
           const msg: PedidoDecodificar = { buffer: img.data.buffer as ArrayBuffer, w: sw, h: sh, seq: ++seq };
+          // ZXing pode levar mais de 100 ms num celular simples. Sem esta trava,
+          // novos quadros se acumulam na fila do worker durante horas de
+          // conferência, consumindo memória e devolvendo imagens antigas.
+          workerOcupado = true;
           worker.postMessage(msg, [msg.buffer]);
         } catch {
+          workerOcupado = false;
           // getImageData falha em alguns aparelhos; tenta no próximo quadro
         }
       }
@@ -160,6 +173,7 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
     stream = null;
     worker?.terminate();
     worker = null;
+    workerOcupado = false;
     detector = null;
     video.srcObject = null;
   }

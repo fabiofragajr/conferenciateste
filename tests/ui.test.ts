@@ -135,7 +135,7 @@ assert.equal(sinalSync(e()).texto, 'Sincronizado');
 assert.equal(sinalSync(e()).tom, 'ok');
 
 assert.equal(sinalSync(e({ enviando: true, pendentes: 3 })).texto, 'Sincronizando');
-assert.equal(sinalSync(e({ online: false, pendentes: 3 })).texto, 'Offline');
+assert.equal(sinalSync(e({ online: false, pendentes: 3 })).texto, 'Offline • salvo no aparelho');
 assert.equal(sinalSync(e({ pendentes: 8 })).texto, '8 leituras pendentes');
 assert.equal(sinalSync(e({ pendentes: 1 })).texto, '1 leitura pendente');
 

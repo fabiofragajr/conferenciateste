@@ -43,6 +43,7 @@ sem isso a câmera não abre em nenhum celular.
 ```bash
 npm test           # typecheck + regras de domínio + decodificação real de um QR
 npm run test:e2e   # navegador de verdade: bipagem, painéis e operação offline
+npm run test:carga # retoma 3.000 caixas offline sem inflar a tela
 npm run test:base  # confere a base de produção do .env — só leitura
 ```
 
@@ -51,6 +52,10 @@ vez, instale o navegador: `npx playwright install chromium`. Os testes cobrem o
 caminho crítico — divergência, duplicado, ocorrência, relatório, acessos — e o
 cenário offline: 25 volumes bipados sem rede, recarregar no meio da conferência
 e gerar o PDF com a conexão desligada.
+
+O teste de carga mantém **3.000 leituras** no IndexedDB, recarrega o PWA sem
+rede e confirma os contadores, a deduplicação em memória e o limite de itens no
+DOM. Ele existe separado do E2E comum para deixar a verificação diária rápida.
 
 **Nada de teste chega à base de produção.** Cada aparelho de teste recebe seu
 cadastro por `tests/cadastro.mjs` — gravado no IndexedDB exatamente como a
@@ -167,7 +172,9 @@ São muitas caixas por carga e o galpão tem sinal ruim. Por isso:
    A bipagem nunca espera rede — nem para gravar, nem para classificar.
 2. O **motor de sync** (`src/lib/sync.ts`) drena a fila em lotes de 200 via
    `upsert` por `id`: ao voltar a rede, ao voltar para a tela, a cada minuto e
-   ao encerrar a conferência.
+   ao encerrar a conferência. Cada lote também é confirmado no IndexedDB em
+   uma única transação, para o envio de milhares de caixas não disputar o
+   aparelho com a câmera.
 3. Falha de envio **não perde nada**: o registro continua `PENDENTE` e é tentado
    de novo (8 tentativas antes de virar `ERRO`, que o gestor reenvia num botão).
 3.1. A sincronização também **desce**: transportadoras, rotas e usuários
