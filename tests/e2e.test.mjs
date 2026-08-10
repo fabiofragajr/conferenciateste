@@ -36,7 +36,7 @@ const passo = async (nome, fn) => {
 await prepararAparelho(p, BASE, '/entrar');
 vigiarErros(p, 'operador');
 
-await passo('aparelho sem cadastro avisa em vez de recusar a senha certa', async () => {
+await passo('navegador sem cache orienta login normal quando está online', async () => {
   // Contexto próprio: IndexedDB vazio de verdade, e sem alcançar a base — é o
   // celular novo que ainda não conseguiu baixar o cadastro e por isso não tem
   // contra o que conferir a senha.
@@ -46,7 +46,7 @@ await passo('aparelho sem cadastro avisa em vez de recusar a senha certa', async
   await v.goto(`${BASE}/`);
   await v.waitForSelector('#dica-seed:not([hidden])', { timeout: 8000 });
   const dica = await v.textContent('#dica-seed');
-  if (!/ainda não recebeu o cadastro/.test(dica)) throw new Error(`dica: ${dica}`);
+  if (!/Entre normalmente.*automaticamente/.test(dica)) throw new Error(`dica: ${dica}`);
   await zerado.close();
 });
 

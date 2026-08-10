@@ -120,6 +120,7 @@ elLogin.form.addEventListener('submit', async (ev) => {
     return;
   }
   usuario = r.usuario;
+  elLogin.dica.hidden = true;
   elLogin.senha.value = '';
   await conferirSessaoAberta();
   // `true` substitui a entrada do histórico: voltar depois de entrar não pode
@@ -128,12 +129,14 @@ elLogin.form.addEventListener('submit', async (ev) => {
 });
 
 async function boot(): Promise<void> {
-  // Aparelho novo não tem cadastro: ele desce da base. Enquanto não descer, a
-  // tela diz o que fazer em vez de ficar recusando a senha certa.
+  // Cache vazio não é bloqueio de login. Online, a pessoa apenas entra e o
+  // perfil desce automaticamente depois do Supabase Auth. Offline, explicamos
+  // por que um primeiro acesso ainda não é possível.
   if (!(await sync.garantirCadastroLocal())) {
     elLogin.dica.hidden = false;
-    elLogin.dica.textContent =
-      'Este aparelho ainda não recebeu o cadastro. Conecte-se à internet uma vez para baixá-lo.';
+    elLogin.dica.textContent = navigator.onLine
+      ? 'Entre normalmente. Seu cadastro será carregado automaticamente.'
+      : 'Primeiro acesso neste navegador: conecte-se à internet para entrar.';
   }
 
   sync.iniciarAuto();
