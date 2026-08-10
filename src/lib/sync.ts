@@ -245,18 +245,16 @@ type StoreCadastro = 'usuarios' | 'transportadoras' | 'rotas';
  * aberta sobre uma dessas fantasmas bate em violação de FK no envio e fica
  * presa no celular — a carga foi conferida e a base nunca fica sabendo.
  *
- * Duas travas, e as duas existem porque o custo de errar aqui é alto:
+ * A trava existe porque o custo de apagar trabalho local é alto:
  *
  * 1. **Só remove o que já subiu.** Registro `PENDENTE` é coisa criada ou
  *    editada neste aparelho que o servidor ainda não viu — ele não está lá
  *    porque ainda não chegou, não porque foi excluído. Apagar seria destruir o
  *    trabalho de alguém.
- * 2. **Lista vazia não apaga nada.** "O servidor não tem nenhum" é
- *    indistinguível de "a consulta foi filtrada por uma política de acesso", e
- *    o segundo caso limparia o cadastro inteiro de um aparelho que estava
- *    funcionando — inclusive os usuários, deixando ninguém capaz de entrar.
- *    Esvaziar uma tabela de propósito continua possível pelo painel, item a
- *    item, que apaga na base e no aparelho.
+ * A consulta completa roda depois do Auth e qualquer falha de RLS/rede aborta
+ * antes daqui. Assim, uma resposta vazia bem-sucedida limpa os registros
+ * ENVIADO do cache; cadastros legados PENDENTE/ERRO continuam preservados para
+ * revisão, mas não voltam à fila operacional.
  */
 async function reconciliarCadastro(store: StoreCadastro, idsNoServidor: Set<string>): Promise<number> {
   const remover = idsParaRemover(await db.todos(store), idsNoServidor);

@@ -196,6 +196,27 @@ await passo('a transportadora excluída some do aparelho, e a nova fica', async 
   await ctx.close();
 });
 
+await passo('base vazia limpa transportadoras e rotas antigas do navegador', async () => {
+  SERVIDOR.transportadoras = [];
+  SERVIDOR.rotas = [];
+
+  const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR' });
+  const p = await ctx.newPage();
+  await prepararAparelho(p, BASE, '/entrar');
+  await simularServidor(ctx);
+  await ligarESincronizar(p);
+
+  const depois = await esperarCadastro(
+    p,
+    (c) => c.transportadoras.length === 0 && c.rotas.length === 0,
+    'o cache antigo não acompanhou a base vazia'
+  );
+  if (depois.usuarios.join() !== 'sandro') {
+    throw new Error(`a limpeza de rotas mexeu nos usuários: ${depois.usuarios.join(', ')}`);
+  }
+  await ctx.close();
+});
+
 await passo('cadastro legado pendente sobrevive à varredura', async () => {
   // Versões antigas podiam criar cadastro offline. A v4 nunca o envia, mas
   // também não pode apagá-lo silenciosamente durante a reconciliação.

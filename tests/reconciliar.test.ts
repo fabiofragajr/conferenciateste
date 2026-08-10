@@ -45,12 +45,16 @@ passo('registro que ainda não subiu nunca é apagado', () => {
   assert.deepEqual(idsParaRemover(locais, new Set(['outro'])), ['velho']);
 });
 
-passo('lista vazia do servidor não apaga nada', () => {
-  // "O servidor não tem nenhum" é indistinguível de "a consulta voltou vazia
-  // por política de acesso". No segundo caso, obedecer limparia o cadastro
-  // inteiro — inclusive os usuários, e aí ninguém mais entra neste aparelho.
+passo('lista vazia do servidor limpa todo cache confirmado', () => {
+  // A consulta completa autenticada terminou sem erro: vazio é um estado
+  // válido do Supabase, inclusive depois de uma limpeza administrativa.
   const locais = ['a', 'b', 'c'].map(enviado);
-  assert.deepEqual(idsParaRemover(locais, new Set()), []);
+  assert.deepEqual(idsParaRemover(locais, new Set()), ['a', 'b', 'c']);
+});
+
+passo('lista vazia preserva somente cadastro legado não confirmado', () => {
+  const locais = [enviado('velho'), pendente('legado'), comErro('separado')];
+  assert.deepEqual(idsParaRemover(locais, new Set()), ['velho']);
 });
 
 passo('aparelho sem cadastro local não inventa remoção', () => {

@@ -19,26 +19,21 @@ import type { StatusSync } from '../types.js';
 /**
  * Os ids que este aparelho deve esquecer.
  *
- * O custo de errar aqui é assimétrico, e as duas travas vêm disso: deixar sobra
- * é feio, apagar demais é perder trabalho de alguém ou trancar o aparelho fora
- * do app.
+ * O custo de errar aqui é assimétrico: deixar sobra oferece uma rota que não
+ * existe; apagar trabalho local ainda pendente seria pior.
  *
  * 1. **Só o que já subiu.** Registro `PENDENTE` ou `ERRO` não está no servidor
  *    porque ainda não CHEGOU lá, não porque foi excluído — é o cadastro criado
  *    offline, no galpão sem sinal, que ainda espera a fila. Apagar seria
  *    destruir o que a pessoa acabou de fazer.
- * 2. **Lista vazia não apaga nada.** "O servidor não tem nenhum" é
- *    indistinguível de "a consulta voltou vazia por política de acesso", e
- *    obedecer no segundo caso limparia o cadastro inteiro — inclusive os
- *    usuários, deixando ninguém capaz de entrar neste aparelho. Esvaziar uma
- *    tabela de propósito continua possível pelo painel, item a item, que apaga
- *    na base e no aparelho.
+ * A consulta completa só roda autenticada e erros de RLS/rede chegam separados.
+ * Portanto uma lista vazia bem-sucedida significa literalmente que o cadastro
+ * foi zerado no Supabase e o cache ENVIADO deve acompanhar essa verdade.
  */
 export function idsParaRemover(
   locais: { id: string; sync: StatusSync }[],
   idsNoServidor: Set<string>
 ): string[] {
-  if (!idsNoServidor.size) return [];
   return locais
     .filter((r) => r.sync === 'ENVIADO' && !idsNoServidor.has(r.id))
     .map((r) => r.id);
