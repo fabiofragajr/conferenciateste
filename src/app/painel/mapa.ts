@@ -5,7 +5,7 @@
 // precisa dizer se não houve leitura ou se houve leitura sem posição.
 
 import { renderMapa } from '../../lib/mapa.js';
-import { campo, filtros, kpis, pageHeader, plural, secao, tabela } from '../../lib/ui/index.js';
+import { campo, filtros, kpis, pageHeader, plural, secao, tabela, vazio } from '../../lib/ui/index.js';
 import { $, dataHora, pct } from '../../lib/util.js';
 import { dentro, type Montar } from './contexto.js';
 
@@ -54,6 +54,21 @@ export const montar: Montar = (raiz, ctx) => {
       (l) => l.lat !== null && l.lng !== null && l.geoStatus !== 'NEGADO'
     );
     const imprecisas = localizadas.filter((l) => l.geoStatus === 'IMPRECISO');
+    const negadas = leituras.filter((l) => l.geoStatus === 'NEGADO').length;
+    const semSinal = leituras.filter((l) => l.geoStatus === 'INDISPONIVEL').length;
+    const sessoesSemPosicao = sessoes.filter((s) =>
+      !(b.porSessao.get(s.id) ?? []).some(
+        (l) => l.lat !== null && l.lng !== null && l.geoStatus !== 'NEGADO'
+      )
+    ).length;
+
+    const mapa = !sessoes.length
+      ? vazio('Nenhuma conferência no período selecionado. Ajuste as datas para consultar outro intervalo.')
+      : !leituras.length
+        ? vazio('As conferências do período ainda não têm volumes registrados.')
+        : !localizadas.length
+          ? vazio('Há volumes no período, mas nenhum possui posição — verifique a permissão e o sinal de GPS dos aparelhos.')
+          : renderMapa(leituras);
 
     resultado.innerHTML = [
       kpis([
@@ -63,9 +78,30 @@ export const montar: Montar = (raiz, ctx) => {
         { rotulo: 'Posição imprecisa', valor: imprecisas.length, tom: imprecisas.length ? 'atencao' : 'neutro' }
       ]),
       secao({
-        titulo: 'Dispersão das leituras',
+        titulo: 'Distribuição relativa das leituras',
         meta: plural(localizadas.length, 'posição', 'posições'),
-        corpo: renderMapa(leituras)
+        corpo: `<div class="p-mapa-layout">
+          <div class="p-mapa-visual">${mapa}</div>
+          <aside class="p-mapa-diagnostico" aria-label="Qualidade das posições">
+            <div>
+              <span>Sessões sem posição</span>
+              <strong>${sessoesSemPosicao}</strong>
+            </div>
+            <div>
+              <span>GPS não permitido</span>
+              <strong>${negadas}</strong>
+            </div>
+            <div>
+              <span>Sem sinal no momento</span>
+              <strong>${semSinal}</strong>
+            </div>
+            <div>
+              <span>Precisão acima de 100 m</span>
+              <strong>${imprecisas.length}</strong>
+            </div>
+            <p>O desenho compara as posições entre si e funciona offline. Ruas e nomes de locais aparecem somente ao abrir a região no mapa externo.</p>
+          </aside>
+        </div>`
       }),
       secao({
         titulo: 'Cobertura por conferência',
@@ -103,9 +139,5 @@ export const montar: Montar = (raiz, ctx) => {
 
   de.addEventListener('change', pintar);
   ate.addEventListener('change', pintar);
-  raiz.querySelector('.ui-filtros-abrir')?.addEventListener('click', () => {
-    raiz.querySelector('.ui-filtros-campos')?.classList.toggle('aberto');
-  });
-
   return { pintar };
 };

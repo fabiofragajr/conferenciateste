@@ -125,6 +125,7 @@ export const montar: Montar = (raiz, ctx) => {
             { chave: 'duracao', rotulo: 'Duração' },
             { chave: 'volumes', rotulo: 'Volumes', alinhar: 'direita' },
             { chave: 'ocorrencias', rotulo: 'Ocorrências', alinhar: 'direita' },
+            { chave: 'situacao', rotulo: 'Situação', html: true },
             { chave: 'acoes', rotulo: 'Baixar', html: true }
           ],
           linhas: sessoes.map((s) => ({
@@ -135,10 +136,18 @@ export const montar: Montar = (raiz, ctx) => {
             duracao: duracao(s.inicio, s.fim),
             volumes: (ctx.base().porSessao.get(s.id) ?? []).length,
             ocorrencias: (ctx.base().ocPorSessao.get(s.id) ?? []).length,
-            acoes: `<span class="p-acao-inline">
-                <button class="btn btn-secundario" data-rel-pdf="${esc(s.id)}" type="button">PDF</button>
-                <button class="btn btn-fantasma" data-rel-csv="${esc(s.id)}" type="button">CSV</button>
-              </span>`
+            situacao: s.status === 'ABERTA'
+              ? '<span class="p-situacao p-situacao-andamento">Em andamento</span>'
+              : s.liberadaEm
+                ? '<span class="p-situacao p-situacao-ok">Liberada</span>'
+                : '<span class="p-situacao p-situacao-atencao">Aguardando liberação</span>',
+            acoes: `<details class="p-exportar">
+                <summary>Baixar</summary>
+                <div class="p-exportar-menu">
+                  <button data-rel-pdf="${esc(s.id)}" type="button"><b>PDF</b><span>Documento oficial</span></button>
+                  <button data-rel-csv="${esc(s.id)}" type="button"><b>CSV</b><span>Dados da conferência</span></button>
+                </div>
+              </details>`
           })),
           vazio: 'Nenhuma conferência no período selecionado.'
         })
@@ -152,9 +161,5 @@ export const montar: Montar = (raiz, ctx) => {
     const sessoes = filtradas();
     exportarCSVPeriodo(sessoes, ctx.base().leituras, ctx.base().ocorrencias);
   });
-  raiz.querySelector('.ui-filtros-abrir')?.addEventListener('click', () => {
-    raiz.querySelector('.ui-filtros-campos')?.classList.toggle('aberto');
-  });
-
   return { pintar };
 };

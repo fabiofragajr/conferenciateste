@@ -129,9 +129,9 @@ async function pintarKPIs(): Promise<void> {
   $('#kpis').innerHTML = [
     kpi(
       'Cobertura de conferência',
-      cobertura === null ? '<span style="font-size:16px;color:var(--texto-2)">informe as cargas previstas</span>' : `${cobertura}%`,
+      cobertura === null ? '—' : `${cobertura}%`,
       cobertura === null
-        ? '<span class="p-kpi-cmp p-neutro">sem esse número os demais não se sustentam</span>'
+        ? '<span class="p-kpi-cmp p-neutro">Informe as cargas previstas abaixo</span>'
         : comparacao(cobertura, coberturaAnterior, '%', false),
       true
     ),

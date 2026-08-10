@@ -201,11 +201,12 @@ await passo('Mapa mostra posições e cobertura em vez do placeholder', async ()
 await passo('Relatórios lista conferências e baixa CSV individual e consolidado', async () => {
   const { ctx, p } = await painelAberto(undefined, semearDivergencia);
   await irParaSecao(p, 'relatorios');
-  await p.waitForSelector('button[data-rel-pdf]', { timeout: 4000 });
+  await p.waitForSelector('.p-exportar summary', { timeout: 4000 });
   const texto = await p.textContent('[data-secao="relatorios"]');
   if (/Carregando/.test(texto)) throw new Error('o placeholder continuou na tela');
   if (!/Sandro|Ana Paula/.test(texto)) throw new Error('a conferência não apareceu na lista');
 
+  await p.click('.p-exportar summary');
   const individual = p.waitForEvent('download');
   await p.click('button[data-rel-csv]');
   if (!(await individual).suggestedFilename().endsWith('.csv')) {
@@ -301,6 +302,23 @@ const irNoCelular = async (p, id) => {
   }
   await p.waitForSelector(`[data-secao="${id}"]:not([hidden])`, { timeout: 4000 });
 };
+
+await passo('filtros recolhidos no celular abrem e anunciam o estado', async () => {
+  const { ctx, p } = await painelAberto({ width: 390, height: 844 });
+  await irNoCelular(p, 'mapa');
+  const botao = '[data-secao="mapa"] .ui-filtros-abrir';
+  if (await p.getAttribute(botao, 'aria-expanded') !== 'false') {
+    throw new Error('o filtro não começou recolhido');
+  }
+  await p.click(botao);
+  if (await p.getAttribute(botao, 'aria-expanded') !== 'true') {
+    throw new Error('o botão não anunciou a abertura');
+  }
+  if (!await p.isVisible('[data-secao="mapa"] .ui-filtros-campos')) {
+    throw new Error('os campos continuaram escondidos');
+  }
+  await ctx.close();
+});
 
 for (const tela of CELULARES) {
   await passo(`o painel não rola na horizontal em ${tela.nome}`, async () => {

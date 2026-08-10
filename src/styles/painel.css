@@ -399,6 +399,307 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
 .p-acao-inline { display: inline-flex; gap: 6px; align-items: center; }
 .p-acao-inline select { min-width: 150px; min-height: 32px; font-size: 12px; padding: 4px 8px; }
 
+/* ============================================= refinamento do gestor === */
+/* Estas regras vivem sob body.painel. A tela de bipagem usa body.operacao e
+   continua com sua escala, câmera e alvos de toque exatamente como estavam. */
+body.painel > #tela-painel { padding: 28px 32px 56px; }
+body.painel .p-corpo { max-width: 1500px; }
+body.painel .p-secao { margin-bottom: 40px; }
+
+body.painel .ui-page-header {
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+  min-height: 38px;
+}
+body.painel .ui-page-header h2 {
+  font-weight: 780;
+  line-height: 1.15;
+  letter-spacing: -.025em;
+}
+body.painel .ui-page-header > span { line-height: 1.4; }
+body.painel .ui-page-acoes { align-self: center; }
+
+body.painel .btn {
+  min-height: var(--toque);
+  padding: 0 16px;
+  border-radius: 9px;
+  font-size: 14px;
+}
+body.painel .p-campo label,
+body.painel .ui-campo label {
+  margin: 0 0 6px;
+  color: var(--tinta-2);
+  font-size: var(--t-label);
+  font-weight: 700;
+}
+body.painel .p-campo input,
+body.painel .p-campo select,
+body.painel .ui-campo input,
+body.painel .ui-campo select {
+  min-height: var(--toque);
+  border-color: var(--linha);
+  background: var(--superficie);
+  font-size: 15px;
+}
+
+/* Filtros são uma ferramenta da tela, não parte da tabela. A superfície clara
+   reúne período e ações numa faixa reconhecível sem disputar com os dados. */
+body.painel .ui-filtros,
+body.painel .p-filtros-superficie {
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: 0 1px 2px rgba(22, 33, 29, .025);
+}
+body.painel .ui-filtros-campos { gap: 12px; }
+
+/* Os números principais agora têm área e alinhamento próprios. Antes pareciam
+   quatro pedaços de texto soltos, especialmente nas telas sem registros. */
+body.painel .ui-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0;
+  margin-bottom: 20px;
+}
+body.painel .ui-kpi {
+  min-width: 0;
+  min-height: 104px;
+  padding: 17px 18px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: 0 1px 2px rgba(22, 33, 29, .03);
+}
+body.painel .ui-kpi small {
+  margin-bottom: 8px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+body.painel .ui-kpi b { display: block; line-height: 1; }
+
+body.painel .ui-secao {
+  margin-bottom: 18px;
+  padding: 18px 20px 20px;
+  border: 1px solid var(--linha);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: 0 1px 2px rgba(22, 33, 29, .025);
+}
+body.painel .ui-secao > h3 {
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  color: var(--tinta-2);
+  font-weight: 800;
+}
+body.painel .ui-vazio {
+  margin: 6px 0;
+  padding: 14px 0;
+  line-height: 1.5;
+}
+
+/* A tabela comum e a tabela responsiva passam a compartilhar ritmo visual. */
+body.painel .p-cartao {
+  border-color: var(--linha);
+  border-radius: 12px;
+  background: var(--superficie);
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(22, 33, 29, .025);
+}
+body.painel .p-cartao h3 { color: var(--tinta); font-size: 16px; }
+body.painel table.p-tab { font-size: var(--t-secundario); }
+body.painel table.p-tab th,
+body.painel table.p-tab td { padding: 11px 12px; }
+body.painel table.p-tab th {
+  background: #f8faf9;
+  color: var(--tinta-2);
+  font-size: 11px;
+}
+body.painel table.p-tab tbody tr:last-child td { border-bottom: 0; }
+body.painel .ui-tabela th {
+  padding: 8px 12px;
+  background: #f8faf9;
+  color: var(--tinta-2);
+  font-weight: 750;
+}
+body.painel .ui-tabela td { padding: 11px 12px; line-height: 1.35; }
+body.painel .ui-tabela tbody tr:last-child td { border-bottom: 0; }
+
+.p-problemas { display: flex; flex-wrap: wrap; gap: 5px; }
+.p-problema,
+.p-sem-problema {
+  display: inline-flex;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--fundo-3);
+  color: var(--tinta-2);
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.p-problema-alarme { background: var(--alarme-superficie); color: var(--alarme); }
+.p-problema-atencao { background: var(--atencao-superficie); color: var(--atencao); }
+.p-sem-problema { background: rgba(22, 163, 74, .10); color: #117238; }
+.p-carga-resumo { display: grid; gap: 2px; min-width: 110px; }
+.p-carga-resumo b { color: var(--tinta); font-size: 13px; }
+.p-carga-resumo small { color: var(--tinta-2); font-size: 11.5px; }
+
+/* Uma linha por pendência dá ao olho um ponto de entrada e mantém a ação
+   sempre na mesma coluna. */
+body.painel .p-atencao-lista { margin: 0; padding: 0; list-style: none; }
+body.painel .p-atencao-lista li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--linha-fraca);
+}
+body.painel .p-atencao-lista li:last-child { border-bottom: 0; }
+body.painel .p-atencao-lista strong { font-size: var(--t-corpo); font-weight: 650; }
+.p-atencao-marca {
+  display: inline-flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--alarme-superficie);
+  color: var(--alarme);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+/* O mapa deixa de ser uma ilustração pequena no canto: a visualização e a
+   qualidade da coleta dividem a largura disponível e respondem juntas. */
+.p-mapa-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.75fr) minmax(250px, .75fr);
+  gap: 18px;
+  align-items: stretch;
+}
+body.painel .p-mapa-visual { min-width: 0; }
+body.painel .p-mapa { max-width: none; height: 100%; background: #f7faf8; }
+.p-mapa-diagnostico {
+  display: grid;
+  align-content: start;
+  border: 1px solid var(--linha);
+  border-radius: 10px;
+  background: #f8faf9;
+  overflow: hidden;
+}
+.p-mapa-diagnostico > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--linha);
+  color: var(--tinta-2);
+  font-size: var(--t-secundario);
+}
+.p-mapa-diagnostico strong { color: var(--tinta); font-size: 17px; }
+.p-mapa-diagnostico p {
+  margin: 0;
+  padding: 14px;
+  color: var(--tinta-2);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* Situação e exportação ganham rótulos sem abreviação e reduzem os dois
+   botões repetidos em cada linha a uma única ação contextual. */
+.p-situacao {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+.p-situacao-andamento { background: #edf4ff; color: #245da7; }
+.p-situacao-ok { background: rgba(22, 163, 74, .11); color: #117238; }
+.p-situacao-atencao { background: var(--atencao-superficie); color: #9a5806; }
+.p-exportar { min-width: 92px; }
+.p-exportar summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 11px;
+  border: 1px solid var(--linha);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--marca);
+  font-size: 12.5px;
+  font-weight: 750;
+  cursor: pointer;
+  list-style: none;
+}
+.p-exportar summary::-webkit-details-marker { display: none; }
+.p-exportar summary::after { content: '⌄'; margin-left: 7px; color: var(--tinta-3); }
+.p-exportar[open] summary::after { transform: rotate(180deg); }
+.p-exportar-menu {
+  display: grid;
+  width: 190px;
+  gap: 4px;
+  margin-top: 6px;
+  padding: 5px;
+  border: 1px solid var(--linha);
+  border-radius: 9px;
+  background: var(--superficie);
+}
+.p-exportar-menu button {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--tinta);
+  text-align: left;
+  cursor: pointer;
+}
+.p-exportar-menu button:hover { background: var(--marca-superficie); }
+.p-exportar-menu b { font-size: 12.5px; }
+.p-exportar-menu span { color: var(--tinta-2); font-size: 11.5px; }
+
+/* Indicadores deixam de parecer uma página de outro produto. */
+body.painel .p-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+body.painel .p-kpi {
+  min-height: 126px;
+  padding: 18px;
+  border-color: var(--linha);
+  border-radius: 12px;
+  background: var(--superficie);
+  box-shadow: 0 1px 2px rgba(22, 33, 29, .025);
+}
+body.painel .p-kpi .p-kpi-rot { color: var(--tinta-2); font-size: var(--t-label); font-weight: 650; }
+body.painel .p-kpi .p-kpi-val { color: var(--tinta); font-size: var(--t-indicador); }
+body.painel .p-kpi.p-destaque { border: 1px solid var(--marca-forte); background: var(--marca-superficie); }
+.p-bloco-analise { margin-top: 34px; }
+.p-bloco-analise > h2 {
+  margin: 0 0 16px;
+  color: var(--tinta);
+  font-size: 19px;
+  line-height: 1.25;
+  letter-spacing: -.01em;
+}
+body.painel .p-gr { background: var(--superficie); border-color: var(--linha); border-radius: 12px; padding: 18px; }
+body.painel .p-gr h4 { color: var(--tinta); font-size: 14px; }
+
+@media (max-width: 1180px) {
+  .p-mapa-layout { grid-template-columns: 1fr; }
+  .p-mapa-diagnostico { grid-template-columns: 1fr 1fr; }
+  .p-mapa-diagnostico > div:nth-of-type(odd) { border-right: 1px solid var(--linha); }
+  .p-mapa-diagnostico p { grid-column: 1 / -1; }
+}
 
 /* --------------------------------------------- celular: barra inferior --- */
 .sh-barra { display: none; }
@@ -473,6 +774,33 @@ table.p-tab td.p-livre { white-space: normal; min-width: 240px; }
   .ui-folha .p-lateral-rodape { border-top-color: var(--linha); }
   .ui-folha .p-lateral-rodape .p-usuario { color: var(--tinta-2); }
   .ui-folha .btn-sair { color: var(--tinta-2); border-color: var(--linha); }
+
+  body.painel .ui-page-header { align-items: flex-start; flex-wrap: wrap; margin-bottom: 16px; }
+  body.painel .ui-page-header > span { width: 100%; margin-top: -8px; }
+  body.painel .ui-filtros { padding: 0; border: 0; background: transparent; box-shadow: none; }
+  body.painel .p-filtros-superficie { padding: 12px; }
+  body.painel .ui-secao { padding: 16px; }
+  body.painel .p-cartao { padding: 16px; }
+  body.painel .p-kpis { grid-template-columns: 1fr 1fr; }
+  body.painel .ui-tabela th { background: transparent; }
+  body.painel .ui-tabela td { padding: 5px 0; }
+  body.painel .ui-tabela tr { padding: 12px 0; }
+  .p-exportar-menu { width: min(190px, 100%); }
+}
+
+@media (max-width: 720px) {
+  body.painel .ui-kpis { grid-template-columns: 1fr 1fr; }
+  body.painel .ui-kpi { min-height: 96px; padding: 14px; }
+  body.painel .p-atencao-lista li { grid-template-columns: 26px minmax(0, 1fr); }
+  body.painel .p-atencao-lista .ui-acao { grid-column: 2; }
+  .p-mapa-diagnostico { grid-template-columns: 1fr; }
+  .p-mapa-diagnostico > div:nth-of-type(odd) { border-right: 0; }
+  .p-mapa-diagnostico p { grid-column: auto; }
+}
+
+@media (max-width: 380px) {
+  body.painel .ui-kpis,
+  body.painel .p-kpis { grid-template-columns: 1fr; }
 }
 
 /* ------------------------------------------------------------- folha ----- */

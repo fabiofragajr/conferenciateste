@@ -178,6 +178,7 @@ async function iniciarPainel(): Promise<void> {
   (window as unknown as { __shell: Shell }).__shell = shell;
   shell.aoTrocarSecao(() => pintarSecaoVisivel());
   ligarExclusao();
+  ligarFiltrosResponsivos();
 
   secoes.set('divergencias', montarDivergencias($('[data-secao="divergencias"]'), contexto));
   secoes.set('incompletos', montarIncompletos($('[data-secao="incompletos"]'), contexto));
@@ -219,6 +220,23 @@ async function recarregarTudo(): Promise<void> {
   pintarCadastros();
   pintarSecaoVisivel();
   void sync.atualizarContagem();
+}
+
+/**
+ * Os filtros dos módulos são remontados quando os dados mudam. A delegação no
+ * painel conserva o botão no celular sem cada tela precisar repetir o mesmo
+ * listener — e mantém o estado acessível sincronizado com o que está visível.
+ */
+function ligarFiltrosResponsivos(): void {
+  $('#tela-painel').addEventListener('click', (ev) => {
+    const btn = (ev.target as HTMLElement).closest<HTMLButtonElement>('.ui-filtros-abrir');
+    if (!btn) return;
+    const campos = btn.closest('.ui-filtros')?.querySelector<HTMLElement>('.ui-filtros-campos');
+    if (!campos) return;
+
+    const aberto = campos.classList.toggle('aberto');
+    btn.setAttribute('aria-expanded', String(aberto));
+  });
 }
 
 async function atualizarAoVivo(): Promise<void> {
@@ -291,22 +309,28 @@ function pintarHistorico(): void {
   const sessoes = sessoesFiltradas();
 
   $('#tabela-sessoes').innerHTML = tabela(
-    ['Início', 'Pessoa', 'Transportadora', 'Rotas', 'Duração', 'Volumes', 'OK', 'Outra rota', 'Não mapeado', 'Dupl.', 'Inv.', 'Ocorr.', 'Carga', ''],
+    ['Início', 'Conferente', 'Carga', 'Duração', 'Volumes', 'Problemas', 'Situação', ''],
     sessoes.map((s) => {
       const ls = base.porSessao.get(s.id) ?? [];
       const conta = (st: StatusLeitura): number => ls.filter((l) => l.status === st).length;
       const div = conta('ROTA_DIVERGENTE');
+      const duplicados = conta('DUPLICADO');
+      const invalidos = conta('INVALIDO');
       const ocs = base.ocPorSessao.get(s.id) ?? [];
       const graves = ocs.filter((o) => o.grave).length;
       const naoMapeado = conta('DESTINO_NAO_MAPEADO');
+      const problemas = [
+        div ? `<span class="p-problema p-problema-alarme">${div} outra rota</span>` : '',
+        naoMapeado ? `<span class="p-problema p-problema-atencao">${naoMapeado} não mapeado</span>` : '',
+        duplicados ? `<span class="p-problema">${duplicados} duplicado${duplicados === 1 ? '' : 's'}</span>` : '',
+        invalidos ? `<span class="p-problema">${invalidos} inválido${invalidos === 1 ? '' : 's'}</span>` : '',
+        ocs.length ? `<span class="p-problema ${graves ? 'p-problema-alarme' : ''}">${ocs.length} ocorrência${ocs.length === 1 ? '' : 's'}${graves ? ` · ${graves} grave${graves === 1 ? '' : 's'}` : ''}</span>` : ''
+      ].filter(Boolean).join('');
       return [
-        dataHora(s.inicio), esc(s.usuarioNome), esc(s.transportadoraNome), esc(s.rotas.join(', ')),
+        dataHora(s.inicio), esc(s.usuarioNome),
+        `<span class="p-carga-resumo"><b>${esc(s.transportadoraNome)}</b><small>${esc(s.rotas.join(', '))}</small></span>`,
         duracao(s.inicio, s.fim), `<span class="p-num-col">${ls.length}</span>`,
-        String(conta('OK')),
-        div ? `<b style="color:var(--div)">${div}</b>` : '0',
-        naoMapeado ? `<b style="color:var(--mapa, #ea580c)">${naoMapeado}</b>` : '0',
-        String(conta('DUPLICADO')), String(conta('INVALIDO')),
-        ocs.length ? `${ocs.length}${graves ? ` <b style="color:var(--div)">(${graves} graves)</b>` : ''}` : '0',
+        problemas ? `<span class="p-problemas">${problemas}</span>` : '<span class="p-sem-problema">Sem problemas</span>',
         estadoDaCarga(s, ls),
         `<button class="btn btn-secundario" data-sessao="${esc(s.id)}" style="min-height:32px;font-size:12px">Detalhe</button>`
       ];

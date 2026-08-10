@@ -320,7 +320,7 @@ await passo('painel do diretor mostra indicadores e tendência', async () => {
   );
   const kpis = await d.innerHTML('#kpis');
   if (!/Taxa de divergência de rota/.test(kpis)) throw new Error('KPI ausente');
-  if (!/informe as cargas previstas/.test(kpis)) throw new Error('cobertura deveria pedir o número');
+  if (!/informe as cargas previstas/i.test(kpis)) throw new Error('cobertura deveria pedir o número');
   if (!/svg/.test(await d.innerHTML('#tendencias'))) throw new Error('gráficos de tendência ausentes');
   // painel largo não pode ter barra de rolagem horizontal no corpo
   const estoura = await d.evaluate(() => document.body.scrollWidth > window.innerWidth + 1);

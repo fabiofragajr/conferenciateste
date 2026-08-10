@@ -73,6 +73,8 @@ export function selecao(op: OpcoesSelecao): string {
 export function filtros(campos: string[], resumo?: string): string {
   return `<div class="ui-filtros">
     <div class="ui-filtros-campos">${campos.join('')}</div>
-    ${resumo ? `<button class="ui-filtros-abrir" type="button">Filtros · ${esc(resumo)}</button>` : ''}
+    <button class="ui-filtros-abrir" type="button" aria-expanded="false">
+      ${resumo ? `Filtros · ${esc(resumo)}` : 'Filtros'}
+    </button>
   </div>`;
 }

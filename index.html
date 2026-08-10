@@ -188,9 +188,12 @@
         <header class="ui-page-header">
           <h2>Conferências</h2>
           <span>No período filtrado</span>
+          <div class="ui-page-acoes">
+            <button id="btn-csv-periodo" class="btn btn-secundario">CSV do período</button>
+          </div>
         </header>
 
-        <div class="p-filtros">
+        <div class="p-filtros p-filtros-superficie">
           <div class="p-campo">
             <label for="f-de">De</label>
             <input id="f-de" type="date" />
@@ -217,7 +220,6 @@
             </select>
           </div>
           <button id="btn-filtrar" class="btn btn-primario">Aplicar</button>
-          <button id="btn-csv-periodo" class="btn btn-secundario">CSV do período</button>
         </div>
 
         <div class="p-cartao">
@@ -389,29 +391,26 @@
 
       <!-- A leitura agregada, antes em diretor.html. -->
       <section class="p-secao" data-secao="indicadores" hidden>
-        <div class="p-filtros">
-    <div class="p-campo">
-      <label for="f-mes" style="margin:0">Mês</label>
-      <select id="f-mes"></select>
-    </div>
-    <button id="btn-pdf-periodo" class="btn btn-secundario">PDF do período</button>
-        </div>
-
-      <section class="p-secao">
         <header class="ui-page-header">
           <h2>Indicadores</h2>
           <span>do mês <span id="rot-comparacao"></span></span>
         </header>
+        <div class="p-filtros p-filtros-superficie">
+          <div class="p-campo">
+            <label for="f-mes" style="margin:0">Mês</label>
+            <select id="f-mes"></select>
+          </div>
+          <button id="btn-pdf-periodo" class="btn btn-secundario">PDF do período</button>
+        </div>
         <div id="kpis" class="p-kpis"></div>
         <div id="cobertura-form" class="p-cartao" style="margin-top:12px"></div>
-      </section>
 
-      <section class="p-secao">
+      <section class="p-bloco-analise">
         <h2>Tendência — melhorou ou piorou?</h2>
         <div id="tendencias" class="p-graficos"></div>
       </section>
 
-      <section class="p-secao">
+      <section class="p-bloco-analise">
         <h2>Onde o problema se concentra</h2>
         <div class="p-grade p-grade-2">
           <div class="p-cartao">
@@ -437,7 +436,7 @@
         </div>
       </section>
 
-      <section class="p-secao">
+      <section class="p-bloco-analise">
         <h2>O que o pessoal da doca escreveu</h2>
         <div class="p-cartao">
           <p class="p-vazio" style="padding-top:0">
@@ -448,7 +447,7 @@
         </div>
       </section>
 
-      <section class="p-secao">
+      <section class="p-bloco-analise">
         <h2>Onde as cargas estão sendo conferidas</h2>
         <div class="p-cartao">
           <div id="calor"></div>

@@ -120,6 +120,8 @@ const s2 = selecao({ id: 'f-mes', rotulo: 'Mês', opcoes: [{ valor: '2026-08', r
 assert.ok(s2.includes('selected'));
 
 assert.ok(filtros([c], '30 dias').includes('30 dias'));
+assert.ok(filtros([c]).includes('ui-filtros-abrir'), 'filtro sempre oferece abertura no celular');
+assert.ok(filtros([c]).includes('aria-expanded="false"'), 'botão de filtro anuncia o estado fechado');
 
 // Escape em tudo que vem do cadastro.
 assert.ok(!botao({ rotulo: '<b>x</b>' }).includes('<b>x</b>'));

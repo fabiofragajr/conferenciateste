@@ -8,7 +8,7 @@
 
 import { dentro, type Montar } from './contexto.js';
 import { cadastrarRota } from './cadastro-rotas.js';
-import { pageHeader, kpis, secao, tabela, vazio, alerta, plural } from '../../lib/ui/index.js';
+import { pageHeader, kpis, secao, tabela, vazio, plural } from '../../lib/ui/index.js';
 import { pedidosIncompletos } from '../../lib/model.js';
 import { $, dataHora, duracao, esc, limitesDoDia } from '../../lib/util.js';
 
@@ -30,13 +30,9 @@ export const montar: Montar = (raiz, ctx) => {
     /* ------------------------------------------------- precisa de atenção */
     const avisos: Aviso[] = [];
 
-    if (divergentes.length) {
-      avisos.push({
-        texto: plural(divergentes.length, 'volume de outra transportadora', 'volumes de outra transportadora'),
-        rotulo: 'Ver volumes',
-        href: '/painel/divergencias'
-      });
-    }
+    // Divergência já ocupa a faixa persistente do shell. Repeti-la nesta lista
+    // criava dois alarmes para o mesmo fato e empurrava as outras pendências
+    // para baixo; aqui entram somente os problemas que ainda não foram ditos.
 
     const naoMapeados = new Set(
       hoje.filter((l) => l.status === 'DESTINO_NAO_MAPEADO').map((l) => l.rotaPrefixo ?? '?')
@@ -100,16 +96,7 @@ export const montar: Montar = (raiz, ctx) => {
       .map((t) => `<option value="${esc(t.id)}">${esc(t.nome)}</option>`).join('');
 
     raiz.innerHTML = [
-      pageHeader({ titulo: 'Início', sub: 'Tem algo errado agora?' }),
-
-      divergentes.length
-        ? alerta({
-            tom: 'alarme',
-            titulo: plural(divergentes.length, 'volume de outra transportadora', 'volumes de outra transportadora'),
-            texto: 'Não podem embarcar. Confira antes de liberar a carga.',
-            acao: { rotulo: 'Ver volumes', href: '/painel/divergencias' }
-          })
-        : '',
+      pageHeader({ titulo: 'Início', sub: 'Visão operacional de hoje' }),
 
       kpis([
         { rotulo: 'Volumes hoje', valor: hoje.length },
@@ -123,8 +110,11 @@ export const montar: Montar = (raiz, ctx) => {
         meta: avisos.length ? plural(avisos.length, 'item', 'itens') : '',
         corpo: avisos.length
           ? `<ul class="p-atencao-lista">${avisos.map((a) => `
-              <li><span>${esc(a.texto)}</span>
-              <a class="ui-acao" href="${esc(a.href)}">${esc(a.rotulo)} ›</a></li>`).join('')}</ul>`
+              <li>
+                <span class="p-atencao-marca" aria-hidden="true">!</span>
+                <strong>${esc(a.texto)}</strong>
+                <a class="ui-acao" href="${esc(a.href)}">${esc(a.rotulo)} ›</a>
+              </li>`).join('')}</ul>`
           : vazio('Operação normal: nenhuma pendência hoje.')
       }),
 
