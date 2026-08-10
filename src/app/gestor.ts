@@ -25,16 +25,17 @@ import { baseVazia, dentro, type Base, type Contexto, type Modulo } from './pain
 import { montar as montarDivergencias } from './painel/divergencias.js';
 import { montar as montarIncompletos } from './painel/incompletos.js';
 import { montar as montarInicio } from './painel/inicio.js';
+import { montar as montarMapa } from './painel/mapa.js';
 import { montar as montarOcorrencias } from './painel/ocorrencias.js';
+import { montar as montarRelatorios } from './painel/relatorios.js';
 import { cadastrarRota } from './painel/cadastro-rotas.js';
 import { excluirCadastro, impedimentos, type TipoCadastro } from './painel/excluir-cadastro.js';
 import {
-  exportarPDF, exportarCSV, hidratarFotos, montarRelatorio, renderizarHTML,
+  exportarPDF, exportarCSV, exportarCSVPeriodo, hidratarFotos, montarRelatorio, renderizarHTML,
   type DadosRelatorio
 } from '../lib/relatorio.js';
 import {
-  $, baixarArquivo, dataHora, duracao, esc, limitesDoDia, minutosEntre,
-  paraCSV, pct
+  $, dataHora, duracao, esc, limitesDoDia, minutosEntre, pct
 } from '../lib/util.js';
 
 /* --------------------------------------------------------------- dados --- */
@@ -182,6 +183,8 @@ async function iniciarPainel(): Promise<void> {
   secoes.set('incompletos', montarIncompletos($('[data-secao="incompletos"]'), contexto));
   secoes.set('inicio', montarInicio($('[data-secao="inicio"]'), contexto));
   secoes.set('ocorrencias', montarOcorrencias($('[data-secao="ocorrencias"]'), contexto));
+  secoes.set('mapa', montarMapa($('[data-secao="mapa"]'), contexto));
+  secoes.set('relatorios', montarRelatorios($('[data-secao="relatorios"]'), contexto));
 
   // Delegação, e não um listener no `#btn-sair`: no celular o "Sair" vive na
   // folha "Mais", que é remontada a cada abertura — um listener preso ao
@@ -757,24 +760,7 @@ function ligarEventos(): void {
 
   $('#btn-csv-periodo').addEventListener('click', () => {
     const sessoes = sessoesFiltradas();
-    const ids = new Set(sessoes.map((s) => s.id));
-    const linhas = base.leituras
-      .filter((l) => ids.has(l.sessaoId))
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-      .map((l) => {
-        const s = base.sessoes.find((x) => x.id === l.sessaoId);
-        const ocs = (base.ocPorSessao.get(l.sessaoId) ?? []).filter((o) => o.leituraId === l.id);
-        return [
-          s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '', (s?.rotas ?? []).join('|'),
-          l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '', l.volume ?? '', l.status, l.origem, l.timestamp,
-          l.lat ?? '', l.lng ?? '', l.precisaoMetros ?? '', l.geoStatus,
-          ocs.map((o) => o.texto).join(' | '), l.rawData
-        ];
-      });
-    const cab = ['sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas', 'codigo_volume', 'rota',
-      'pedido', 'volume', 'status', 'origem', 'horario', 'lat', 'lng', 'precisao_m', 'geo_status',
-      'ocorrencias', 'raw_qr'];
-    baixarArquivo(paraCSV(cab, linhas), 'conferencias_periodo.csv', 'text/csv;charset=utf-8');
+    exportarCSVPeriodo(sessoes, base.leituras, base.ocorrencias);
   });
 
   $('#gaveta-fechar').addEventListener('click', () => { gaveta.hidden = true; });

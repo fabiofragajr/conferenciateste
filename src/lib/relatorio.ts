@@ -230,6 +230,47 @@ export function exportarCSV(r: DadosRelatorio): void {
   baixarArquivo(paraCSV(cabecalho, linhas), `conferencia_${sessao.id.slice(0, 8)}.csv`, 'text/csv;charset=utf-8');
 }
 
+/** CSV consolidado de várias conferências, usado no histórico e em Relatórios. */
+export function exportarCSVPeriodo(
+  sessoes: Sessao[], leituras: Leitura[], ocorrencias: Ocorrencia[]
+): void {
+  const ids = new Set(sessoes.map((s) => s.id));
+  const porId = new Map(sessoes.map((s) => [s.id, s]));
+  const ocorrenciasPorLeitura = new Map<string, Ocorrencia[]>();
+
+  for (const o of ocorrencias) {
+    if (!o.leituraId || !ids.has(o.sessaoId)) continue;
+    const lista = ocorrenciasPorLeitura.get(o.leituraId) ?? [];
+    lista.push(o);
+    ocorrenciasPorLeitura.set(o.leituraId, lista);
+  }
+
+  const cabecalho = [
+    'sessao', 'inicio_sessao', 'conferente', 'transportadora', 'rotas',
+    'codigo_volume', 'rota', 'pedido', 'volume', 'status', 'origem', 'horario',
+    'lat', 'lng', 'precisao_m', 'geo_status', 'ocorrencias', 'raw_qr'
+  ];
+  const linhas = leituras
+    .filter((l) => ids.has(l.sessaoId))
+    .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    .map((l) => {
+      const s = porId.get(l.sessaoId);
+      return [
+        s?.id ?? '', s?.inicio ?? '', s?.usuarioNome ?? '', s?.transportadoraNome ?? '',
+        (s?.rotas ?? []).join('|'), l.codigoVolume ?? '', l.rota ?? '', l.pedido ?? '',
+        l.volume ?? '', l.status, l.origem, l.timestamp, l.lat ?? '', l.lng ?? '',
+        l.precisaoMetros ?? '', l.geoStatus,
+        (ocorrenciasPorLeitura.get(l.id) ?? []).map((o) => o.texto).join(' | '), l.rawData
+      ];
+    });
+
+  baixarArquivo(
+    paraCSV(cabecalho, linhas),
+    'conferencias_periodo.csv',
+    'text/csv;charset=utf-8'
+  );
+}
+
 export function exportarCSVOcorrencias(ocorrencias: Ocorrencia[], nomeArquivo = 'ocorrencias.csv'): void {
   const cabecalho = ['id', 'sessao', 'momento', 'grave', 'codigo_volume', 'texto', 'etiquetas', 'horario', 'lat', 'lng', 'fotos'];
   const linhas = ocorrencias.map((o) => [

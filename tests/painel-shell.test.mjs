@@ -42,7 +42,10 @@ const painelAberto = async (viewport = { width: 1440, height: 900 }, semear = nu
   return { ctx, p };
 };
 
-const SECOES = ['conferencias', 'ocorrencias', 'desempenho', 'pessoas', 'transportadoras', 'rotas', 'sincronizacao'];
+const SECOES = [
+  'conferencias', 'ocorrencias', 'desempenho', 'mapa', 'relatorios',
+  'pessoas', 'transportadoras', 'rotas', 'sincronizacao'
+];
 
 /** Duas, e não uma: badge com "2" não passa por acaso, badge com "1" passaria. */
 const DIVERGENCIAS = 2;
@@ -104,10 +107,10 @@ const semearDivergencia = async (pagina) => {
       origem: 'MANUAL',
       motivoInvalido: null,
       dispositivoId: 'aparelho-de-teste',
-      lat: null,
-      lng: null,
-      precisaoMetros: null,
-      geoStatus: 'INDISPONIVEL'
+      lat: -23.5505 + n * 0.0001,
+      lng: -46.6333 + n * 0.0001,
+      precisaoMetros: 12,
+      geoStatus: 'OK'
     });
 
     await new Promise((ok, falhou) => {
@@ -180,6 +183,39 @@ await passo('cada item do menu mostra sua seção e escreve o caminho', async ()
     if (!p.url().endsWith(esperado)) throw new Error(`caminho não acompanhou: ${p.url()}`);
     const visiveis = await p.$$eval('[data-secao]', (ns) => ns.filter((n) => !n.hidden).length);
     if (visiveis !== 1) throw new Error(`${visiveis} seções visíveis ao mesmo tempo`);
+  }
+  await ctx.close();
+});
+
+await passo('Mapa mostra posições e cobertura em vez do placeholder', async () => {
+  const { ctx, p } = await painelAberto(undefined, semearDivergencia);
+  await irParaSecao(p, 'mapa');
+  await p.waitForSelector('#mapa-resultado .p-mapa svg', { timeout: 4000 });
+  const texto = await p.textContent('[data-secao="mapa"]');
+  if (/Carregando/.test(texto)) throw new Error('o placeholder continuou na tela');
+  if (!/Cobertura por conferência/.test(texto)) throw new Error('a cobertura não foi exibida');
+  if (!/2 \(100%\)/.test(texto)) throw new Error(`a cobertura das duas leituras está errada: ${texto}`);
+  await ctx.close();
+});
+
+await passo('Relatórios lista conferências e baixa CSV individual e consolidado', async () => {
+  const { ctx, p } = await painelAberto(undefined, semearDivergencia);
+  await irParaSecao(p, 'relatorios');
+  await p.waitForSelector('button[data-rel-pdf]', { timeout: 4000 });
+  const texto = await p.textContent('[data-secao="relatorios"]');
+  if (/Carregando/.test(texto)) throw new Error('o placeholder continuou na tela');
+  if (!/Sandro|Ana Paula/.test(texto)) throw new Error('a conferência não apareceu na lista');
+
+  const individual = p.waitForEvent('download');
+  await p.click('button[data-rel-csv]');
+  if (!(await individual).suggestedFilename().endsWith('.csv')) {
+    throw new Error('o CSV individual não foi baixado');
+  }
+
+  const consolidado = p.waitForEvent('download');
+  await p.click('#rel-csv-periodo');
+  if ((await consolidado).suggestedFilename() !== 'conferencias_periodo.csv') {
+    throw new Error('o CSV consolidado saiu com nome inesperado');
   }
   await ctx.close();
 });
