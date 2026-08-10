@@ -102,7 +102,7 @@ export function montarShell(op: OpcoesShell): Shell {
     // `esc` porque o nome vem do cadastro, e cadastro aceita qualquer coisa.
     const rodape = `<div class="p-lateral-rodape">
       <span class="p-usuario">${esc(op.usuario)}</span>
-      <a class="btn btn-secundario" href="/bipagem">Abrir bipagem</a>
+      <a class="btn btn-bipar" href="/bipagem">Abrir bipagem</a>
       <button class="btn btn-fantasma" data-sair type="button">Sair</button>
     </div>`;
     barra.querySelector('[data-aba="mais"]')?.addEventListener('click', () => {

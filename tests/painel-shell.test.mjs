@@ -241,8 +241,16 @@ await passo('no celular a navegação é a barra inferior, não gaveta', async (
   if (await p.isVisible('.p-lateral')) throw new Error('a lateral do desktop apareceu no celular');
   if (!(await p.isVisible('.sh-barra'))) throw new Error('não há barra inferior');
   const abas = await p.$$eval('.sh-aba', (ns) => ns.map((n) => n.dataset.aba));
-  const esperado = ['inicio', 'divergencias', 'conferencias', 'mapa', 'mais'];
+  const esperado = ['inicio', 'divergencias', 'bipagem', 'conferencias', 'mais'];
   if (JSON.stringify(abas) !== JSON.stringify(esperado)) throw new Error(`abas: ${JSON.stringify(abas)}`);
+  const bipar = await p.$eval('.sh-aba-bipar', (n) => {
+    const estilo = getComputedStyle(n);
+    return { href: n.getAttribute('href'), fundo: estilo.backgroundColor, cor: estilo.color };
+  });
+  if (bipar.href !== '/bipagem') throw new Error(`atalho da bipagem aponta para ${bipar.href}`);
+  if (bipar.fundo === 'rgba(0, 0, 0, 0)' || bipar.fundo === bipar.cor) {
+    throw new Error('atalho da bipagem não está destacado');
+  }
   await ctx.close();
 });
 
@@ -256,12 +264,12 @@ await passo('a aba navega e marca a ativa', async () => {
   await ctx.close();
 });
 
-await passo('"Mais" abre a folha com os oito restantes e fecha ao escolher', async () => {
+await passo('"Mais" abre a folha com as seções restantes e fecha ao escolher', async () => {
   const { ctx, p } = await painelAberto({ width: 390, height: 844 });
   await p.click('.sh-aba[data-aba="mais"]');
   await p.waitForSelector('.ui-folha.aberta', { timeout: 4000 });
   const n = await p.$$eval('.ui-folha .p-item', (ns) => ns.length);
-  if (n !== 9) throw new Error(`a folha traz ${n} itens, não 9`);
+  if (n !== 10) throw new Error(`a folha traz ${n} itens, não 10`);
   await p.click('.ui-folha .p-item[href="/painel/rotas"]');
   await p.waitForSelector('[data-secao="rotas"]:not([hidden])', { timeout: 4000 });
   if (await p.isVisible('.ui-folha.aberta')) throw new Error('a folha ficou aberta depois de escolher');

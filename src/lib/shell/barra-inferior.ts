@@ -1,8 +1,9 @@
 // barra-inferior.ts — a navegação do painel no celular.
 //
-// Cinco abas na zona do polegar, contra um hambúrguer no canto mais alto e mais
-// longe da mão. As quatro primeiras são o que o gestor usa todo dia; as outras
-// nove são consulta, e moram atrás de "Mais".
+// Cinco ações na zona do polegar, contra um hambúrguer no canto mais alto e mais
+// longe da mão. "Bipar" é uma ação operacional (não uma seção do painel), mas
+// precisa ficar direta e destacada: é a passagem mais frequente entre gestão e
+// doca. As consultas menos frequentes moram atrás de "Mais".
 //
 // A aba Divergências carrega o badge, e é essa a razão de ela estar aqui em vez
 // de dentro de "Mais": com a gaveta, a contagem só existia com o menu aberto.
@@ -15,8 +16,8 @@ import { esc } from '../util.js';
 import { icone } from './icones.js';
 import { htmlDaArvore, type ItemMenu } from './lateral.js';
 
-/** Ids que ganham aba própria, nesta ordem. O resto vai para "Mais". */
-export const ABAS = ['inicio', 'divergencias', 'conferencias', 'mapa'] as const;
+/** Ids de seções que ganham aba própria. O resto vai para "Mais". */
+export const ABAS = ['inicio', 'divergencias', 'conferencias'] as const;
 
 const ROTULO_CURTO: Record<string, string> = {
   inicio: 'Início', divergencias: 'Alertas', conferencias: 'Conferências', mapa: 'Mapa'
@@ -37,7 +38,7 @@ export function montarBarra(itens: ItemMenu[]): HTMLElement {
   barra.className = 'sh-barra';
   barra.setAttribute('aria-label', 'Navegação do painel');
 
-  const abas = ABAS.map((id) => {
+  const aba = (id: typeof ABAS[number]): string => {
     const item = itens.find((i) => i.id === id);
     if (!item) return '';
     return `<a class="sh-aba" data-aba="${esc(id)}" href="${esc(item.href)}">
@@ -45,7 +46,16 @@ export function montarBarra(itens: ItemMenu[]): HTMLElement {
       <span class="ui-badge" data-badge="${esc(id)}" hidden></span>
       ${esc(ROTULO_CURTO[id] ?? item.rotulo)}
     </a>`;
-  }).join('');
+  };
+
+  const abas = [
+    aba('inicio'),
+    aba('divergencias'),
+    `<a class="sh-aba sh-aba-bipar" data-aba="bipagem" href="/bipagem" aria-label="Abrir bipagem">
+      ${icone('bipagem', { tamanho: 23, traco: 1.9 })}<span>Bipar</span>
+    </a>`,
+    aba('conferencias')
+  ].join('');
 
   barra.innerHTML = `${abas}
     <button class="sh-aba" data-aba="mais" type="button">
