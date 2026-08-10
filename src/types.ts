@@ -34,18 +34,12 @@ export interface Sincronizavel {
 
 export interface Usuario extends Sincronizavel {
   id: string;
+  /** Vínculo com Supabase Auth. Ausente apenas em cadastro legado ainda não migrado. */
+  authUserId?: string;
+  /** Organização dona do dado; transportadora continua sendo destino da carga. */
+  tenantId?: string;
   nome: string;
   login: string;
-  /**
-   * Hash PBKDF2 da senha, no formato `salt$pbkdf2$iteracoes$hex`.
-   * Vazio = ainda sem senha; a pessoa define na primeira entrada.
-   *
-   * O hash ACOMPANHA o cadastro (sobe e desce). Sem isso a senha definida pelo
-   * gestor no desktop não valeria no celular da doca, e qualquer um poderia
-   * reivindicar um login num aparelho novo só digitando uma senha qualquer.
-   * Ver a nota de segurança em `supabase/schema.sql`.
-   */
-  senhaHash: string;
   gestor: boolean;
   /** Texto livre e descritivo. Não é regra de acesso. */
   funcao: string;
@@ -60,6 +54,7 @@ export interface Usuario extends Sincronizavel {
  */
 export interface Transportadora extends Sincronizavel {
   id: string;
+  tenantId?: string;
   nome: string;
   cnpj: string;
   responsavel: string;
@@ -78,6 +73,7 @@ export interface Transportadora extends Sincronizavel {
  */
 export interface Rota extends Sincronizavel {
   id: string;
+  tenantId?: string;
   codigo: string;
   nome: string;
   transportadoraId: string;
@@ -94,6 +90,7 @@ export interface PontoGeo {
 
 export interface Sessao extends Sincronizavel {
   id: string;
+  tenantId?: string;
   transportadoraId: string;
   usuarioId: string;
   inicio: string;
@@ -115,6 +112,7 @@ export interface Sessao extends Sincronizavel {
 
 export interface Leitura extends Sincronizavel, PontoGeo {
   id: string;
+  tenantId?: string;
   sessaoId: string;
   codigoVolume: string | null;
   /** Campo 2 da etiqueta, cru: 'FNOR 100'. */
@@ -142,6 +140,7 @@ export interface Leitura extends Sincronizavel, PontoGeo {
 
 export interface Ocorrencia extends Sincronizavel {
   id: string;
+  tenantId?: string;
   sessaoId: string;
   /** Nulo quando a ocorrência é da entrega inteira, não de um volume. */
   leituraId: string | null;
@@ -235,6 +234,8 @@ export interface ConfigSupabase {
 
 export interface EstadoSync {
   pendentes: number;
+  /** Cadastros antigos preservados fora da fila operacional. */
+  cadastrosLegados?: number;
   online: boolean;
   configurado: boolean;
   enviando: boolean;

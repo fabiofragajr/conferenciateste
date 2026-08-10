@@ -1,5 +1,8 @@
-// auth.ts — login local. Sem OAuth e sem backend: no galpão o app precisa
-// abrir e logar mesmo sem rede nenhuma.
+// auth.ts — autenticação pelo Supabase Auth.
+//
+// Depois da primeira entrada online, a sessão e o perfil operacional ficam no
+// aparelho para a bipagem continuar sem rede. Senhas e hashes nunca entram no
+// IndexedDB.
 //
 // Quem está logado é quem bipa, e é isso que fica gravado na leitura.
 // `funcao` é texto descritivo para o relatório — nunca libera nem bloqueia nada.
@@ -7,93 +10,9 @@
 
 import type { Usuario } from '../types.js';
 import * as db from './db.js';
-import { novoSync } from './db.js';
+import { entrarNoSupabase, estaConfigurado, obterCliente, sairDoSupabase, sessaoAutenticada } from './supabase.js';
 
 const CHAVE_SESSAO = 'logdis.usuarioLogado';
-
-/**
- * O hash viaja junto com o cadastro, então precisa custar caro para quebrar.
- * PBKDF2 com iteração alta é o que o WebCrypto oferece sem dependência externa.
- */
-const ITERACOES = 210_000;
-
-const paraHex = (buf: ArrayBuffer): string =>
-  Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, '0')).join('');
-
-/** Fallback para contexto não seguro (dev em http puro). Produção é HTTPS + WebCrypto. */
-function hashSimples(txt: string): string {
-  let h1 = 0x811c9dc5;
-  let h2 = 0x01000193;
-  for (let i = 0; i < txt.length; i++) {
-    h1 = Math.imul(h1 ^ txt.charCodeAt(i), 16777619) >>> 0;
-    h2 = Math.imul(h2 + txt.charCodeAt(i) + 7, 2246822519) >>> 0;
-  }
-  return `f${h1.toString(16).padStart(8, '0')}${h2.toString(16).padStart(8, '0')}`;
-}
-
-async function pbkdf2(salt: string, senha: string, iteracoes: number): Promise<string | null> {
-  if (!crypto?.subtle) return null;
-  try {
-    const material = await crypto.subtle.importKey(
-      'raw', new TextEncoder().encode(senha), 'PBKDF2', false, ['deriveBits']
-    );
-    const bits = await crypto.subtle.deriveBits(
-      { name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: iteracoes, hash: 'SHA-256' },
-      material, 256
-    );
-    return paraHex(bits);
-  } catch {
-    return null;
-  }
-}
-
-/** Formato legado (v1): SHA-256 simples de `salt:senha`. Só para conferir. */
-async function digerirLegado(salt: string, senha: string): Promise<string> {
-  const txt = `${salt}:${senha}`;
-  if (crypto?.subtle) {
-    try {
-      return paraHex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt)));
-    } catch {
-      /* cai no fallback */
-    }
-  }
-  return hashSimples(txt);
-}
-
-function novoSalt(): string {
-  if (crypto?.randomUUID) return crypto.randomUUID().slice(0, 8);
-  return Math.random().toString(36).slice(2, 10);
-}
-
-export async function gerarSenhaHash(senha: string): Promise<string> {
-  const salt = novoSalt();
-  const derivado = await pbkdf2(salt, senha, ITERACOES);
-  if (derivado) return `${salt}$pbkdf2$${ITERACOES}$${derivado}`;
-  return `${salt}$simples$${hashSimples(`${salt}:${senha}`)}`;
-}
-
-/**
- * Confere nos três formatos já emitidos. O legado continua valendo para não
- * trancar ninguém para fora num aparelho que já tinha senha gravada.
- */
-export async function conferirSenha(senha: string, senhaHash: string): Promise<boolean> {
-  const partes = String(senhaHash ?? '').split('$');
-
-  if (partes.length === 4 && partes[1] === 'pbkdf2') {
-    const iteracoes = Number(partes[2]);
-    if (!Number.isFinite(iteracoes) || iteracoes <= 0) return false;
-    return (await pbkdf2(partes[0], senha, iteracoes)) === partes[3];
-  }
-  if (partes.length === 3 && partes[1] === 'simples') {
-    return hashSimples(`${partes[0]}:${senha}`) === partes[2];
-  }
-  if (partes.length === 2 && partes[0] && partes[1]) {
-    return (await digerirLegado(partes[0], senha)) === partes[1];
-  }
-  return false;
-}
-
-const formatoLegado = (senhaHash: string): boolean => String(senhaHash ?? '').split('$').length === 2;
 
 export const normalizarLogin = (login: string): string => String(login ?? '').trim().toLowerCase();
 
@@ -115,33 +34,23 @@ export interface DadosUsuario {
 
 export const SENHA_MINIMA = 4;
 
-/**
- * Cadastro mínimo para alguém começar a bipar hoje: nome e login.
- *
- * A senha é opcional de propósito. O gestor cadastra o ajudante que entrou hoje
- * sem precisar inventar senha por ele: quem entra sem senha define a dela na
- * primeira entrada, no próprio aparelho.
- */
+/** Cadastro administrativo online, com credencial criada no Supabase Auth. */
 export async function criarUsuario(dados: DadosUsuario): Promise<Usuario> {
   if (!dados.nome?.trim()) throw new Error('Informe o nome.');
   if (!dados.login?.trim()) throw new Error('Informe o login.');
-  if (dados.senha && dados.senha.length < SENHA_MINIMA) {
+  if (!dados.senha || dados.senha.length < SENHA_MINIMA) {
     throw new Error(`A senha precisa ter ${SENHA_MINIMA} ou mais caracteres.`);
   }
-  if (await buscarPorLogin(dados.login)) throw new Error('Já existe um usuário com este login.');
-
-  const usuario: Usuario = {
-    ...novoSync(),
-    nome: dados.nome.trim(),
-    login: normalizarLogin(dados.login),
-    senhaHash: dados.senha ? await gerarSenhaHash(dados.senha) : '',
-    gestor: dados.gestor === true,
-    funcao: (dados.funcao ?? '').trim(),
-    telefone: (dados.telefone ?? '').trim(),
-    placa: (dados.placa ?? '').trim().toUpperCase(),
-    ativo: dados.ativo !== false
-  };
-  await db.salvar('usuarios', usuario);
+  const cliente = await exigirAdministracaoOnline();
+  const { data, error } = await cliente.functions.invoke('admin-users', {
+    body: { acao: 'criar', dados: { ...dados, login: normalizarLogin(dados.login) } }
+  });
+  if (error) throw new Error(error.message);
+  const id = String((data as { id?: string } | null)?.id ?? '');
+  const sync = await import('./sync.js');
+  await sync.baixarCadastroAgora();
+  const usuario = (id ? await db.obter('usuarios', id) : undefined) ?? await buscarPorLogin(dados.login);
+  if (!usuario) throw new Error('Usuário criado, mas o perfil ainda não desceu para este aparelho. Sincronize novamente.');
   return usuario;
 }
 
@@ -156,105 +65,73 @@ export async function atualizarUsuario(
     throw new Error(`A senha precisa ter ${SENHA_MINIMA} ou mais caracteres.`);
   }
 
-  let login = atual.login;
-  if (campos.login && normalizarLogin(campos.login) !== atual.login) {
-    if (await buscarPorLogin(campos.login)) throw new Error('Já existe um usuário com este login.');
-    login = normalizarLogin(campos.login);
-  }
-
-  const novo: Usuario = {
-    ...atual,
-    nome: campos.nome?.trim() ?? atual.nome,
-    login,
-    gestor: campos.gestor ?? atual.gestor,
-    funcao: campos.funcao?.trim() ?? atual.funcao,
-    telefone: campos.telefone?.trim() ?? atual.telefone,
-    placa: campos.placa?.trim().toUpperCase() ?? atual.placa,
-    ativo: campos.ativo ?? atual.ativo,
-    senhaHash: novaSenha ? await gerarSenhaHash(novaSenha) : atual.senhaHash
-  };
-  await db.salvar('usuarios', novo);
-  return novo;
+  const cliente = await exigirAdministracaoOnline();
+  const { error } = await cliente.functions.invoke('admin-users', {
+    body: {
+      acao: 'atualizar', id,
+      dados: {
+        ...campos,
+        ...(campos.login ? { login: normalizarLogin(campos.login) } : {}),
+        ...(novaSenha ? { senha: novaSenha } : {})
+      }
+    }
+  });
+  if (error) throw new Error(error.message);
+  const sync = await import('./sync.js');
+  await sync.baixarCadastroAgora();
+  return (await db.obter('usuarios', id)) ?? atual;
 }
 
-/**
- * Libera o login para a pessoa escolher outra senha na próxima entrada.
- * É o caminho do "esqueci a senha": o gestor não precisa inventar uma senha
- * nova nem descobrir a antiga, e ninguém fica parado na doca esperando.
- */
-export async function redefinirSenha(id: string): Promise<Usuario> {
-  const atual = await db.obter('usuarios', id);
-  if (!atual) throw new Error('Usuário não encontrado.');
-  const novo: Usuario = { ...atual, senhaHash: '' };
-  await db.salvar('usuarios', novo);
-  return novo;
+/** Redefine a credencial diretamente no Supabase Auth. */
+export async function redefinirSenha(id: string, novaSenha: string): Promise<Usuario> {
+  if (novaSenha.length < SENHA_MINIMA) throw new Error(`A senha precisa ter ${SENHA_MINIMA} ou mais caracteres.`);
+  return atualizarUsuario(id, {}, novaSenha);
+}
+
+async function exigirAdministracaoOnline() {
+  if (!navigator.onLine) throw new Error('Para cadastrar ou alterar usuários é necessário estar conectado à internet.');
+  const cliente = await obterCliente();
+  if (!cliente) throw new Error('Configure o Supabase antes de alterar usuários.');
+  if (!(await sessaoAutenticada())) throw new Error('Entre novamente com internet para alterar usuários.');
+  return cliente;
 }
 
 type Resultado =
-  | { ok: true; usuario: Usuario; primeiroAcesso?: boolean }
+  | { ok: true; usuario: Usuario }
   | { ok: false; erro: string };
 
-/**
- * Entra, e se não der, busca o cadastro e tenta uma segunda vez.
- *
- * A mesma pessoa usa mais de um aparelho, e a senha vive no cadastro: ela pode
- * ter sido definida no celular e estar sendo usada no desktop, ou trocada pelo
- * gestor cinco minutos atrás. O aparelho que ainda não sincronizou recusaria a
- * senha certa e mandaria a pessoa procurar um erro que não existe.
- *
- * A segunda tentativa só acontece quando a primeira falha — o caminho normal
- * continua sem tocar na rede, que é o que faz o login funcionar no galpão sem
- * sinal.
- */
+/** Novo login exige rede; a operação offline reutiliza a sessão já aberta. */
 export async function entrar(login: string, senha: string): Promise<Resultado> {
-  const primeira = await tentarEntrar(login, senha);
-  if (primeira.ok) return primeira;
-
-  // Inativo é decisão do gestor, não desencontro de cadastro: não insiste.
-  if (primeira.erro.startsWith('Usuário inativo')) return primeira;
-
+  if (!navigator.onLine) {
+    return { ok: false, erro: 'Conecte-se à internet para entrar. Depois, a bipagem continuará funcionando offline.' };
+  }
+  if (!(await estaConfigurado())) return { ok: false, erro: 'Configure o Supabase antes de entrar.' };
+  const remoto = await entrarNoSupabase(login, senha);
+  if (!remoto.ok) return remoto;
   const sync = await import('./sync.js');
-  if (!(await sync.baixarCadastroAgora())) return primeira;
-
-  return tentarEntrar(login, senha);
-}
-
-async function tentarEntrar(login: string, senha: string): Promise<Resultado> {
-  const u = await buscarPorLogin(login);
-  if (!u) return { ok: false, erro: 'Login ou senha incorretos.' };
-  if (!u.ativo) return { ok: false, erro: 'Usuário inativo. Procure o gestor.' };
-
-  // Cadastrado pelo gestor sem senha, ou senha redefinida por ele: a primeira
-  // senha digitada passa a ser a senha da pessoa, e sobe junto com o cadastro.
-  if (!u.senhaHash) {
-    if (senha.length < SENHA_MINIMA) {
-      return {
-        ok: false,
-        erro: `Primeiro acesso: escolha uma senha com ${SENHA_MINIMA} ou mais caracteres.`
-      };
-    }
-    const comSenha = { ...u, senhaHash: await gerarSenhaHash(senha) };
-    await db.salvar('usuarios', comSenha);
-    localStorage.setItem(CHAVE_SESSAO, u.id);
-    return { ok: true, usuario: comSenha, primeiroAcesso: true };
+  if (!(await sync.baixarCadastroAgora())) {
+    await sairDoSupabase();
+    return { ok: false, erro: 'Não foi possível baixar o perfil deste usuário.' };
   }
-
-  if (!(await conferirSenha(senha, u.senhaHash))) return { ok: false, erro: 'Login ou senha incorretos.' };
-
-  // Senha certa num hash do formato antigo: regrava no formato forte agora que
-  // o hash acompanha o cadastro. A pessoa não percebe nada.
-  let usuario = u;
-  if (formatoLegado(u.senhaHash)) {
-    usuario = { ...u, senhaHash: await gerarSenhaHash(senha) };
-    await db.salvar('usuarios', usuario);
+  const normalizado = normalizarLogin(login);
+  const cadastrado = (await db.todos('usuarios')).find(
+    (u) => u.authUserId === remoto.authUserId || u.login === normalizado
+  );
+  if (!cadastrado) {
+    await sairDoSupabase();
+    return { ok: false, erro: 'A conta autenticou, mas não possui perfil neste tenant.' };
   }
-
-  localStorage.setItem(CHAVE_SESSAO, usuario.id);
-  return { ok: true, usuario };
+  if (!cadastrado.ativo) {
+    await sairDoSupabase();
+    return { ok: false, erro: 'Usuário inativo. Procure o gestor.' };
+  }
+  localStorage.setItem(CHAVE_SESSAO, cadastrado.id);
+  return { ok: true, usuario: cadastrado };
 }
 
 export function sair(): void {
   localStorage.removeItem(CHAVE_SESSAO);
+  void sairDoSupabase();
 }
 
 /** A sessão fica logada no aparelho: ninguém digita senha toda manhã. */

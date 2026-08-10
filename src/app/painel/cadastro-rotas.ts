@@ -8,7 +8,7 @@
 
 import type { Rota, Transportadora } from '../../types.js';
 import * as db from '../../lib/db.js';
-import { novoSync } from '../../lib/db.js';
+import { criarRota } from '../../lib/cadastros.js';
 import { prefixoRota } from '../../lib/model.js';
 
 export type ResultadoCadastro = { ok: true } | { ok: false; erro: string };
@@ -34,13 +34,5 @@ export async function cadastrarRota(
     return { ok: false, erro: `O código ${codigo} já pertence à ${dona}. Um código de rota é de uma transportadora só.` };
   }
 
-  await db.salvar('rotas', {
-    ...novoSync(),
-    codigo,
-    nome: dados.nome.trim() || codigo,
-    transportadoraId: dados.transportadoraId,
-    descricao: (dados.descricao ?? '').trim(),
-    ativo: true
-  });
-  return { ok: true };
+  return criarRota({ ...dados, codigo });
 }

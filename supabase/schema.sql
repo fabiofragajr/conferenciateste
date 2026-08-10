@@ -1,5 +1,10 @@
 -- LogDis Entrega — schema do destino de sincronização.
 --
+-- IMPORTANTE: depois deste arquivo, execute `migracao-v3-para-v4.sql`.
+-- Ela é a camada vigente de autenticação, tenant e RLS. As policies anon mais
+-- abaixo existem apenas para permitir a evolução de instalações antigas e são
+-- removidas pela v4 antes de o sistema entrar em operação.
+--
 -- Rode este arquivo no SQL Editor do projeto Supabase.
 -- O app é offline-first: o IndexedDB do aparelho é a fonte da verdade durante a
 -- operação e estas tabelas recebem os registros depois, por upsert em `id`.
@@ -10,15 +15,9 @@
 -- gestor) e descem para os aparelhos. Um projeto novo precisa de pelo menos um
 -- gestor — ver o bloco no fim deste arquivo.
 --
--- `senha_hash`: PBKDF2-SHA256, 210.000 iterações, salt por usuário. O hash
--- ACOMPANHA o cadastro, e isso é uma troca consciente. Sem ele, a senha que o
--- gestor define no desktop não valeria no celular da doca, e qualquer pessoa
--- poderia reivindicar um login num aparelho novo só digitando uma senha
--- qualquer — o aparelho não teria contra o que conferir.
--- Em compensação, a chave anônima está dentro do app e é pública na prática:
--- quem a tiver consegue LER esta coluna. É proteção contra uso indevido casual,
--- não contra um atacante. Antes de produção, troque por autenticação Supabase
--- de verdade (ver a nota de RLS mais abaixo).
+-- `senha_hash` existe somente para compatibilidade da estrutura histórica. A
+-- migração v4 obrigatória remove a coluna e usa Supabase Auth; nenhum hash
+-- desce para o aparelho.
 create table if not exists public.usuarios (
   id             uuid primary key,
   nome           text not null,
@@ -213,13 +212,8 @@ begin
   end loop;
 end $$;
 
--- O aparelho precisa LER o cadastro para validar offline: transportadoras,
--- rotas e a lista de aparelhos descem para o celular. Leitura, ocorrência e
--- sessão continuam fechadas para `anon` — o aparelho só escreve essas.
---
--- `usuarios` desce sem senha: a coluna de hash não existe nesta tabela, a
--- autenticação é local e a senha é definida no primeiro acesso de cada
--- aparelho.
+-- Policies transitórias do schema histórico. A v4 remove todo acesso `anon` e
+-- faz os cadastros descerem somente depois do Supabase Auth validar o tenant.
 do $$
 declare t text;
 begin

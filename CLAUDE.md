@@ -71,9 +71,8 @@ Restrição: **tudo gratuito, open source e client-side.** Roda em navegador de 
 A única distinção que o sistema faz é uma: **acessa o painel do gestor ou não.** Todo o resto é a mesma pessoa usando o mesmo app.
 
 ```
-Usuario        { id, nome, login, senhaHash, gestor: boolean,
-                 funcao, telefone, placa, ativo }             // funcao: texto livre, descritivo
-                                                              // senhaHash vazio = escolhe na 1ª entrada
+Usuario        { id, authUserId, tenantId, nome, login, gestor: boolean,
+                 funcao, telefone, placa, ativo }             // credencial fica no Supabase Auth
 Transportadora { id, nome, cnpj, responsavel, telefone, email, ativo }  // nome único
 Rota           { id, codigo, nome, transportadoraId, descricao, ativo }
 Sessao         { id, transportadoraId, usuarioId, inicio, fim, status,
@@ -87,15 +86,13 @@ Leitura        { id, sessaoId, codigoVolume, rota, rotaPrefixo, rotaId,
                  lat, lng, precisaoMetros, geoStatus }        // rawData = string bruta do QR
 ```
 
-**`Rota.codigo` é único no sistema inteiro.** Se `FNOR` pertence à Transportadora Alfa, nenhuma outra pode cadastrá-lo. Não é detalhe de banco: é essa unicidade que permite descobrir o dono do volume só a partir da etiqueta. Sem ela, a conferência não tem resposta.
+**`Rota.codigo` é único dentro do tenant.** Se `FNOR` pertence à Transportadora Alfa naquela organização, nenhuma outra pode cadastrá-lo. Não é detalhe de banco: é essa unicidade que permite descobrir o dono do volume só a partir da etiqueta. Sem ela, a conferência não tem resposta.
 
 **`Transportadora.nome` também é único**, e o cadastro precisa recusar repetido em vez de deixar passar. Duas "LOGDIS" na lista não são um incômodo estético: o operador escolhe uma das duas na doca sem ter como saber qual delas tem o código de rota, e a carga certa vira `DESTINO_NAO_MAPEADO` por causa da escolha. Comparar por nome normalizado (`trim()` + `toUpperCase()`), senão `Logdis` e `LOGDIS ` passam pela checagem.
 
 Os campos `transportadoraNome`, `rotas` e `usuarioNome` da sessão são **cópias congeladas** do cadastro no momento da conferência. Renomear uma transportadora hoje não pode mudar o relatório de ontem.
 
-`funcao`, `telefone` e `placa` são **opcionais**. Cadastro mínimo para alguém começar a bipar: **nome e login**. Não travar o cadastro exigindo documento, placa, e-mail ou confirmação — o ajudante que entrou hoje precisa conseguir bipar hoje.
-
-**A senha também é opcional no cadastro**, e esse é o caminho normal: o gestor não precisa inventar senha pelos outros. Quem é cadastrado sem senha escolhe a dela na primeira entrada. No painel, **Redefinir senha** devolve essa escolha para a pessoa — é o "esqueci a senha", sem ninguém descobrir a antiga.
+`funcao`, `telefone` e `placa` são **opcionais**. Nome, login e senha inicial são exigidos na criação online da conta Auth; a senha nunca entra no cache local.
 
 ### Não existe cadastro de exemplo
 
@@ -106,17 +103,12 @@ Isso não é preferência de estilo. Semear cadastro no cliente gerava um id nov
 Consequências que precisam ser respeitadas:
 
 - Aparelho sem cadastro **avisa** ("ainda não recebeu o cadastro; conecte-se uma vez"), em vez de recusar a senha certa. Ele não tem contra o que conferir — fingir "senha incorreta" manda a pessoa procurar um erro que não existe.
-- O primeiro gestor de um projeto novo nasce no `supabase/schema.sql`, sem senha.
-- Falha ao enviar uma tabela **nunca** pode impedir o envio das outras. A leitura é o dado que não pode se perder; cadastro emperrado não prende caixa bipada.
+- O primeiro gestor é criado no Supabase Auth e vinculado ao perfil conforme `migracao-v3-para-v4.sql`.
+- Cadastro nunca sobe pela fila. Falha em um registro operacional não pode desfazer os que já sincronizaram.
 
-### A senha acompanha o cadastro
+### Autenticação e tenant
 
-`senhaHash` é PBKDF2-SHA256 (210.000 iterações, salt por usuário) e **sobe e desce junto com o usuário** — antes ele ficava só no aparelho. Trocou-se um problema pelo outro conscientemente:
-
-- Sem viajar, a senha definida pelo gestor no desktop não valeria no celular da doca; e, sem cadastro de exemplo, qualquer um reivindicaria um login num aparelho novo digitando uma senha qualquer.
-- Viajando, quem tem a chave anônima consegue **ler** a coluna. É proteção contra uso indevido casual, não contra um atacante.
-
-O caminho definitivo continua sendo autenticação Supabase de verdade, com políticas por usuário. Até lá, não trate `senha_hash` como segredo forte.
+Credenciais ficam exclusivamente no Supabase Auth. O perfil local contém apenas identidade e permissões necessárias para operar offline. `tenantId` representa a organização; **não** é a transportadora escolhida para a carga. RLS usa `app_metadata.tenant_id`, que o usuário não pode editar.
 
 Toda leitura carrega `usuarioId` via `sessaoId`. O gestor sempre consegue responder "quem bipou esta caixa" sem depender de como a pessoa foi classificada no cadastro.
 
@@ -145,7 +137,7 @@ Login → Escolher transportadora → Bipar volumes → Encerrar → Relatório
 
 **Cada um começa onde trabalha.** Quem tem `gestor: true` entra no painel; quem não tem entra na bipagem. Conferência aberta ganha das duas regras — ninguém é tirado do meio de uma carga, e voltar ao painel com sessão aberta não encerra nada: a sessão fica `ABERTA` e é retomada. **Toda tela de bipagem tem uma saída que não encerra a carga:** o `←` do topo. O destino muda com quem está usando — painel para quem tem painel, escolha de transportadora para quem não tem — e o rótulo acessível diz qual é, porque uma seta sozinha não conta para onde aponta. Antes só o gestor tinha saída (um botão "Painel"); para todo o resto a única forma de deixar a tela era **Encerrar**, que é irreversível — quem entrasse na carga errada precisava encerrar uma conferência de verdade para escapar. Voltar avisa a fila pendente por *toast*, nunca por diálogo: sair não põe leitura nenhuma em risco, então ali há informação, não decisão. E ninguém apanha da tela errada: usuário sem acesso ao painel que chegar nele vai para a bipagem, em vez de tomar "acesso negado" sem saída.
 
-1. **Login** — simples, local. Sem OAuth, sem backend externo nesta versão. Manter a sessão logada no aparelho; ninguém digita senha toda manhã.
+1. **Login** — Supabase Auth na primeira entrada online; a sessão persistida permite retomar a operação offline. Nunca guardar senha ou hash no IndexedDB.
 2. **Transportadora** — escolhe a transportadora terceira que está carregando agora. Botões grandes, não `<select>`. Se só existe uma cadastrada, pular a tela e já abrir a câmera. Trocar de transportadora com conferência aberta exige encerrar antes — misturar bipagem de duas transportadoras invalida a conferência.
 3. **Bipagem** — leitura contínua pela câmera, com feedback **imediato**:
    - Cor de tela cheia (verde/vermelho/âmbar) + som + vibração (`navigator.vibrate`)

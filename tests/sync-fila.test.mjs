@@ -19,6 +19,7 @@ import { prepararAparelho, entrar as fazerLogin, encerrarConferencia } from './c
 
 const PORTA_BASE_FALSA = 4199;
 const recebido = new Map();   // tabela -> nº de linhas que chegaram
+const codigosRecebidos = new Set();
 let falhou = false;
 
 const passo = async (nome, fn) => {
@@ -63,7 +64,13 @@ const baseFalsa = createServer((req, res) => {
       return;
     }
     let linhas = 0;
-    try { linhas = JSON.parse(corpo || '[]').length ?? 0; } catch { linhas = 0; }
+    try {
+      const registros = JSON.parse(corpo || '[]');
+      linhas = registros.length ?? 0;
+      for (const registro of registros) {
+        if (registro.codigo_volume) codigosRecebidos.add(registro.codigo_volume);
+      }
+    } catch { linhas = 0; }
     recebido.set(tabela, (recebido.get(tabela) ?? 0) + linhas);
     res.writeHead(201, { ...cors, 'Content-Type': 'application/json' });
     res.end('[]');
@@ -107,6 +114,25 @@ await p.evaluate(async (porta) => {
   });
 
   bd.close();
+
+  // Sessão Supabase Auth persistida: a fila só pode sair acompanhada de JWT.
+  const agora = Math.floor(Date.now() / 1000);
+  const payload = btoa(JSON.stringify({
+    sub: '10000000-0000-4000-8000-000000000001', role: 'authenticated', aud: 'authenticated',
+    exp: agora + 3600, iat: agora,
+    app_metadata: { tenant_id: '00000000-0000-4000-8000-000000000001' }
+  })).replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_');
+  const token = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${payload}.assinatura-de-teste`;
+  localStorage.setItem('sb-127-auth-token', JSON.stringify({
+    access_token: token, refresh_token: 'refresh-de-teste', token_type: 'bearer',
+    expires_in: 3600, expires_at: agora + 3600,
+    user: {
+      id: '10000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated',
+      email: 'ana@usuarios.logdis.local', is_anonymous: false,
+      app_metadata: { tenant_id: '00000000-0000-4000-8000-000000000001' },
+      user_metadata: {}, identities: [], created_at: new Date().toISOString()
+    }
+  }));
 }, PORTA_BASE_FALSA);
 
 await p.reload();
@@ -142,12 +168,21 @@ const ateChegar = async (tabela, minimo, limiteMs = 20000) => {
 
 await passo('rota recusada não impede a sessão de subir', () => ateChegar('sessoes', 1));
 await passo('rota recusada não impede as LEITURAS de subir', () => ateChegar('leituras', 3));
-await passo('a rota recusada de fato bateu no 409', async () => {
-  if (recebido.has('rotas')) throw new Error('o servidor aceitou rotas — o teste não provou nada');
+await passo('cadastro local legado NÃO é enviado para o servidor', async () => {
+  if (recebido.has('rotas')) throw new Error('uma rota local entrou na fila de saída');
+  const estado = await p.evaluate(async () => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    const q = bd.transaction('rotas').objectStore('rotas').index('sync').count('ERRO');
+    const n = await new Promise((ok) => { q.onsuccess = () => ok(q.result); });
+    bd.close();
+    return n;
+  });
+  if (estado < 1) throw new Error('o cadastro legado não foi separado para revisão');
 });
 await passo('o aparelho continua se registrando apesar da recusa', () => ateChegar('dispositivos', 1));
 
-await passo('o erro aparece para o gestor em vez de ficar escondido', async () => {
+await passo('o cadastro legado separado aparece para o gestor', async () => {
   const g = await ctx.newPage();
   await g.setViewportSize({ width: 1440, height: 900 });
   // A ana (não-gestora) segue logada neste contexto. Quem não é gestor não
@@ -159,118 +194,55 @@ await passo('o erro aparece para o gestor em vez de ficar escondido', async () =
   await fazerLogin(g, 'sandro');
   await g.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
   await g.waitForFunction(
-    () => /rotas_codigo_key|duplicate key/.test(document.querySelector('#fila-status')?.textContent ?? ''),
+    () => /Cadastros legados\s*[1-9]/.test(document.querySelector('#fila-status')?.textContent ?? ''),
     null,
     { timeout: 20000 }
   );
 });
 
-// ------------------------------------------------- senha entre aparelhos ---
-// A mesma pessoa em dois celulares. A senha vive no cadastro, então o segundo
-// aparelho tem que aceitar a senha definida no primeiro — inclusive na primeira
-// tentativa, sem esperar a sincronização de fundo passar.
-await passo('a senha definida num aparelho vale no outro, já na 1ª tentativa', async () => {
-  const cadastro = await import('./cadastro.mjs');
-
-  // A base agora responde com o Sandro e um hash de senha de verdade, como o
-  // servidor responderia depois que o gestor definiu a senha dele.
-  const hashDaBase = await (async () => {
-    const { pbkdf2Sync } = await import('node:crypto');
-    const salt = 'abcd1234';
-    return `${salt}$pbkdf2$210000$${pbkdf2Sync('senha-da-base', salt, 210000, 32, 'sha256').toString('hex')}`;
-  })();
-
-  // A base só entrega o Sandro depois que o teste liberar. Assim a descida
-  // automática do boot volta vazia, o aparelho continua com a senha velha, e o
-  // único caminho para o login dar certo é a segunda tentativa do `entrar`.
-  let liberarUsuarios = false;
-
-  baseFalsa.removeAllListeners('request');
-  baseFalsa.on('request', (req, res) => {
-    const cors = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Headers': '*',
-      'Access-Control-Allow-Methods': '*'
-    };
-    if (req.method === 'OPTIONS') { res.writeHead(204, cors); res.end(); return; }
-    const tabela = (req.url.split('/rest/v1/')[1] ?? '').split('?')[0];
-    if (req.method === 'GET' && tabela === 'usuarios' && liberarUsuarios) {
-      res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-      res.end(JSON.stringify([{
-        id: '00000000-0000-4000-8000-000000000001',
-        nome: 'Sandro', login: 'sandro', senha_hash: hashDaBase, gestor: true,
-        funcao: 'Gestor de transporte', telefone: '', placa: '', ativo: true,
-        atualizado_em: new Date().toISOString()
-      }]));
-      return;
-    }
-    if (req.method === 'GET') {
-      res.writeHead(200, { ...cors, 'Content-Type': 'application/json' });
-      res.end('[]');
-      return;
-    }
-    req.on('data', () => {});
-    req.on('end', () => { res.writeHead(201, { ...cors, 'Content-Type': 'application/json' }); res.end('[]'); });
-  });
-
-  // Hash da senha ANTIGA, a que este aparelho ainda tem gravada. Sem isto o
-  // Sandro local ficaria sem senha, cairia no "primeiro acesso" e o teste
-  // passaria mesmo com o app errado — não provaria nada.
-  const hashAntigo = await (async () => {
-    const { pbkdf2Sync } = await import('node:crypto');
-    const salt = 'ffff0000';
-    return `${salt}$pbkdf2$210000$${pbkdf2Sync('senha-antiga', salt, 210000, 32, 'sha256').toString('hex')}`;
-  })();
-
-  // Segundo aparelho: tem o Sandro com a senha velha e nunca ouviu falar da nova.
-  const ctx2 = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: 'pt-BR' });
-  const p2 = await ctx2.newPage();
-  await cadastro.prepararAparelho(p2, BASE, '/entrar');
-  await p2.evaluate(async ({ porta, hashAntigo }) => {
+await passo('sem sessão Auth a fila operacional fica protegida no aparelho', async () => {
+  // Contexto novo: nenhum cliente Supabase em memória e nenhum token
+  // persistido. Remover apenas o localStorage de uma página já autenticada não
+  // simula logout, pois a sessão válida continua em memória até signOut.
+  const contextoSemAuth = await navegador.newContext({ viewport: { width: 420, height: 900 }, locale: 'pt-BR' });
+  const semAuth = await contextoSemAuth.newPage();
+  await prepararAparelho(semAuth, BASE, '/entrar');
+  await semAuth.evaluate(async (porta) => {
     const req = indexedDB.open('logdis');
     const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
-    await new Promise((ok) => {
-      const tx = bd.transaction(['config', 'usuarios'], 'readwrite');
+    await new Promise((ok, erro) => {
+      const tx = bd.transaction(['leituras', 'config'], 'readwrite');
       tx.objectStore('config').put({
         chave: 'supabase.config',
         valor: { url: `http://127.0.0.1:${porta}`, anonKey: 'chave-de-teste', bucket: 'ocorrencias' }
       });
-      // Zera o marco da descida: o cadastro do servidor é "novo" para ele.
-      tx.objectStore('config').put({ chave: 'sync.ultimaDescida', valor: '1970-01-01T00:00:00.000Z' });
-      const loja = tx.objectStore('usuarios');
-      loja.getAll().onsuccess = (ev) => {
-        for (const u of ev.target.result) {
-          if (u.login === 'sandro') loja.put({ ...u, senhaHash: hashAntigo, sync: 'ENVIADO' });
-        }
-      };
+      tx.objectStore('leituras').put({
+        id: '90000000-0000-4000-8000-000000000001',
+        codigoVolume: 'EMB-SEM-AUTH', rawData: 'EMB-SEM-AUTH;FNOR 100;0001/0001;999',
+        sync: 'PENDENTE', syncErro: null, syncTentativas: 0,
+        atualizadoEm: new Date().toISOString()
+      });
       tx.oncomplete = ok;
+      tx.onerror = () => erro(tx.error);
     });
     bd.close();
-  }, { porta: PORTA_BASE_FALSA, hashAntigo });
-  await p2.reload();
+  }, PORTA_BASE_FALSA);
 
-  // Confirma o ponto de partida: o aparelho tem a senha velha e não conhece a
-  // nova. Sem esta checagem o teste passaria mesmo com o app errado.
-  const partiuDaSenhaVelha = await p2.evaluate(async () => {
+  await semAuth.reload();
+  await semAuth.waitForTimeout(2500);
+  if (codigosRecebidos.has('EMB-SEM-AUTH')) {
+    throw new Error('a leitura saiu sem JWT autenticado');
+  }
+  const pendente = await semAuth.evaluate(async () => {
     const req = indexedDB.open('logdis');
     const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
-    const r = bd.transaction('usuarios').objectStore('usuarios').getAll();
-    const todos = await new Promise((ok) => { r.onsuccess = () => ok(r.result); });
+    const q = bd.transaction('leituras').objectStore('leituras').get('90000000-0000-4000-8000-000000000001');
+    const leitura = await new Promise((ok) => { q.onsuccess = () => ok(q.result); });
     bd.close();
-    return todos.find((u) => u.login === 'sandro')?.senhaHash ?? '';
+    return leitura?.sync;
   });
-  if (!partiuDaSenhaVelha.startsWith('ffff0000$')) {
-    throw new Error('o aparelho já estava com a senha nova — o teste não provaria nada');
-  }
-
-  // A partir de agora a base responde. A pessoa digita a senha que só existe
-  // lá, na primeira tentativa, sem esperar sincronização nenhuma.
-  liberarUsuarios = true;
-  await p2.fill('#in-login', 'sandro');
-  await p2.fill('#in-senha', 'senha-da-base');
-  await p2.click('#form-login button[type=submit]');
-  await p2.waitForSelector('#tela-painel:not([hidden])', { timeout: 15000 });
-  await ctx2.close();
+  if (pendente !== 'PENDENTE') throw new Error(`estado local: ${pendente}`);
+  await contextoSemAuth.close();
 });
 
 await navegador.close();

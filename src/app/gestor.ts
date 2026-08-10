@@ -10,9 +10,11 @@ import type {
   Dispositivo, Leitura, Ocorrencia, Sessao, StatusLeitura, Usuario
 } from '../types.js';
 import * as db from '../lib/db.js';
-import { novoSync } from '../lib/db.js';
 import * as auth from '../lib/auth.js';
 import * as sync from '../lib/sync.js';
+import {
+  administracaoDisponivel, criarTransportadora, definirRotaAtiva, definirTransportadoraAtiva
+} from '../lib/cadastros.js';
 import { salvarConfig, obterConfig, testarConexao } from '../lib/supabase.js';
 import { pendenciasDaCarga, prefixoRota } from '../lib/model.js';
 import { renderMapa } from '../lib/mapa.js';
@@ -154,7 +156,10 @@ async function boot(): Promise<void> {
       chip.textContent = `${s.icone} ${s.texto}`;
       chip.className = `chip chip-sync ui-sync-${s.tom}`;
     }
-    pintarFila(estado.ultimoErro, estado.pendentes, estado.configurado, estado.ultimoEnvio);
+    pintarFila(
+      estado.ultimoErro, estado.pendentes, estado.cadastrosLegados ?? 0,
+      estado.configurado, estado.ultimoEnvio
+    );
   });
 
   await iniciarPainel();
@@ -185,6 +190,8 @@ async function iniciarPainel(): Promise<void> {
     if (!(ev.target as HTMLElement).closest('#btn-sair, [data-sair]')) return;
     ambiente?.sair();
   });
+  window.addEventListener('online', pintarCadastros);
+  window.addEventListener('offline', pintarCadastros);
 
 
   const hoje = new Date();
@@ -517,13 +524,11 @@ function pintarCadastros(): void {
        style="min-height:32px;font-size:12px">${texto}</button>`;
 
   $('#lista-usuarios').innerHTML = tabela(
-    ['Nome', 'Login', 'Função', 'Placa', 'Painel', 'Senha', 'Situação', ''],
+    ['Nome', 'Login', 'Função', 'Placa', 'Painel', 'Acesso', 'Situação', ''],
     base.usuarios.map((u) => [
       esc(u.nome), `<code>${esc(u.login)}</code>`, esc(u.funcao || '—'), esc(u.placa || '—'),
       u.gestor ? 'sim' : 'não',
-      u.senhaHash
-        ? 'definida'
-        : '<span style="color:var(--texto-2)">escolhe na 1ª entrada</span>',
+      u.authUserId ? 'Supabase Auth' : '<span style="color:var(--dup)">legado</span>',
       u.ativo ? 'ativo' : '<span style="color:var(--texto-2)">inativo</span>',
       acao('data-editar', u.id, 'Editar')
         + ' ' + acao('data-senha', u.id, 'Redefinir senha')
@@ -542,8 +547,12 @@ function pintarCadastros(): void {
         avisoUsuario('Você não pode desativar o próprio acesso.', true);
         return;
       }
-      await auth.atualizarUsuario(u.id, { ativo: !u.ativo });
-      await recarregarTudo();
+      try {
+        await auth.atualizarUsuario(u.id, { ativo: !u.ativo });
+        await recarregarTudo();
+      } catch (e) {
+        avisoUsuario(e instanceof Error ? e.message : 'Não foi possível alterar o usuário.', true);
+      }
     });
   });
 
@@ -558,9 +567,15 @@ function pintarCadastros(): void {
     btn.addEventListener('click', async () => {
       const u = base.usuarios.find((x) => x.id === btn.dataset.senha);
       if (!u) return;
-      await auth.redefinirSenha(u.id);
-      await recarregarTudo();
-      avisoUsuario(`Senha de ${u.nome} liberada. Na próxima entrada, ela escolhe a nova senha no aparelho dela.`);
+      const nova = prompt(`Defina uma nova senha para ${u.nome} (mínimo ${auth.SENHA_MINIMA} caracteres):`);
+      if (!nova) return;
+      try {
+        await auth.redefinirSenha(u.id, nova);
+        await recarregarTudo();
+        avisoUsuario(`Senha de ${u.nome} atualizada no Supabase Auth.`);
+      } catch (e) {
+        avisoUsuario(e instanceof Error ? e.message : 'Não foi possível redefinir a senha.', true);
+      }
     });
   });
 
@@ -588,8 +603,12 @@ function pintarCadastros(): void {
     btn.addEventListener('click', async () => {
       const t = base.transportadoras.find((x) => x.id === btn.dataset.transp);
       if (!t) return;
-      await db.salvar('transportadoras', { ...t, ativo: !t.ativo });
-      await recarregarTudo();
+      try {
+        await definirTransportadoraAtiva(t, !t.ativo);
+        await recarregarTudo();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Não foi possível alterar a transportadora.');
+      }
     });
   });
 
@@ -611,10 +630,41 @@ function pintarCadastros(): void {
     btn.addEventListener('click', async () => {
       const r = base.rotas.find((x) => x.id === btn.dataset.rota);
       if (!r) return;
-      await db.salvar('rotas', { ...r, ativo: !r.ativo });
-      await recarregarTudo();
+      try {
+        await definirRotaAtiva(r, !r.ativo);
+        await recarregarTudo();
+      } catch (e) {
+        alert(e instanceof Error ? e.message : 'Não foi possível alterar a rota.');
+      }
     });
   });
+
+  const online = administracaoDisponivel();
+  for (const formId of ['form-usuario', 'form-transportadora', 'form-rota']) {
+    const form = document.querySelector<HTMLFormElement>(`#${formId}`);
+    for (const campo of Array.from(form?.elements ?? [])) {
+      (campo as HTMLInputElement | HTMLButtonElement | HTMLSelectElement).disabled = !online;
+    }
+  }
+  for (const btn of document.querySelectorAll<HTMLButtonElement>(
+    '[data-usuario],[data-senha],[data-transp],[data-rota],[data-excluir-usuarios],[data-excluir-transportadoras],[data-excluir-rotas]'
+  )) btn.disabled = !online;
+  if (!online) {
+    avisoUsuario('Para criar ou alterar usuários é necessário estar conectado à internet.', true);
+    for (const [id, texto] of [
+      ['t-msg', 'Para criar ou alterar transportadoras é necessário estar conectado à internet.'],
+      ['r-msg', 'Para criar ou alterar rotas é necessário estar conectado à internet.']
+    ]) {
+      const node = $(`#${id}`);
+      node.textContent = texto;
+      node.hidden = false;
+    }
+  } else {
+    for (const id of ['u-msg', 't-msg', 'r-msg']) {
+      const node = $(`#${id}`);
+      if (/necessário estar conectado à internet/i.test(node.textContent ?? '')) node.hidden = true;
+    }
+  }
 }
 
 /** O código é único no sistema: é isso que permite achar o dono pela etiqueta. */
@@ -639,7 +689,7 @@ function limparFormUsuario(): void {
   $('#u-titulo').textContent = 'Acessos';
   $('#u-salvar').textContent = 'Cadastrar';
   $('#u-cancelar').hidden = true;
-  $<HTMLInputElement>('#u-senha').placeholder = 'a pessoa escolhe na 1ª entrada';
+  $<HTMLInputElement>('#u-senha').placeholder = 'mínimo de 4 caracteres';
 }
 
 function entrarEmEdicao(u: Usuario): void {
@@ -673,10 +723,14 @@ async function preencherConfigSupabase(): Promise<void> {
   $<HTMLInputElement>('#s-bucket').value = c.bucket;
 }
 
-function pintarFila(erro: string | null, pendentes: number, configurado: boolean, ultimo: string | null): void {
+function pintarFila(
+  erro: string | null, pendentes: number, cadastrosLegados: number,
+  configurado: boolean, ultimo: string | null
+): void {
   $('#fila-status').innerHTML = `
     <div class="p-kpis">
       <div class="p-kpi"><span class="p-kpi-rot">Registros na fila</span><span class="p-kpi-val">${pendentes}</span></div>
+      <div class="p-kpi"><span class="p-kpi-rot">Cadastros legados</span><span class="p-kpi-val">${cadastrosLegados}</span></div>
       <div class="p-kpi"><span class="p-kpi-rot">Conexão</span><span class="p-kpi-val" style="font-size:18px">${navigator.onLine ? 'online' : 'offline'}</span></div>
       <div class="p-kpi"><span class="p-kpi-rot">Supabase</span><span class="p-kpi-val" style="font-size:18px">${configurado ? 'configurado' : 'não configurado'}</span></div>
     </div>
@@ -760,9 +814,7 @@ function ligarEventos(): void {
         const novo = await auth.criarUsuario({ ...campos, senha: senha || undefined });
         limparFormUsuario();
         await recarregarTudo();
-        avisoUsuario(senha
-          ? `${novo.nome} cadastrado. Passe a senha para a pessoa; ela já pode entrar.`
-          : `${novo.nome} cadastrado. Na primeira entrada, ela escolhe a própria senha.`);
+        avisoUsuario(`${novo.nome} cadastrado no Supabase Auth. Passe a senha inicial para a pessoa.`);
       }
     } catch (e) {
       avisoUsuario(e instanceof Error ? e.message : 'Não foi possível salvar.', true);
@@ -779,19 +831,20 @@ function ligarEventos(): void {
       return;
     }
 
-    await db.salvar('transportadoras', {
-      ...novoSync(),
-      nome,
-      cnpj: $<HTMLInputElement>('#t-cnpj').value.trim(),
-      responsavel: $<HTMLInputElement>('#t-resp').value.trim(),
-      telefone: $<HTMLInputElement>('#t-tel').value.trim(),
-      email: '',
-      ativo: true
-    });
-
-    $<HTMLFormElement>('#form-transportadora').reset();
-    msg.hidden = true;
-    await recarregarTudo();
+    try {
+      await criarTransportadora({
+        nome,
+        cnpj: $<HTMLInputElement>('#t-cnpj').value,
+        responsavel: $<HTMLInputElement>('#t-resp').value,
+        telefone: $<HTMLInputElement>('#t-tel').value
+      });
+      $<HTMLFormElement>('#form-transportadora').reset();
+      msg.hidden = true;
+      await recarregarTudo();
+    } catch (e) {
+      msg.textContent = e instanceof Error ? e.message : 'Não foi possível cadastrar a transportadora.';
+      msg.hidden = false;
+    }
   });
 
   $<HTMLFormElement>('#form-rota').addEventListener('submit', async (ev) => {

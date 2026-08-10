@@ -16,9 +16,7 @@
 //    Nesse caso o caminho é Desativar.
 
 import type { Base } from './contexto.js';
-import * as db from '../../lib/db.js';
-import { TABELAS } from '../../lib/sync.js';
-import { obterCliente } from '../../lib/supabase.js';
+import { excluirCadastroOnline } from '../../lib/cadastros.js';
 
 export type TipoCadastro = 'usuarios' | 'transportadoras' | 'rotas';
 
@@ -61,18 +59,10 @@ export type ResultadoExclusao = { ok: true } | { ok: false; erro: string };
  * configurado não há descida, e aí apagar local basta.
  */
 export async function excluirCadastro(tipo: TipoCadastro, id: string): Promise<ResultadoExclusao> {
-  const cliente = await obterCliente();
-
-  if (cliente) {
-    const { error } = await cliente.from(TABELAS[tipo]).delete().eq('id', id);
-    if (error) {
-      return {
-        ok: false,
-        erro: `A base recusou a exclusão: ${error.message}. Nada foi apagado neste aparelho.`
-      };
-    }
+  try {
+    await excluirCadastroOnline(tipo, id);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, erro: e instanceof Error ? e.message : 'Não foi possível excluir o cadastro.' };
   }
-
-  await db.remover(tipo, id);
-  return { ok: true };
 }

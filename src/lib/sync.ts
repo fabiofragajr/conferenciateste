@@ -11,7 +11,7 @@ import type {
 import * as db from './db.js';
 import { idsParaRemover } from './reconciliar.js';
 import { agora } from './util.js';
-import { obterCliente, obterConfig, estaConfigurado } from './supabase.js';
+import { obterCliente, obterConfig, estaConfigurado, sessaoAutenticada } from './supabase.js';
 
 const LOTE = 200;
 const INTERVALO_AUTO_MS = 60_000;
@@ -65,7 +65,8 @@ export function aoMudarSync(fn: (e: EstadoSync) => void): () => void {
 export const estadoSync = (): EstadoSync => ({ ...estado });
 
 export async function atualizarContagem(): Promise<number> {
-  estado.pendentes = await db.contarPendentes();
+  estado.pendentes = await db.contarPendentesOperacionais();
+  estado.cadastrosLegados = await db.contarCadastrosLegados();
   estado.configurado = await estaConfigurado();
   estado.online = navigator.onLine;
   emitir();
@@ -89,44 +90,9 @@ export function agendarContagem(): void {
 /* ------------------------------------------------------- mapeamento ------ */
 // Colunas em snake_case, como no schema de supabase/schema.sql.
 
-const linhaUsuario = (u: Usuario): Record<string, unknown> => ({
-  id: u.id,
-  nome: u.nome,
-  login: u.login,
-  // O hash acompanha o cadastro: é o que faz a senha valer no celular da doca,
-  // e não só no aparelho onde ela foi digitada. Ver a nota em schema.sql.
-  senha_hash: u.senhaHash || null,
-  gestor: u.gestor,
-  funcao: u.funcao,
-  telefone: u.telefone,
-  placa: u.placa,
-  ativo: u.ativo,
-  atualizado_em: u.atualizadoEm
-});
-
-const linhaTransportadora = (t: Transportadora): Record<string, unknown> => ({
-  id: t.id,
-  nome: t.nome,
-  cnpj: t.cnpj || null,
-  responsavel: t.responsavel || null,
-  telefone: t.telefone || null,
-  email: t.email || null,
-  ativo: t.ativo,
-  atualizado_em: t.atualizadoEm
-});
-
-const linhaRota = (r: Rota): Record<string, unknown> => ({
-  id: r.id,
-  codigo: r.codigo,
-  nome: r.nome,
-  transportadora_id: r.transportadoraId,
-  descricao: r.descricao || null,
-  ativo: r.ativo,
-  atualizado_em: r.atualizadoEm
-});
-
 const linhaSessao = (s: Sessao): Record<string, unknown> => ({
   id: s.id,
+  tenant_id: s.tenantId,
   transportadora_id: s.transportadoraId,
   usuario_id: s.usuarioId,
   inicio: s.inicio,
@@ -145,6 +111,7 @@ const linhaSessao = (s: Sessao): Record<string, unknown> => ({
 
 const linhaLeitura = (l: Leitura): Record<string, unknown> => ({
   id: l.id,
+  tenant_id: l.tenantId,
   sessao_id: l.sessaoId,
   codigo_volume: l.codigoVolume,
   rota: l.rota,
@@ -171,6 +138,7 @@ const linhaLeitura = (l: Leitura): Record<string, unknown> => ({
 
 const linhaOcorrencia = (o: Ocorrencia): Record<string, unknown> => ({
   id: o.id,
+  tenant_id: o.tenantId,
   sessao_id: o.sessaoId,
   leitura_id: o.leituraId,
   codigo_volume: o.codigoVolume,
@@ -204,7 +172,7 @@ async function subirFotos(o: Ocorrencia): Promise<string[]> {
 
   const caminhos = [...(o.fotosRemotas ?? [])];
   for (let i = caminhos.length; i < o.fotos.length; i++) {
-    const caminho = `${o.sessaoId}/${o.id}-${i}.jpg`;
+    const caminho = `${o.tenantId ?? 'legado'}/${o.sessaoId}/${o.id}-${i}.jpg`;
     const { error } = await cliente.storage
       .from(bucket)
       .upload(caminho, o.fotos[i], { contentType: 'image/jpeg', upsert: true });
@@ -222,19 +190,21 @@ async function subirFotos(o: Ocorrencia): Promise<string[]> {
 interface LinhaTransportadora {
   id: string; nome: string; cnpj: string | null; responsavel: string | null;
   telefone: string | null; email: string | null; ativo: boolean; atualizado_em: string;
+  tenant_id?: string;
 }
 interface LinhaRota {
   id: string; codigo: string; nome: string; transportadora_id: string;
-  descricao: string | null; ativo: boolean; atualizado_em: string;
+  descricao: string | null; ativo: boolean; atualizado_em: string; tenant_id?: string;
 }
 interface LinhaUsuario {
-  id: string; nome: string; login: string; senha_hash: string | null; gestor: boolean;
+  id: string; auth_user_id?: string | null; tenant_id?: string; nome: string; login: string; gestor: boolean;
   funcao: string | null; telefone: string | null; placa: string | null;
   ativo: boolean; atualizado_em: string;
 }
 
 const daLinhaTransportadora = (l: LinhaTransportadora): Transportadora => ({
   id: l.id,
+  tenantId: l.tenant_id,
   nome: l.nome,
   cnpj: l.cnpj ?? '',
   responsavel: l.responsavel ?? '',
@@ -249,6 +219,7 @@ const daLinhaTransportadora = (l: LinhaTransportadora): Transportadora => ({
 
 const daLinhaRota = (l: LinhaRota): Rota => ({
   id: l.id,
+  tenantId: l.tenant_id,
   codigo: l.codigo,
   nome: l.nome,
   transportadoraId: l.transportadora_id,
@@ -296,9 +267,8 @@ async function reconciliarCadastro(store: StoreCadastro, idsNoServidor: Set<stri
 /**
  * Baixa o cadastro alterado desde a última descida, e tira o que foi excluído.
  *
- * A senha NUNCA desce (nem sobe): o hash fica só no aparelho onde a pessoa o
- * definiu. Um usuário criado pelo gestor chega aqui sem senha e a define no
- * primeiro acesso deste aparelho — ver `auth.entrar`.
+ * Senha não faz parte do cache. O aparelho recebe somente perfil e permissões;
+ * a credencial fica no Supabase Auth.
  */
 async function baixarCadastro(): Promise<{ baixados: number; removidos: number; erro: string | null }> {
   const cliente = await obterCliente();
@@ -360,27 +330,15 @@ async function baixarCadastro(): Promise<{ baixados: number; removidos: number; 
 }
 
 /**
- * Atualiza o cadastro do usuário.
- *
- * A senha vem do servidor — é assim que a senha definida pelo gestor no desktop
- * passa a valer no celular, e que "redefinir senha" (hash nulo) chega ao
- * aparelho da pessoa. A exceção é o registro que ainda não subiu: aí a senha
- * digitada aqui agora é mais nova que a do servidor e não pode ser perdida.
+ * Atualiza somente o perfil operacional. Nunca baixa hash ou senha.
  */
 async function aplicarUsuarios(linhas: LinhaUsuario[]): Promise<number> {
-  const novos: Usuario[] = [];
-  for (const l of linhas) {
-    // Por login também: um aparelho pode ter a mesma pessoa com outro id, de
-    // quando o cadastro nascia local. A senha ainda não enviada é dela.
-    const local = (await db.obter('usuarios', l.id))
-      ?? (await db.umPorIndice('usuarios', 'login', l.login));
-    const naoSubiu = local?.sync === 'PENDENTE' && Boolean(local.senhaHash);
-    novos.push({
+  const novos: Usuario[] = linhas.map((l) => ({
       id: l.id,
+      authUserId: l.auth_user_id ?? undefined,
+      tenantId: l.tenant_id,
       nome: l.nome,
       login: l.login,
-      // '' = sem senha; a pessoa define na primeira entrada.
-      senhaHash: naoSubiu ? local!.senhaHash : (l.senha_hash ?? ''),
       gestor: l.gestor,
       funcao: l.funcao ?? '',
       telefone: l.telefone ?? '',
@@ -390,10 +348,31 @@ async function aplicarUsuarios(linhas: LinhaUsuario[]): Promise<number> {
       syncTentativas: 0,
       syncErro: null,
       atualizadoEm: l.atualizado_em
-    });
-  }
+    }));
   await db.salvarDoServidor('usuarios', novos);
   return novos.length;
+}
+
+/**
+ * Versões antigas podiam criar cadastros locais. Eles são preservados para
+ * auditoria, mas saem da fila automática: reenviá-los é justamente o que
+ * produz conflito de código/nome. Se o mesmo cadastro existir no servidor, a
+ * descida acima já o reconciliou pelo índice natural.
+ */
+async function separarCadastrosLegados(): Promise<number> {
+  let total = 0;
+  for (const store of db.STORES_MESTRES) {
+    const pendentes = await db.pendentes(store, 10_000);
+    if (!pendentes.length) continue;
+    await db.marcarSync(
+      store,
+      pendentes.map((r) => r.id),
+      'ERRO',
+      'Cadastro local legado preservado. Recrie ou confirme este cadastro online no painel.'
+    );
+    total += pendentes.length;
+  }
+  return total;
 }
 
 /* ----------------------------------------------------- dispositivos ------ */
@@ -463,12 +442,6 @@ async function enviarStore(store: db.NomeStore): Promise<{ enviados: number; err
         }
         linhas.push(linhaOcorrencia({ ...o, fotosRemotas }));
       }
-    } else if (store === 'usuarios') {
-      linhas = (lote as Usuario[]).map(linhaUsuario);
-    } else if (store === 'transportadoras') {
-      linhas = (lote as Transportadora[]).map(linhaTransportadora);
-    } else if (store === 'rotas') {
-      linhas = (lote as Rota[]).map(linhaRota);
     } else if (store === 'sessoes') {
       linhas = (lote as Sessao[]).map(linhaSessao);
     } else {
@@ -478,10 +451,36 @@ async function enviarStore(store: db.NomeStore): Promise<{ enviados: number; err
     const { error } = await cliente.from(TABELAS[store]).upsert(linhas, { onConflict: 'id' });
 
     const ids = lote.map((r) => r.id);
+    const versoes = new Map(lote.map((r) => [r.id, r.atualizadoEm]));
     if (error) {
-      // Mantém pendente para tentar de novo; só vira ERRO depois de insistir.
-      await marcarFalha(store, lote as { id: string; syncTentativas: number }[], error.message);
-      return { enviados, erro: `${TABELAS[store]}: ${error.message}` };
+      const mensagem = error.message;
+      // Falha de autorização atinge o lote inteiro; repetir item por item só
+      // faria centenas de requisições iguais. Erro de dado/FK pode ser isolado:
+      // tenta cada registro, confirma os válidos e mantém apenas os recusados.
+      if (/row-level security|jwt|not authenticated|permission denied/i.test(mensagem)) {
+        await marcarFalha(store, lote as { id: string; syncTentativas: number }[], mensagem);
+        return { enviados, erro: `${TABELAS[store]}: ${mensagem}` };
+      }
+
+      const falhas: string[] = [];
+      for (let i = 0; i < lote.length; i++) {
+        const registro = lote[i];
+        const tentativa = await cliente.from(TABELAS[store]).upsert([linhas[i]], { onConflict: 'id' });
+        if (tentativa.error) {
+          await marcarFalha(store, [registro] as { id: string; syncTentativas: number }[], tentativa.error.message);
+          falhas.push(`${registro.id}: ${tentativa.error.message}`);
+        } else {
+          await db.marcarSync(
+            store, [registro.id], 'ENVIADO', null,
+            extrasPorId.get(registro.id) ?? {}, versoes
+          );
+          enviados++;
+        }
+      }
+      return {
+        enviados,
+        erro: falhas.length ? `${TABELAS[store]}: ${falhas.length} registro(s) recusado(s)` : null
+      };
     }
 
     // Um lote de 200 leituras precisa virar UMA transação local, não 200.
@@ -490,10 +489,10 @@ async function enviarStore(store: db.NomeStore): Promise<{ enviados: number; err
     // câmera. Fotos são a única exceção porque cada ocorrência pode receber um
     // caminho remoto diferente; leitura, sessão e cadastro não têm extras.
     if (extrasPorId.size === 0) {
-      await db.marcarSync(store, ids, 'ENVIADO');
+      await db.marcarSync(store, ids, 'ENVIADO', null, {}, versoes);
     } else {
       for (const id of ids) {
-        await db.marcarSync(store, [id], 'ENVIADO', null, extrasPorId.get(id) ?? {});
+        await db.marcarSync(store, [id], 'ENVIADO', null, extrasPorId.get(id) ?? {}, versoes);
       }
     }
     enviados += ids.length;
@@ -536,8 +535,19 @@ export async function sincronizar(): Promise<EstadoSync> {
       return estadoSync();
     }
 
-    // Sobe primeiro o que foi feito aqui, depois desce o que mudou lá: assim
-    // uma alteração de cadastro nunca sobrescreve leitura que ainda não subiu.
+    if (!(await sessaoAutenticada())) {
+      estado.ultimoErro = 'Entre novamente com internet para autorizar o envio protegido.';
+      return estadoSync();
+    }
+
+    // Dados mestres descem antes. Cadastro nunca sobe pela fila automática.
+    const descida = await baixarCadastro();
+    if (descida.erro) {
+      estado.ultimoErro = descida.erro;
+      return estadoSync();
+    }
+    estado.ultimaDescida = agora();
+    const legados = await separarCadastrosLegados();
     //
     // Cada store segue mesmo que a anterior falhe. Isto não é zelo: `rotas` vem
     // antes de `leituras`, e um código de rota recusado pelo servidor (dois
@@ -552,17 +562,13 @@ export async function sincronizar(): Promise<EstadoSync> {
       if (r.erro) falhas.push(r.erro);
     }
 
-    // A descida também roda sempre: é ela que cura o aparelho: o cadastro certo
-    // desce e substitui o registro local que o servidor está recusando.
-    const descida = await baixarCadastro();
-    if (descida.erro) falhas.push(descida.erro);
-    else estado.ultimaDescida = agora();
+    if (legados) falhas.push(`${legados} cadastro(s) local(is) legado(s) separado(s) da fila operacional`);
 
     const erro = falhas.length ? falhas.join(' | ') : null;
     estado.ultimoErro = erro;
     if (enviados > 0) estado.ultimoEnvio = agora();
 
-    await registrarDispositivo(await db.contarPendentes(), estado.usuarioAtual);
+    await registrarDispositivo(await db.contarPendentesOperacionais(), estado.usuarioAtual);
     return estadoSync();
   } catch (e) {
     estado.ultimoErro = e instanceof Error ? e.message : 'Falha inesperada na sincronização.';
@@ -582,27 +588,26 @@ export function sincronizarEmSegundoPlano(): void {
 /**
  * Busca o cadastro agora, sem esperar o ciclo automático.
  *
- * Serve ao login: a mesma pessoa usa mais de um aparelho, e a senha pode ter
- * sido definida ou trocada em outro — ou pelo gestor, no desktop. Sem isto, o
- * celular recusaria a senha certa até a sincronização de fundo passar.
+ * Serve ao login: depois que o Supabase Auth valida a credencial, o perfil e
+ * as permissões daquele tenant precisam descer antes de abrir a operação.
  *
  * Devolve `true` se conseguiu falar com a base, para quem chamou saber se vale
  * tentar de novo.
  */
 export async function baixarCadastroAgora(): Promise<boolean> {
   if (!navigator.onLine || !(await estaConfigurado())) return false;
+  if (!(await sessaoAutenticada())) return false;
   const r = await baixarCadastro();
   if (!r.erro) estado.ultimaDescida = agora();
   return !r.erro;
 }
 
 /**
- * Garante que este aparelho conhece o cadastro antes de pedir a senha.
+ * Tenta restaurar o cadastro durante o boot quando já existe sessão Auth.
  *
  * Não existe cadastro de exemplo: aparelho novo começa vazio e recebe pessoas,
- * transportadoras e rotas da base. Sem esta espera, a tela de login recusaria a
- * senha certa só porque a descida ainda não terminou — e a pessoa procuraria um
- * erro que não existe. Roda uma vez, no boot, e só quando não há nada local.
+ * transportadoras e rotas da base. Roda uma vez no boot, só quando não há nada
+ * local; sem sessão autenticada, apenas mantém a tela de entrada.
  */
 export async function garantirCadastroLocal(): Promise<boolean> {
   if ((await db.todos('usuarios')).length > 0) return true;

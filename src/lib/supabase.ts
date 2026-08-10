@@ -10,10 +10,11 @@ import * as db from './db.js';
 
 const CHAVE_CONFIG = 'supabase.config';
 
+const variaveis = (import.meta as ImportMeta & { env?: ImportMetaEnv }).env;
 const doAmbiente: ConfigSupabase = {
-  url: (import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? '',
-  anonKey: (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) ?? '',
-  bucket: (import.meta.env.VITE_SUPABASE_BUCKET as string | undefined) ?? 'ocorrencias'
+  url: variaveis?.VITE_SUPABASE_URL ?? '',
+  anonKey: variaveis?.VITE_SUPABASE_ANON_KEY ?? '',
+  bucket: variaveis?.VITE_SUPABASE_BUCKET ?? 'ocorrencias'
 };
 
 let cache: ConfigSupabase | null = null;
@@ -65,13 +66,42 @@ export async function obterCliente(): Promise<SupabaseClient | null> {
   const assinatura = `${c.url}|${c.anonKey.slice(0, 12)}`;
   if (cliente && clienteDe === assinatura) return cliente;
   cliente = createClient(c.url, c.anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
+    // A sessão autenticada é o que faz as políticas RLS reconhecerem usuário e
+    // tenant. Persistir o refresh token permite voltar ao galpão e operar
+    // offline depois de uma primeira entrada online.
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
     // A fila local já garante a entrega; não queremos retry agressivo segurando
     // a thread enquanto a pessoa bipa.
     global: { headers: { 'x-client-info': 'logdis-entrega' } }
   });
   clienteDe = assinatura;
   return cliente;
+}
+
+/** Login curto continua na UI; o Auth recebe um e-mail técnico determinístico. */
+export function emailDeLogin(login: string): string {
+  const limpo = String(login ?? '').trim().toLowerCase();
+  return limpo.includes('@') ? limpo : `${limpo}@usuarios.logdis.local`;
+}
+
+export async function sessaoAutenticada(): Promise<boolean> {
+  const c = await obterCliente();
+  if (!c) return false;
+  const { data, error } = await c.auth.getSession();
+  return !error && Boolean(data.session?.user && !data.session.user.is_anonymous);
+}
+
+export async function entrarNoSupabase(login: string, senha: string): Promise<{ ok: true; authUserId: string } | { ok: false; erro: string }> {
+  const c = await obterCliente();
+  if (!c) return { ok: false, erro: 'Supabase não configurado.' };
+  const { data, error } = await c.auth.signInWithPassword({ email: emailDeLogin(login), password: senha });
+  if (error || !data.user) return { ok: false, erro: 'Login ou senha incorretos.' };
+  return { ok: true, authUserId: data.user.id };
+}
+
+export async function sairDoSupabase(): Promise<void> {
+  const c = await obterCliente();
+  if (c) await c.auth.signOut({ scope: 'local' });
 }
 
 /** Teste de conectividade usado no painel do gestor. */

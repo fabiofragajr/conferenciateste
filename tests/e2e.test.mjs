@@ -273,171 +273,25 @@ await passo('detalhe da sessão abre com mapa', async () => {
   await g.screenshot({ path: 'tests/saida/tela-gestor.png', fullPage: true });
 });
 
-await passo('cadastro de transportadora e código de rota', async () => {
+await passo('cadastro não nasce local quando o Supabase não está configurado', async () => {
   await secao(g, 'transportadoras');
-  await g.fill('#t-nome', 'Transportadora Beta');
+  const antes = await g.innerHTML('#lista-transportadoras');
+  await g.fill('#t-nome', 'Transportadora que não pode ficar local');
   await g.click('#form-transportadora button[type=submit]');
-  await g.waitForTimeout(400);
-  if (!/Transportadora Beta/.test(await g.innerHTML('#lista-transportadoras'))) {
-    throw new Error('transportadora não cadastrada');
-  }
-
-  await secao(g, 'rotas');
-  const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
-  const beta = opcoes.find(([, t]) => t === 'Transportadora Beta');
-  await g.selectOption('#r-transportadora', beta[0]);
-  await g.fill('#r-codigo', 'FLES');
-  await g.fill('#r-nome', 'Carga Leste');
-  await g.click('#form-rota button[type=submit]');
-  await g.waitForTimeout(400);
-  if (!/FLES/.test(await g.innerHTML('#lista-rotas'))) throw new Error('rota não cadastrada');
-});
-
-await passo('excluir recusa cadastro com histórico e explica o caminho', async () => {
-  await secao(g, 'rotas');
-  // FNOR já foi bipada lá em cima: excluir apagaria o vínculo que responde
-  // "quem bipou esta caixa". O aviso precisa dizer isso e oferecer Desativar.
-  let aviso = '';
-  g.once('dialog', (d) => { aviso = d.message(); void d.dismiss(); });
-  const linhaFnor = g.locator('#lista-rotas tr', { hasText: 'FNOR' }).first();
-  await linhaFnor.locator('button[data-excluir-rotas]').click();
   await g.waitForTimeout(300);
-  if (!/histórico/i.test(aviso)) throw new Error(`aviso não explicou o motivo: ${aviso}`);
-  if (!/Desativar/.test(aviso)) throw new Error(`aviso não ofereceu saída: ${aviso}`);
-  if (!/FNOR/.test(await g.innerHTML('#lista-rotas'))) throw new Error('FNOR sumiu mesmo assim');
+  const mensagem = await g.textContent('#t-msg');
+  if (!/Configure o Supabase/i.test(mensagem ?? '')) throw new Error(`mensagem: ${mensagem}`);
+  if ((await g.innerHTML('#lista-transportadoras')) !== antes) throw new Error('cadastro foi alterado localmente');
 });
 
-await passo('excluir apaga o cadastro que nunca foi usado', async () => {
-  await secao(g, 'rotas');
-  // FLES foi cadastrada agora e nunca recebeu leitura: esta é a que pode sair.
-  g.once('dialog', (d) => void d.accept());
-  const linhaFles = g.locator('#lista-rotas tr', { hasText: 'FLES' }).first();
-  await linhaFles.locator('button[data-excluir-rotas]').click();
-  await g.waitForTimeout(600);
-  if (/FLES/.test(await g.innerHTML('#lista-rotas'))) throw new Error('a rota continuou na lista');
-});
-
-await passo('código de rota não pode ter dois donos', async () => {
-  await secao(g, 'rotas');
-  const opcoes = await g.$$eval('#r-transportadora option', (os) => os.map((o) => [o.value, o.textContent.trim()]));
-  const beta = opcoes.find(([, t]) => t === 'Transportadora Beta');
-  await g.selectOption('#r-transportadora', beta[0]);
-  await g.fill('#r-codigo', 'FNOR');
-  await g.fill('#r-nome', 'Tentativa duplicada');
-  await g.click('#form-rota button[type=submit]');
-  await g.waitForTimeout(300);
-  const msg = await g.textContent('#r-msg');
-  if (!/já pertence/.test(msg ?? '')) throw new Error(`esperava recusa por duplicidade, veio: ${msg}`);
-});
-
-// ---- acessos: o gestor cria e administra quem entra, sem e-mail no caminho
-await passo('gestor cria acesso sem senha e sem e-mail', async () => {
+await passo('usuário exige senha e administração autenticada', async () => {
   await secao(g, 'pessoas');
   await g.fill('#u-nome', 'Marcos Ajudante');
   await g.fill('#u-login', 'marcos');
-  await g.fill('#u-funcao', 'Ajudante');
   await g.click('#u-salvar');
-  await g.waitForTimeout(400);
-  const lista = await g.innerHTML('#lista-usuarios');
-  if (!/marcos/.test(lista)) throw new Error('acesso não apareceu na lista');
-  if (!/escolhe na 1ª entrada/.test(lista)) throw new Error('deveria indicar senha pendente');
-});
-
-await passo('quem foi cadastrado hoje entra hoje', async () => {
-  const ctxMarcos = await navegador.newContext({ viewport: { width: 420, height: 900 }, locale: 'pt-BR' });
-  const m = await ctxMarcos.newPage();
-  await prepararAparelho(m, BASE, '/entrar');
-  // O aparelho do Marcos não conhece o login novo: entrega como a base entregaria.
-  await m.evaluate(async (novo) => {
-    const req = indexedDB.open('logdis');
-    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
-    await new Promise((ok) => {
-      const tx = bd.transaction('usuarios', 'readwrite');
-      tx.objectStore('usuarios').put(novo);
-      tx.oncomplete = ok;
-    });
-    bd.close();
-  }, {
-    id: '00000000-0000-4000-8000-000000000003', nome: 'Marcos Ajudante', login: 'marcos',
-    senhaHash: '', gestor: false, funcao: 'Ajudante', telefone: '', placa: '', ativo: true,
-    sync: 'ENVIADO', syncTentativas: 0, syncErro: null, atualizadoEm: '2026-01-01T00:00:00.000Z'
-  });
-  await m.reload();
-  await fazerLogin(m, 'marcos', 'senha-do-marcos');
-  await m.waitForSelector('#view-grupo:not([hidden])', { timeout: 5000 });
-  await ctxMarcos.close();
-});
-
-await passo('editar acesso pelo mesmo formulário', async () => {
-  await secao(g, 'pessoas');
-  await g.click('#lista-usuarios button[data-editar]>>nth=0');
   await g.waitForTimeout(200);
-  if ((await g.textContent('#u-salvar')).trim() !== 'Salvar') throw new Error('form não entrou em edição');
-  await g.fill('#u-funcao', 'Conferente sênior');
-  await g.click('#u-salvar');
-  await g.waitForTimeout(400);
-  if (!/Conferente sênior/.test(await g.innerHTML('#lista-usuarios'))) {
-    throw new Error('edição não gravou');
-  }
-  if ((await g.textContent('#u-salvar')).trim() !== 'Cadastrar') throw new Error('form não voltou ao modo cadastro');
-});
-
-await passo('redefinir senha devolve a escolha para a pessoa', async () => {
-  await secao(g, 'pessoas');
-  const linhas = await g.$$('#lista-usuarios tbody tr');
-  let alvo = null;
-  for (const linha of linhas) {
-    if (/marcos/.test(await linha.innerHTML())) alvo = linha;
-  }
-  if (!alvo) throw new Error('linha do marcos não encontrada');
-  await (await alvo.$('button[data-senha]')).click();
-  await g.waitForTimeout(400);
-  if (!/escolhe a nova senha/.test(await g.textContent('#u-ok'))) {
-    throw new Error('sem confirmação do que acontece agora');
-  }
-});
-
-await passo('gestor troca a própria senha na tela', async () => {
-  // O acesso nasce com uma senha provisória que alguém entregou na mão. Trocar
-  // sozinho, sem pedir nada a ninguém, é o que faz essa senha deixar de rodar
-  // pela operação.
-  await secao(g, 'pessoas');
-  const linhas = await g.$$('#lista-usuarios tbody tr');
-  let minha = null;
-  for (const linha of linhas) {
-    if (/sandro/.test(await linha.innerHTML())) minha = linha;
-  }
-  if (!minha) throw new Error('o gestor não se encontra na lista');
-  await (await minha.$('button[data-editar]')).click();
-  await g.waitForTimeout(200);
-
-  await g.fill('#u-senha', 'nova-senha-do-sandro');
-  await g.click('#u-salvar');
-  await g.waitForTimeout(500);
-
-  await g.click('#btn-sair');
-  await g.waitForSelector('#view-login:not([hidden])', { timeout: 5000 });
-
-  await fazerLogin(g, 'sandro', SENHA_ANTIGA);
-  await g.waitForSelector('#login-erro:not([hidden])', { timeout: 5000 });
-  if (await g.isVisible('#tela-painel:not([hidden])')) throw new Error('a senha antiga ainda entra');
-
-  await fazerLogin(g, 'sandro', 'nova-senha-do-sandro');
-  await g.waitForSelector('#tela-painel:not([hidden])', { timeout: 5000 });
-});
-
-await passo('gestor não consegue tirar o próprio acesso', async () => {
-  await secao(g, 'pessoas');
-  const linhas = await g.$$('#lista-usuarios tbody tr');
-  let alvo = null;
-  for (const linha of linhas) {
-    if (/sandro/.test(await linha.innerHTML())) alvo = linha;
-  }
-  await (await alvo.$('button[data-usuario]')).click();
-  await g.waitForTimeout(300);
-  if (!/não pode desativar o próprio acesso/.test(await g.textContent('#u-msg'))) {
-    throw new Error('deixou o gestor se trancar para fora');
-  }
+  if (!/senha precisa ter/i.test(await g.textContent('#u-msg') ?? '')) throw new Error('senha inicial não foi exigida');
+  if (/marcos/.test(await g.innerHTML('#lista-usuarios'))) throw new Error('usuário nasceu apenas no cache');
 });
 
 await passo('rota lida sem cadastro vira fila de decisão do gestor', async () => {

@@ -109,6 +109,21 @@ await passo('PDF é gerado offline (chunk no precache)', async () => {
   if (!/\.pdf$/.test(arq.suggestedFilename())) throw new Error(`arquivo: ${arq.suggestedFilename()}`);
 });
 
+await passo('cadastros administrativos são bloqueados antes do preenchimento offline', async () => {
+  await p.evaluate(() => localStorage.removeItem('logdis.usuarioLogado'));
+  await p.goto(`${BASE}/painel`, { waitUntil: 'domcontentloaded' });
+  await p.waitForSelector('#view-login:not([hidden])');
+  await fazerLogin(p, 'sandro');
+  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 10_000 });
+  await p.goto(`${BASE}/painel/rotas`, { waitUntil: 'domcontentloaded' });
+  await p.waitForSelector('[data-secao="rotas"]:not([hidden])', { timeout: 10_000 });
+  if (!(await p.isDisabled('#form-rota button[type="submit"]'))) {
+    throw new Error('cadastro de rota continua habilitado offline');
+  }
+  const aviso = await p.textContent('#r-msg');
+  if (!/necessário estar conectado/i.test(aviso ?? '')) throw new Error(`aviso offline: ${aviso}`);
+});
+
 await navegador.close();
 servidor.parar();
 console.log(falhou ? '\nFALHAS ACIMA' : '\nOFFLINE_OK');

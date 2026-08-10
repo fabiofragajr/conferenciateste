@@ -11,11 +11,11 @@ import type {
 import { agora, uid } from './util.js';
 
 const DB_NOME = 'logdis';
-const DB_VERSAO = 2;
+const DB_VERSAO = 4;
 
 interface LogDisDB extends DBSchema {
   usuarios: { key: string; value: Usuario; indexes: { login: string; sync: string } };
-  transportadoras: { key: string; value: Transportadora; indexes: { sync: string } };
+  transportadoras: { key: string; value: Transportadora; indexes: { nome: string; sync: string } };
   rotas: { key: string; value: Rota; indexes: { codigo: string; transportadoraId: string; sync: string } };
   sessoes: { key: string; value: Sessao; indexes: { usuarioId: string; status: string; inicio: string; sync: string } };
   leituras: { key: string; value: Leitura; indexes: { sessaoId: string; timestamp: string; sync: string } };
@@ -25,9 +25,10 @@ interface LogDisDB extends DBSchema {
 
 export type NomeStore = 'usuarios' | 'transportadoras' | 'rotas' | 'sessoes' | 'leituras' | 'ocorrencias';
 
-/** Ordem de envio: respeita a dependência entre as tabelas no Supabase. */
-export const STORES_SYNC: NomeStore[] =
-  ['usuarios', 'transportadoras', 'rotas', 'sessoes', 'leituras', 'ocorrencias'];
+/** Dados mestres são cache de mão única: Supabase -> aparelho. */
+export const STORES_MESTRES: NomeStore[] = ['usuarios', 'transportadoras', 'rotas'];
+/** Somente acontecimentos da operação entram na fila de saída. */
+export const STORES_SYNC: NomeStore[] = ['sessoes', 'leituras', 'ocorrencias'];
 
 /** Formato v1: o grupo carregava a lista de rotas e o nome solto da transportadora. */
 interface GrupoRotaV1 extends Sincronizavel {
@@ -81,6 +82,25 @@ export function db(): Promise<IDBPDatabase<LogDisDB>> {
           rotas.createIndex('sync', 'sync');
 
           await migrarGruposParaTransportadoras(banco, tx);
+        }
+
+        if (versaoAnterior < 3) {
+          const transportadoras = tx.objectStore('transportadoras');
+          if (!transportadoras.indexNames.contains('nome')) {
+            // O servidor garante unicidade por tenant. Localmente basta o
+            // índice para reconciliar UUID legado pelo nome sem apagar fila.
+            transportadoras.createIndex('nome', 'nome');
+          }
+        }
+
+        if (versaoAnterior < 4) {
+          // Credenciais legadas não pertencem ao cache offline. Preserva o
+          // perfil operacional e remove somente o campo de hash antigo.
+          const usuarios = tx.objectStore('usuarios');
+          for (const registro of await usuarios.getAll() as Array<Usuario & { senhaHash?: string }>) {
+            const { senhaHash: _removida, ...perfil } = registro;
+            await usuarios.put(perfil as Usuario);
+          }
         }
       }
     });
@@ -184,6 +204,7 @@ export async function salvarVarios<S extends NomeStore>(store: S, objs: ValorDe<
  */
 const INDICE_UNICO: Partial<Record<NomeStore, string>> = {
   usuarios: 'login',
+  transportadoras: 'nome',
   rotas: 'codigo'
 };
 
@@ -208,6 +229,22 @@ export async function salvarDoServidor<S extends NomeStore>(store: S, objs: Valo
   if (!objs.length) return;
   const banco = await db();
   const indice = INDICE_UNICO[store];
+
+  // Resolve primeiro os ids legados nas referências operacionais. Apenas
+  // apagar o cadastro conflitante faria uma sessão ainda pendente apontar para
+  // um UUID que não existe no servidor e trocar o 409 por violação de FK.
+  if (indice) {
+    const acesso = banco as unknown as AcessoPorIndice;
+    for (const o of objs) {
+      const valor = (o as unknown as Record<string, unknown>)[indice];
+      if (typeof valor !== 'string' || !valor) continue;
+      const chave = await acesso.getKeyFromIndex(store, indice, valor);
+      if (chave !== undefined && chave !== o.id) {
+        await remapearCadastro(store as StoreCadastro, String(chave), o.id);
+      }
+    }
+  }
+
   const tx = banco.transaction(store, 'readwrite');
   const loja = tx.store as unknown as LojaFrouxa;
 
@@ -245,10 +282,51 @@ export async function todos<S extends NomeStore>(store: S): Promise<ValorDe<S>[]
 interface AcessoPorIndice {
   getAllFromIndex(store: string, indice: string, chave?: IDBValidKey, limite?: number): Promise<unknown[]>;
   getFromIndex(store: string, indice: string, chave: IDBValidKey): Promise<unknown>;
+  getKeyFromIndex(store: string, indice: string, chave: IDBValidKey): Promise<IDBValidKey | undefined>;
   countFromIndex(store: string, indice: string, chave?: IDBValidKey): Promise<number>;
 }
 
 const comIndice = async (): Promise<AcessoPorIndice> => (await db()) as unknown as AcessoPorIndice;
+
+type StoreCadastro = 'usuarios' | 'transportadoras' | 'rotas';
+
+/** Troca UUID local legado pelo UUID canônico que desceu do servidor. */
+async function remapearCadastro(store: StoreCadastro, antigo: string, novo: string): Promise<void> {
+  if (antigo === novo) return;
+  const banco = await db();
+  const afetadas: NomeStore[] = store === 'usuarios'
+    ? ['sessoes', 'ocorrencias']
+    : store === 'transportadoras'
+      ? ['rotas', 'sessoes', 'leituras']
+      : ['leituras'];
+  const tx = banco.transaction(afetadas, 'readwrite');
+
+  for (const nome of afetadas) {
+    const loja = tx.objectStore(nome);
+    const todos = await loja.getAll() as ValorQualquer[];
+    for (const item of todos) {
+      let alterado: ValorQualquer | null = null;
+      if (store === 'usuarios' && nome === 'sessoes' && (item as Sessao).usuarioId === antigo) {
+        alterado = { ...item, usuarioId: novo } as Sessao;
+      } else if (store === 'usuarios' && nome === 'ocorrencias' && (item as Ocorrencia).usuarioId === antigo) {
+        alterado = { ...item, usuarioId: novo } as Ocorrencia;
+      } else if (store === 'transportadoras' && nome === 'rotas' && (item as Rota).transportadoraId === antigo) {
+        alterado = { ...item, transportadoraId: novo } as Rota;
+      } else if (store === 'transportadoras' && nome === 'sessoes' && (item as Sessao).transportadoraId === antigo) {
+        alterado = { ...item, transportadoraId: novo } as Sessao;
+      } else if (store === 'transportadoras' && nome === 'leituras' && (item as Leitura).transportadoraDonaId === antigo) {
+        alterado = { ...item, transportadoraDonaId: novo } as Leitura;
+      } else if (store === 'rotas' && nome === 'leituras' && (item as Leitura).rotaId === antigo) {
+        alterado = { ...item, rotaId: novo } as Leitura;
+      }
+      if (alterado) await loja.put(alterado);
+    }
+  }
+  await tx.done;
+  if (store === 'usuarios' && localStorage.getItem('logdis.usuarioLogado') === antigo) {
+    localStorage.setItem('logdis.usuarioLogado', novo);
+  }
+}
 
 export async function porIndice<S extends NomeStore>(store: S, indice: string, valor: string): Promise<ValorDe<S>[]> {
   const banco = await comIndice();
@@ -269,11 +347,20 @@ export async function pendentes<S extends NomeStore>(store: S, limite = 500): Pr
   return (await banco.getAllFromIndex(store, 'sync', 'PENDENTE', limite)) as ValorDe<S>[];
 }
 
-export async function contarPendentes(): Promise<number> {
+export async function contarPendentesOperacionais(): Promise<number> {
   const banco = await comIndice();
   let total = 0;
-  for (const store of STORES_SYNC) {
+  for (const store of STORES_SYNC) total += await banco.countFromIndex(store, 'sync', 'PENDENTE');
+  return total;
+}
+
+/** Cadastros pendentes de versões antigas: preservados, mas nunca reenviados pela fila normal. */
+export async function contarCadastrosLegados(): Promise<number> {
+  const banco = await comIndice();
+  let total = 0;
+  for (const store of STORES_MESTRES) {
     total += await banco.countFromIndex(store, 'sync', 'PENDENTE');
+    total += await banco.countFromIndex(store, 'sync', 'ERRO');
   }
   return total;
 }
@@ -284,7 +371,8 @@ export async function marcarSync(
   ids: string[],
   status: StatusSync,
   erro: string | null = null,
-  extras: Record<string, unknown> = {}
+  extras: Record<string, unknown> = {},
+  versoesEnviadas?: ReadonlyMap<string, string>
 ): Promise<void> {
   if (!ids.length) return;
   const banco = await db();
@@ -292,6 +380,12 @@ export async function marcarSync(
   await Promise.all(ids.map(async (id) => {
     const atual = await tx.store.get(id);
     if (!atual) return;
+    const versaoEnviada = versoesEnviadas?.get(id);
+    if (status === 'ENVIADO' && versaoEnviada && atual.atualizadoEm !== versaoEnviada) {
+      // O registro mudou enquanto a requisição estava em trânsito. A resposta
+      // confirma a versão antiga; a nova continua PENDENTE para o próximo lote.
+      return;
+    }
     // Se o registro foi alterado depois do envio, ele continua pendente.
     const alterado = status === 'ENVIADO' && atual.sync !== 'PENDENTE' && atual.sync !== 'ERRO';
     if (alterado) return;

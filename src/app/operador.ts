@@ -389,6 +389,7 @@ async function iniciarSessao(transportadora: Transportadora): Promise<void> {
 
   const nova: Sessao = {
     ...novoSync(),
+    tenantId: usuario.tenantId,
     transportadoraId: transportadora.id,
     usuarioId: usuario.id,
     inicio: agora(),
@@ -503,6 +504,7 @@ async function registrarLeitura(texto: string, origem: 'CAMERA' | 'MANUAL'): Pro
 
   const leitura: Leitura = {
     ...novoSync(),
+    tenantId: sessao.tenantId ?? usuario?.tenantId,
     sessaoId: sessao.id,
     codigoVolume: dados.codigoVolume ?? null,
     rota: dados.rota ?? null,
@@ -868,6 +870,7 @@ function ligarEventos(): void {
 
     const ocorrencia: Ocorrencia = {
       ...novoSync(),
+      tenantId: sessao.tenantId ?? usuario.tenantId,
       sessaoId: sessao.id,
       leituraId: ocLeitura?.id ?? null,
       codigoVolume: ocLeitura?.codigoVolume ?? null,

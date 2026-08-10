@@ -34,21 +34,24 @@ const passo = async (nome, fn) => {
 /** O estado da base depois da limpeza: uma transportadora e seis rotas. */
 const T_DHM = '00000000-0000-4000-8000-00000000d001';
 const U_SANDRO = '00000000-0000-4000-8000-000000000001';
+const AUTH_SANDRO = '10000000-0000-4000-8000-000000000001';
+const TENANT = '00000000-0000-4000-8000-000000000009';
 const CODIGOS = ['FCEN', 'FSUL', 'FNOR', 'FOES', 'FABC', 'FLES'];
 
 const SERVIDOR = {
   transportadoras: [{
-    id: T_DHM, nome: 'DHM AWAY', cnpj: null, responsavel: null, telefone: null,
+    id: T_DHM, tenant_id: TENANT, nome: 'DHM AWAY', cnpj: null, responsavel: null, telefone: null,
     email: null, ativo: true, atualizado_em: '2026-08-09T12:00:00.000Z'
   }],
   rotas: CODIGOS.map((codigo, i) => ({
-    id: `00000000-0000-4000-8000-9000000000${i}${i}`,
+    id: `00000000-0000-4000-8000-9000000000${i}${i}`, tenant_id: TENANT,
     codigo, nome: codigo, transportadora_id: T_DHM,
     descricao: null, ativo: true, atualizado_em: '2026-08-09T12:00:00.000Z'
   })),
   // O Sandro do cadastro de teste, com o MESMO id: é quem continua entrando.
   usuarios: [{
-    id: U_SANDRO, nome: 'Sandro', login: 'sandro', senha_hash: null, gestor: true,
+    id: U_SANDRO, auth_user_id: AUTH_SANDRO, tenant_id: TENANT,
+    nome: 'Sandro', login: 'sandro', gestor: true,
     funcao: 'Gestor de transporte', telefone: null, placa: null,
     ativo: true, atualizado_em: '2026-01-01T00:00:00.000Z'
   }]
@@ -144,6 +147,24 @@ const ligarESincronizar = async (pagina) => {
       tx.oncomplete = ok;
     });
     bd.close();
+
+    const agora = Math.floor(Date.now() / 1000);
+    const payload = btoa(JSON.stringify({
+      sub: '10000000-0000-4000-8000-000000000001', role: 'authenticated', aud: 'authenticated',
+      exp: agora + 3600, iat: agora,
+      app_metadata: { tenant_id: '00000000-0000-4000-8000-000000000009' }
+    })).replaceAll('=', '').replaceAll('+', '-').replaceAll('/', '_');
+    const token = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${payload}.assinatura-de-teste`;
+    localStorage.setItem('sb-fake-auth-token', JSON.stringify({
+      access_token: token, refresh_token: 'refresh-de-teste', token_type: 'bearer',
+      expires_in: 3600, expires_at: agora + 3600,
+      user: {
+        id: '10000000-0000-4000-8000-000000000001', aud: 'authenticated', role: 'authenticated',
+        email: 'sandro@usuarios.logdis.local', is_anonymous: false,
+        app_metadata: { tenant_id: '00000000-0000-4000-8000-000000000009' },
+        user_metadata: {}, identities: [], created_at: new Date().toISOString()
+      }
+    }));
   });
   await pagina.reload();
 };
@@ -175,9 +196,9 @@ await passo('a transportadora excluída some do aparelho, e a nova fica', async 
   await ctx.close();
 });
 
-await passo('registro que ainda não subiu sobrevive à varredura', async () => {
-  // O cadastro criado offline, no galpão sem sinal, não está no servidor porque
-  // ainda não CHEGOU lá. Apagá-lo seria destruir o que a pessoa acabou de fazer.
+await passo('cadastro legado pendente sobrevive à varredura', async () => {
+  // Versões antigas podiam criar cadastro offline. A v4 nunca o envia, mas
+  // também não pode apagá-lo silenciosamente durante a reconciliação.
   const ctx = await navegador.newContext({ viewport: { width: 390, height: 844 }, locale: 'pt-BR' });
   const p = await ctx.newPage();
   await prepararAparelho(p, BASE, '/entrar');

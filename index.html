@@ -254,16 +254,16 @@
         <div class="p-cartao">
           <h3 id="u-titulo">Acessos</h3>
           <p class="p-vazio" style="padding-top:0">
-            Cadastro mínimo: nome e login. Sem e-mail e sem confirmação — quem
-            foi cadastrado hoje entra hoje. Função, telefone e placa são
-            descritivos e aparecem no relatório: não liberam nem bloqueiam nada.
+            Usuários são criados online no Supabase Auth. Nome, login e senha
+            inicial são obrigatórios; função, telefone e placa continuam apenas
+            descritivos e aparecem no relatório.
           </p>
           <form id="form-usuario" class="p-filtros">
             <div class="p-campo"><label for="u-nome">Nome</label><input id="u-nome" type="text" required /></div>
             <div class="p-campo"><label for="u-login">Login</label><input id="u-login" type="text" autocapitalize="none" autocomplete="off" required /></div>
             <div class="p-campo">
-              <label for="u-senha">Senha <em>opcional</em></label>
-              <input id="u-senha" type="text" autocomplete="off" placeholder="a pessoa escolhe na 1ª entrada" />
+              <label for="u-senha">Senha inicial</label>
+              <input id="u-senha" type="password" autocomplete="new-password" placeholder="mínimo de 4 caracteres" />
             </div>
             <div class="p-campo"><label for="u-funcao">Função <em>opcional</em></label><input id="u-funcao" type="text" /></div>
             <div class="p-campo"><label for="u-placa">Placa <em>opcional</em></label><input id="u-placa" type="text" /></div>

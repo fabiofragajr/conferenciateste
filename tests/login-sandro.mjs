@@ -1,13 +1,12 @@
 // Acesso do gestor nominal da operação.
 //
 // O app não cria mais usuário nenhum: o Sandro vem da base, provisionado pelo
-// SQL (`supabase/migracao-v2-para-v3.sql`). Aqui se confere o que depende do
-// app: que um gestor que desceu do cadastro entra nos dois painéis, define a
-// senha na primeira entrada, que a senha passa a valer, e que ele também bipa —
-// `gestor` abre painel, não fecha a câmera.
+// Supabase Auth. Aqui se confere o que depende do app: que a sessão persistida
+// restaura o gestor nos painéis, que a senha nunca é validada localmente e que
+// ele também bipa — `gestor` abre painel, não fecha a câmera.
 import { chromium } from 'playwright';
 import { subirServidor, opcoesNavegador } from './servidor.mjs';
-import { prepararAparelho, entrar, SENHA } from './cadastro.mjs';
+import { prepararAparelho, entrar } from './cadastro.mjs';
 
 const servidor = await subirServidor();
 const BASE = servidor.base;
@@ -47,7 +46,7 @@ const abrirBipagem = async (p) => {
   await p.click('.ui-folha a[href="/bipagem"]');
 };
 
-await passo('sandro entra no painel do gestor', async () => {
+await passo('sessão persistida do sandro restaura o painel do gestor', async () => {
   const { ctx, p } = await novoAparelho('/entrar');
   await entrar(p, 'sandro');
   await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
@@ -56,19 +55,23 @@ await passo('sandro entra no painel do gestor', async () => {
   await ctx.close();
 });
 
-await passo('a senha do primeiro acesso passa a valer', async () => {
+await passo('senha não é aceita nem armazenada localmente', async () => {
   const { ctx, p } = await novoAparelho('/entrar');
-  await entrar(p, 'sandro');
-  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
-
-  await p.click('#btn-sair');
-  await p.waitForSelector('#view-login:not([hidden])', { timeout: 8000 });
-  await entrar(p, 'sandro', `${SENHA}-errada`);
+  await p.fill('#in-login', 'sandro');
+  await p.fill('#in-senha', 'qualquer-senha-local');
+  await p.click('#form-login button[type=submit]');
   await p.waitForSelector('#login-erro:not([hidden])', { timeout: 8000 });
-  if (await p.isVisible('#tela-painel:not([hidden])')) throw new Error('entrou com senha errada');
-
-  await entrar(p, 'sandro');
-  await p.waitForSelector('#tela-painel:not([hidden])', { timeout: 8000 });
+  const erro = await p.textContent('#login-erro');
+  if (!/Configure o Supabase/.test(erro ?? '')) throw new Error(`mensagem: ${erro}`);
+  const perfil = await p.evaluate(async () => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok) => { req.onsuccess = () => ok(req.result); });
+    const q = bd.transaction('usuarios').objectStore('usuarios').index('login').get('sandro');
+    const usuario = await new Promise((ok) => { q.onsuccess = () => ok(q.result); });
+    bd.close();
+    return usuario;
+  });
+  if ('senhaHash' in perfil) throw new Error('hash de senha permaneceu no IndexedDB');
   await ctx.close();
 });
 

@@ -3,20 +3,20 @@
 // O app não inventa mais cadastro nenhum: pessoas, transportadoras e códigos de
 // rota vêm da base e descem para o aparelho. Aqui o teste faz o papel da base —
 // grava no IndexedDB exatamente o que a descida gravaria — e desliga o Supabase
-// neste contexto.
+// neste contexto. Os testes operacionais restauram uma sessão já autenticada;
+// o fluxo real de senha pertence exclusivamente ao Supabase Auth.
 //
 // Desligar não é para "mockar" nada: o código de sincronização é o mesmo, e a
 // descida de verdade continua coberta por `tests/base-real.test.mjs`, que fala
 // com o projeto de produção. É para uma rodada de teste não virar sessão de
-// mentira no painel do gestor, nem fixar a senha do Sandro num arquivo do
-// repositório — agora que o hash acompanha o cadastro, seria isso que
-// aconteceria.
+// mentira no painel do gestor, nem fixar a senha do Sandro no repositório.
 
-/** Senha que os testes definem no primeiro acesso deste aparelho. */
+/** Valor ignorado pelo helper; mantido para compatibilidade das chamadas E2E. */
 export const SENHA = 'teste-e2e';
 
 const id = (n) => `00000000-0000-4000-8000-0000000000${String(n).padStart(2, '0')}`;
 
+export const TENANT = id(9);
 export const T_LOGDIS = id(10);
 export const T_SUL = id(11);
 
@@ -25,11 +25,10 @@ const sincronizavel = { sync: 'ENVIADO', syncTentativas: 0, syncErro: null, atua
 const pessoa = (n, nome, login, gestor, funcao) => ({
   ...sincronizavel,
   id: id(n),
+  authUserId: id(n + 30),
+  tenantId: TENANT,
   nome,
   login,
-  // Sem hash: a primeira senha digitada neste aparelho passa a ser a dela,
-  // exatamente como acontece com quem o gestor acabou de cadastrar.
-  senhaHash: '',
   gestor,
   funcao,
   telefone: '',
@@ -38,11 +37,11 @@ const pessoa = (n, nome, login, gestor, funcao) => ({
 });
 
 const transportadora = (idT, nome) => ({
-  ...sincronizavel, id: idT, nome, cnpj: '', responsavel: '', telefone: '', email: '', ativo: true
+  ...sincronizavel, id: idT, tenantId: TENANT, nome, cnpj: '', responsavel: '', telefone: '', email: '', ativo: true
 });
 
 const rota = (n, codigo, nome, transportadoraId) => ({
-  ...sincronizavel, id: id(n), codigo, nome, transportadoraId, descricao: '', ativo: true
+  ...sincronizavel, id: id(n), tenantId: TENANT, codigo, nome, transportadoraId, descricao: '', ativo: true
 });
 
 /**
@@ -124,11 +123,25 @@ export async function prepararAparelho(pagina, base, rota = '/entrar') {
   await pagina.reload();
 }
 
-/** Faz o login e, no primeiro acesso, define a senha deste aparelho. */
-export async function entrar(pagina, login, senha = SENHA) {
-  await pagina.fill('#in-login', login);
-  await pagina.fill('#in-senha', senha);
-  await pagina.click('#form-login button[type=submit]');
+/** Restaura uma sessão previamente autenticada para testes de operação. */
+export async function entrar(pagina, login, _senha = SENHA) {
+  const usuarioId = await pagina.evaluate(async (loginDesejado) => {
+    const req = indexedDB.open('logdis');
+    const bd = await new Promise((ok, falhou) => {
+      req.onsuccess = () => ok(req.result);
+      req.onerror = () => falhou(req.error);
+    });
+    const q = bd.transaction('usuarios').objectStore('usuarios').index('login').get(loginDesejado);
+    const usuario = await new Promise((ok, falhou) => {
+      q.onsuccess = () => ok(q.result);
+      q.onerror = () => falhou(q.error);
+    });
+    bd.close();
+    return usuario?.id ?? null;
+  }, login);
+  if (!usuarioId) throw new Error(`Usuário de teste não encontrado: ${login}`);
+  await pagina.evaluate((idUsuario) => localStorage.setItem('logdis.usuarioLogado', idUsuario), usuarioId);
+  await pagina.reload();
 }
 
 /**

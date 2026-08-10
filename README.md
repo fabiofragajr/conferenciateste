@@ -22,12 +22,13 @@ npm run preview   # serve o dist/ para testar o build
 
 ### Não existe cadastro de exemplo
 
-O app não cria usuário, transportadora nem rota. Tudo vem da base: o gestor
-cadastra uma vez, e o cadastro desce para os aparelhos.
+O app não cria cadastro offline. Usuário, transportadora e rota são gravados
+diretamente no Supabase por um gestor autenticado; depois descem para os
+aparelhos como cache de mão única.
 
-Num projeto Supabase novo, `supabase/schema.sql` insere o primeiro gestor (troque
-nome e login antes de rodar). Ele entra **sem senha**: a primeira senha digitada
-é a dele, e a partir daí vale em qualquer aparelho.
+O primeiro gestor precisa existir no Supabase Auth e estar vinculado ao perfil
+`usuarios`. A migração v4 explica o bootstrap e usa o e-mail técnico derivado do
+login, por exemplo `sandro@usuarios.logdis.local`.
 
 Aparelho que ainda não baixou o cadastro diz isso na tela de login, em vez de
 recusar a senha certa — ele não tem contra o que conferir.
@@ -62,12 +63,10 @@ cadastro por `tests/cadastro.mjs` — gravado no IndexedDB exatamente como a
 descida gravaria — e o caminho até o projeto do `.env` é cortado no contexto do
 navegador. Não é para "mockar" a sincronização: o código é o mesmo, e sem isso
 cada rodada viraria sessão de mentira no painel de quem está operando, além de
-fixar num arquivo do repositório a senha real do gestor (agora que o hash
-acompanha o cadastro).
+fixar credenciais reais no repositório.
 
 O que precisa da base de verdade fica em `npm run test:base`, que só lê: confere
-que o cadastro desce, que existe um gestor ativo, que a migração v3 foi aplicada
-e que não há login, nome de transportadora ou código de rota repetido.
+que a migração v4 foi aplicada e que o isolamento por tenant está ativo.
 
 ---
 
@@ -82,7 +81,8 @@ src/
   lib/
     db.ts         IndexedDB — a fonte da verdade da operação
     model.ts      parsing da etiqueta, classificação, pedidos incompletos
-    auth.ts       login local (sem backend)
+    auth.ts       Supabase Auth + retomada local da sessão já autenticada
+    cadastros.ts  gravação online dos dados mestres
     scanner.ts    câmera + BarcodeDetector com fallback ZXing
     decoder.worker.ts   decodificação fora da thread principal
     geo.ts        posição durante a sessão
@@ -94,9 +94,11 @@ src/
     sync.ts       fila de saída (outbox)
   app/            controladores das três telas
 supabase/
-  schema.sql              tabelas, índices, RLS, storage, views, primeiro gestor
+  schema.sql              estrutura histórica/base
   migracao-v1-para-v2.sql grupo de rota -> transportadora + código com dono único
   migracao-v2-para-v3.sql junta cadastro duplicado, unique em login/nome, senha
+  migracao-v3-para-v4.sql Auth, tenant, RLS e fila somente operacional
+  functions/admin-users   administração segura de contas Auth
 tests/
   cadastro.mjs            cadastro dos testes e isolamento da base de produção
   base-real.test.mjs      confere a base de produção (só leitura)
@@ -114,9 +116,9 @@ FNOR → Transportadora Alfa
 FSUL → Transportadora Sul
 ```
 
-`Rota.codigo` é único no sistema inteiro (índice único no IndexedDB e no
-Postgres). Não é detalhe de banco: é essa unicidade que permite descobrir o dono
-do volume só a partir da etiqueta. Tentar cadastrar um código que já tem dono é
+`Rota.codigo` é único dentro de cada tenant (índice único no cache daquele
+tenant e no Postgres). Não é detalhe de banco: é essa unicidade que permite
+descobrir o dono do volume só a partir da etiqueta. Tentar cadastrar um código que já tem dono é
 recusado com o nome de quem já o tem.
 
 A validação inteira acontece em memória, com o cadastro já sincronizado — a
@@ -168,22 +170,23 @@ a um braço de distância.
 
 São muitas caixas por carga e o galpão tem sinal ruim. Por isso:
 
-1. **Tudo grava primeiro no IndexedDB** e já sai marcado como `PENDENTE`.
-   A bipagem nunca espera rede — nem para gravar, nem para classificar.
+1. Sessões, leituras e ocorrências gravam primeiro no IndexedDB como
+   `PENDENTE`. A bipagem nunca espera rede — nem para gravar, nem para
+   classificar. Cadastros não entram nessa fila.
 2. O **motor de sync** (`src/lib/sync.ts`) drena a fila em lotes de 200 via
    `upsert` por `id`: ao voltar a rede, ao voltar para a tela, a cada minuto e
    ao encerrar a conferência. Cada lote também é confirmado no IndexedDB em
    uma única transação, para o envio de milhares de caixas não disputar o
    aparelho com a câmera.
-3. Falha de envio **não perde nada**: o registro continua `PENDENTE` e é tentado
-   de novo (8 tentativas antes de virar `ERRO`, que o gestor reenvia num botão).
-3.1. A sincronização também **desce**: transportadoras, rotas e usuários
+3. Falha parcial **não perde nem reenvia o que já passou**: se 30 registros são
+   aceitos e 3 recusados, só os 3 continuam pendentes.
+4. A sincronização também **desce**: transportadoras, rotas e perfis de usuários
    alterados no servidor entram no aparelho a cada ciclo (incremental por
    `atualizado_em`). Sem isso, a transportadora cadastrada no desktop nunca
    chegaria ao celular da doca.
-4. Fotos de ocorrência sobem para o Storage antes da linha da ocorrência; se a
+5. Fotos de ocorrência sobem para o Storage antes da linha da ocorrência; se a
    foto falhar, o texto sobe do mesmo jeito — o texto é a informação principal.
-5. O app é PWA com precache: abre e opera **sem conexão nenhuma**, inclusive a
+6. O app é PWA com precache: abre e opera **sem conexão nenhuma**, inclusive a
    geração de PDF.
 
 Os IDs são UUID gerados no cliente, então reenviar é idempotente e não duplica
@@ -191,7 +194,8 @@ nada no Supabase.
 
 ### Configurar o Supabase
 
-1. Projeto novo: rode `supabase/schema.sql` no SQL Editor. Só isso.
+1. Projeto novo: rode `supabase/schema.sql` e depois
+   `supabase/migracao-v3-para-v4.sql` no SQL Editor.
 
    Projeto existente, na ordem, pulando o que já rodou:
 
@@ -208,39 +212,27 @@ nada no Supabase.
      sobrevivente: nada de histórico se perde. O fim do arquivo traz consultas
      prontas, comentadas, para você decidir o que fazer com o que sobrou das
      rodadas de teste.
+   - `supabase/migracao-v3-para-v4.sql` — **obrigatória.** Cria tenant separado
+     de transportadora, liga perfis ao Supabase Auth, remove `senha_hash`, troca
+     as policies permissivas por RLS autenticada e mantém somente dados
+     operacionais na fila de subida.
 
-   As duas rodam inteiras numa transação e são idempotentes: rodar de novo não
-   faz nada na segunda vez. Confira com `npm run test:base`.
+   As migrações rodam em transação e podem ser reaplicadas com segurança.
+   Confira com `npm run test:base`.
 2. Informe URL e chave anônima — de duas formas:
    - build: copie `.env.example` para `.env` e preencha `VITE_SUPABASE_URL`,
      `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_BUCKET`;
    - ou em **Painel do gestor → Sincronização**, que grava no aparelho e
      sobrepõe o `.env` (útil para apontar outro projeto sem recompilar).
-3. Use "Testar conexão" para confirmar.
+3. Crie/vincule o primeiro gestor conforme o fim da migração v4 e publique a
+   função: `supabase functions deploy admin-users`.
+4. Use "Testar conexão" para confirmar.
 
-**Sobre segurança:** a autenticação desta versão é local. As políticas RLS do
-schema liberam `insert`/`update` para a chave anônima (que fica no celular e é,
-na prática, pública) e o `select` apenas do cadastro que o aparelho precisa para
-validar offline: transportadoras, rotas, usuários e a lista de aparelhos.
-Leitura, ocorrência e sessão continuam fechadas para `anon`.
-
-**O hash da senha acompanha o cadastro** (PBKDF2-SHA256, 210.000 iterações, salt
-por usuário). É uma troca consciente, e vale entender os dois lados:
-
-- *Por que ele viaja:* sem isso a senha definida pelo gestor no desktop não
-  valeria no celular da doca. Pior: como o app não tem mais cadastro de exemplo,
-  todo aparelho novo começa vazio — e sem hash para conferir, qualquer pessoa
-  reivindicaria um login só digitando uma senha qualquer.
-- *O que isso custa:* quem tiver a chave anônima consegue **ler** a coluna. Trate
-  como proteção contra uso indevido casual, não contra um atacante.
-
-Antes de produção, troque por autenticação Supabase de verdade e políticas por
-usuário — aí o hash sai da tabela e essa conversa acaba.
-
-**Primeiro acesso:** quem o gestor cadastra sem senha (o caminho normal — não
-precisa inventar senha pelos outros) escolhe a dela na primeira entrada. O botão
-**Redefinir senha**, no painel, devolve essa escolha para a pessoa: é o caminho
-do "esqueci a senha", sem ninguém descobrir a antiga.
+**Segurança:** todas as tabelas ficam fechadas para `anon`. Requisições usam a
+sessão persistida do Supabase Auth; as policies comparam `tenant_id` ao
+`app_metadata.tenant_id` do JWT. A chave `service_role` existe somente na Edge
+Function administrativa e nunca entra no navegador. Senhas e hashes não são
+armazenados no IndexedDB nem na tabela pública `usuarios`.
 
 ---
 
