@@ -14,6 +14,16 @@ const auth = readFileSync(new URL('../src/lib/auth.ts', import.meta.url), 'utf8'
 assert.doesNotMatch(auth, /senhaHash|PBKDF2|gerarSenhaHash|conferirSenha/);
 assert.match(auth, /entrarNoSupabase\(login, senha\)/);
 
+// Bipagem instalada precisa acompanhar a mão do operador, e o fallback não
+// pode gastar CPU procurando formatos que a etiqueta da operação não usa.
+const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
+assert.match(vite, /orientation:\s*'any'/);
+const scanner = readFileSync(new URL('../src/lib/scanner.ts', import.meta.url), 'utf8');
+const worker = readFileSync(new URL('../src/lib/decoder.worker.ts', import.meta.url), 'utf8');
+assert.match(scanner, /requestVideoFrameCallback/);
+assert.match(scanner, /focusMode:\s*'continuous'/);
+assert.doesNotMatch(worker, /BarcodeFormat\.(?:CODE_39|DATA_MATRIX|EAN_13|ITF)/);
+
 // Itens de menu não podem apontar para placeholders permanentes. Mapa e
 // Relatórios são módulos de verdade e precisam estar ligados ao gestor.
 const gestor = readFileSync(new URL('../src/app/gestor.ts', import.meta.url), 'utf8');

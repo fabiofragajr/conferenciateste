@@ -169,14 +169,14 @@
   overflow: hidden;
 }
 #video { width: 100%; height: 100%; object-fit: cover; display: block; }
-/* Maior que a antiga (62%) e sem exigir enquadramento perfeito: caixa
-   consecutiva se bipa de qualquer jeito, com uma mão. */
+/* Retângulo largo: cobre tanto o QR quanto o Code 128 da mesma etiqueta e
+   continua dentro da imagem quando o celular gira para paisagem. O leitor usa
+   o quadro todo; isto é uma ajuda de enquadramento, não um recorte obrigatório. */
 .mira {
   position: absolute;
   left: 50%; top: 46%;
-  width: 78%;
-  max-width: 340px;
-  aspect-ratio: 1;
+  width: min(84%, 460px);
+  height: min(58%, 280px);
   transform: translate(-50%, -50%);
   border: 2px solid rgba(255, 255, 255, .55);
   border-radius: 20px;
@@ -361,6 +361,25 @@
   flex: 1;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   font-size: 15px; padding: 0 8px;
+}
+
+/* No modo paisagem a altura é o recurso escasso. Os indicadores ficam sobre a
+   imagem e a lista perde altura máxima; câmera, alvo e resultado continuam
+   disponíveis sem exigir rolagem. */
+@media (orientation: landscape) and (max-height: 600px) {
+  .bip-estado {
+    position: absolute;
+    z-index: 4;
+    top: calc(env(safe-area-inset-top) + 56px);
+    left: 8px;
+    padding: 4px;
+    border: 0;
+    border-radius: 10px;
+    background: rgba(17, 24, 22, .58);
+  }
+  .bip-estado .chip { color: #fff; background: rgba(17, 24, 22, .55); }
+  .leituras { max-height: 24vh; }
+  .barra-inferior { padding-top: 5px; padding-bottom: calc(5px + env(safe-area-inset-bottom)); }
 }
 
 /* ------------------------------------------------ folha "mais ações" --- */

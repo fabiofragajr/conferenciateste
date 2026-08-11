@@ -24,22 +24,20 @@ export interface RespostaDecodificar {
 const hints = new Map<DecodeHintType, unknown>();
 hints.set(DecodeHintType.POSSIBLE_FORMATS, [
   BarcodeFormat.QR_CODE,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-  BarcodeFormat.DATA_MATRIX,
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.ITF
+  BarcodeFormat.CODE_128
 ]);
 
 const leitor = new MultiFormatReader();
 leitor.setHints(hints);
 
-/** RGBA -> luminância (1 byte por pixel), média favorecendo o verde. */
+/** RGBA -> luminância (1 byte por pixel), aproximação inteira de BT.601. */
 function paraLuminancia(rgba: Uint8ClampedArray, largura: number, altura: number): Uint8ClampedArray {
   const total = largura * altura;
   const lum = new Uint8ClampedArray(total);
   for (let i = 0, p = 0; i < total; i++, p += 4) {
-    lum[i] = (rgba[p] * 0.299 + rgba[p + 1] * 0.587 + rgba[p + 2] * 0.114) | 0;
+    // 77/256, 150/256 e 29/256 evitam três operações de ponto flutuante por
+    // pixel. Num quadro 640p são centenas de milhares de operações poupadas.
+    lum[i] = (rgba[p] * 77 + rgba[p + 1] * 150 + rgba[p + 2] * 29) >>> 8;
   }
   return lum;
 }

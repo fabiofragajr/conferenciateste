@@ -6,13 +6,18 @@
 import type { PedidoDecodificar, RespostaDecodificar } from './decoder.worker.js';
 
 const LARGURA_SCAN = 640;         // largura enviada ao decodificador
-const INTERVALO_MS = 100;         // ~10 quadros por segundo
+const INTERVALO_MS = 80;          // até ~12 quadros por segundo
 // O bloqueio longo limitava fisicamente a operação a ~1,4 caixa/s. A repetição
 // da mesma etiqueta já tem uma trava própria de 1,5 s logo abaixo, então caixas
 // diferentes podem seguir em ritmo maior sem transformar uma câmera parada em
 // dezenas de duplicados.
-const PAUSA_APOS_LEITURA = 300;
+const PAUSA_APOS_LEITURA = 180;
 const IGNORAR_REPETICAO_MS = 1500;
+
+// A etiqueta operacional tem QR e Code 128. Pedir ao motor que procure EAN,
+// ITF, Data Matrix e Code 39 em todo quadro dobrava trabalho sem acrescentar
+// nenhum código válido ao fluxo da conferência.
+const FORMATOS_NATIVOS = ['qr_code', 'code_128'];
 
 interface DetectorNativo {
   detect(fonte: CanvasImageSource): Promise<{ rawValue: string }[]>;
@@ -20,6 +25,14 @@ interface DetectorNativo {
 interface DetectorCtor {
   new (opcoes: { formats: string[] }): DetectorNativo;
   getSupportedFormats(): Promise<string[]>;
+}
+
+interface CapacidadesCamera extends MediaTrackCapabilities {
+  focusMode?: string[];
+}
+
+interface RestricoesCamera extends MediaTrackConstraintSet {
+  focusMode?: string;
 }
 
 export interface OpcoesScanner {
@@ -48,7 +61,8 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
   let seq = 0;
   let ultimoCodigo = '';
   let ultimoCodigoEm = 0;
-  let rafId = 0;
+  let frameId = 0;
+  let callbackDeVideo = false;
   let pausaId: number | undefined;
 
   async function prepararDetector(): Promise<boolean> {
@@ -56,7 +70,7 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
     if (!Ctor) return false;
     try {
       const suportados = await Ctor.getSupportedFormats();
-      const formatos = ['qr_code', 'code_128', 'code_39', 'ean_13', 'itf', 'data_matrix']
+      const formatos = FORMATOS_NATIVOS
         .filter((f) => suportados.includes(f));
       if (!formatos.includes('qr_code')) return false;
       detector = new Ctor({ formats: formatos });
@@ -90,6 +104,22 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
     onCodigo(texto);
   }
 
+  /**
+   * Usa o relógio da própria câmera quando existe. requestAnimationFrame pode
+   * acordar a tela duas ou três vezes para o mesmo quadro em aparelhos de 60/
+   * 120 Hz; o callback de vídeo só acorda quando chegou imagem nova.
+   */
+  function agendarPasso(): void {
+    if (!rodando) return;
+    if (typeof video.requestVideoFrameCallback === 'function') {
+      callbackDeVideo = true;
+      frameId = video.requestVideoFrameCallback(() => void passo());
+      return;
+    }
+    callbackDeVideo = false;
+    frameId = requestAnimationFrame(() => void passo());
+  }
+
   async function passo(): Promise<void> {
     if (!rodando) return;
     const t = Date.now();
@@ -107,8 +137,11 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
       } else if (worker && offCtx && !workerOcupado) {
         const sw = Math.min(LARGURA_SCAN, video.videoWidth);
         const sh = Math.round((video.videoHeight * sw) / video.videoWidth);
-        off.width = sw;
-        off.height = sh;
+        // Alterar width/height limpa e realoca o canvas. Só faça isso quando a
+        // câmera realmente mudar de dimensão (inclusive depois de girar o
+        // celular), não dez vezes por segundo.
+        if (off.width !== sw) off.width = sw;
+        if (off.height !== sh) off.height = sh;
         try {
           offCtx.drawImage(video, 0, 0, sw, sh);
           const img = offCtx.getImageData(0, 0, sw, sh);
@@ -125,7 +158,21 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
       }
     }
 
-    rafId = requestAnimationFrame(() => void passo());
+    agendarPasso();
+  }
+
+  async function ativarFocoContinuo(): Promise<void> {
+    const trilha = stream?.getVideoTracks()[0];
+    if (!trilha?.getCapabilities) return;
+    const capacidades = trilha.getCapabilities() as CapacidadesCamera;
+    if (!capacidades.focusMode?.includes('continuous')) return;
+    try {
+      await trilha.applyConstraints({
+        advanced: [{ focusMode: 'continuous' } as RestricoesCamera]
+      });
+    } catch {
+      // Alguns navegadores anunciam a capacidade, mas recusam a restrição.
+    }
   }
 
   async function iniciar(): ReturnType<Scanner['iniciar']> {
@@ -140,7 +187,8 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
         video: {
           facingMode: { ideal: 'environment' },
           width: { ideal: 1280 },
-          height: { ideal: 720 }
+          height: { ideal: 720 },
+          frameRate: { ideal: 30, max: 30 }
         },
         audio: false
       });
@@ -154,6 +202,7 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
 
     video.srcObject = stream;
     video.setAttribute('playsinline', '');
+    await ativarFocoContinuo();
     try { await video.play(); } catch { /* autoplay pode reclamar; o loop segue */ }
 
     const nativo = await prepararDetector();
@@ -161,13 +210,16 @@ export function criarScanner({ video, onCodigo }: OpcoesScanner): Scanner {
 
     rodando = true;
     podeEnviar = true;
-    rafId = requestAnimationFrame(() => void passo());
+    agendarPasso();
     return { ok: true, motor: nativo ? 'nativo' : 'zxing' };
   }
 
   function parar(): void {
     rodando = false;
-    cancelAnimationFrame(rafId);
+    if (callbackDeVideo && typeof video.cancelVideoFrameCallback === 'function') {
+      video.cancelVideoFrameCallback(frameId);
+    }
+    else cancelAnimationFrame(frameId);
     window.clearTimeout(pausaId);
     stream?.getTracks().forEach((t) => t.stop());
     stream = null;

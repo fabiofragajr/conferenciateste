@@ -31,7 +31,10 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        orientation: 'portrait',
+        // A doca usa o celular na posição que deixa a etiqueta maior. Travar o
+        // PWA em retrato fazia a versão instalada ignorar a rotação física e
+        // deixava códigos horizontais pequenos demais para enquadrar.
+        orientation: 'any',
         categories: ['business', 'productivity', 'utilities'],
         background_color: '#f7f9f8', // --fundo: splash na mesma cor da tela de login
         theme_color: '#105945',      // --logdis-forest

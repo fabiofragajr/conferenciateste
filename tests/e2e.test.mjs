@@ -171,6 +171,26 @@ await passo('a câmera é a maior coisa da tela', async () => {
   if (parte < 0.4) throw new Error(`a câmera ficou com ${Math.round(parte * 100)}% da tela`);
 });
 
+await passo('a bipagem acompanha o celular em paisagem', async () => {
+  await p.setViewportSize({ width: 900, height: 420 });
+  const layout = await p.evaluate(() => {
+    const camera = document.querySelector('#camera-area').getBoundingClientRect();
+    const mira = document.querySelector('.mira').getBoundingClientRect();
+    return {
+      paisagem: innerWidth > innerHeight,
+      cameraH: camera.height,
+      miraDentro: mira.left >= camera.left && mira.right <= camera.right
+        && mira.top >= camera.top && mira.bottom <= camera.bottom,
+      larguraDocumento: document.documentElement.scrollWidth
+    };
+  });
+  if (!layout.paisagem) throw new Error('viewport não girou para paisagem');
+  if (layout.cameraH < 140) throw new Error(`câmera ficou com apenas ${Math.round(layout.cameraH)} px de altura`);
+  if (!layout.miraDentro) throw new Error('mira saiu para fora da imagem em paisagem');
+  if (layout.larguraDocumento > 900) throw new Error(`tela criou rolagem horizontal de ${layout.larguraDocumento}px`);
+  await p.setViewportSize({ width: 420, height: 900 });
+});
+
 await passo('tocar em Separar mostra só o que precisa sair do caminhão', async () => {
   await p.click('.cont[data-filtro="SEPARAR"]');
   const visiveis = await p.$$eval('#lista-leituras .leitura', (ns) => ns
