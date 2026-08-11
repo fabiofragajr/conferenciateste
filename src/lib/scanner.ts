@@ -1,7 +1,7 @@
 // scanner.ts — câmera + leitura contínua, sem confirmação por leitura.
 //
 // Caminho rápido: BarcodeDetector nativo (Chrome/Android).
-// Fallback obrigatório: ZXing no worker — o iOS Safari não tem BarcodeDetector.
+// Fallback obrigatório: ZXing-C++ WASM no worker — o iOS Safari não tem BarcodeDetector.
 
 import type { PedidoDecodificar, RespostaDecodificar } from './decoder.worker.js';
 

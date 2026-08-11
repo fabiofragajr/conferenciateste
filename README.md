@@ -83,7 +83,7 @@ src/
     model.ts      parsing da etiqueta, classificação, pedidos incompletos
     auth.ts       Supabase Auth + retomada local da sessão já autenticada
     cadastros.ts  gravação online dos dados mestres
-    scanner.ts    câmera + BarcodeDetector com fallback ZXing
+    scanner.ts    câmera + BarcodeDetector com fallback ZXing-C++ WASM offline
     decoder.worker.ts   decodificação fora da thread principal
     geo.ts        posição durante a sessão
     feedback.ts   cor, som e vibração por status

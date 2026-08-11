@@ -1,13 +1,13 @@
 // decoder.worker.ts — decodificação fora da thread principal.
 //
-// ZXing lê QR e código de barras 1D (Code128) na mesma lib: a etiqueta do
-// operador logístico traz os dois formatos. A lib é empacotada junto com o app
-// (nada de CDN), porque o galpão pode estar sem internet.
+// O fallback usa o ZXing-C++ compilado para WebAssembly: lê QR e Code 128 sem
+// ocupar a interface e sem depender de rede. O binário é emitido pelo Vite e
+// entra no precache do PWA junto com este worker.
 
 import {
-  BarcodeFormat, BinaryBitmap, DecodeHintType,
-  HybridBinarizer, MultiFormatReader, RGBLuminanceSource
-} from '@zxing/library';
+  prepareZXingModule, readBarcodes, type ReaderOptions
+} from 'zxing-wasm/reader';
+import wasmUrl from 'zxing-wasm/reader/zxing_reader.wasm?url';
 
 export interface PedidoDecodificar {
   buffer: ArrayBuffer;
@@ -21,41 +21,48 @@ export interface RespostaDecodificar {
   texto: string | null;
 }
 
-const hints = new Map<DecodeHintType, unknown>();
-hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-  BarcodeFormat.QR_CODE,
-  BarcodeFormat.CODE_128
-]);
+const OPCOES_RAPIDAS: ReaderOptions = {
+  formats: ['QRCode', 'Code128'],
+  maxNumberOfSymbols: 1,
+  tryHarder: false,
+  tryRotate: true,
+  tryInvert: false,
+  // O quadro já chega reduzido para 640 px; uma segunda redução só apagaria
+  // módulos pequenos do QR e barras finas do Code 128.
+  tryDownscale: false
+};
 
-const leitor = new MultiFormatReader();
-leitor.setHints(hints);
+const OPCOES_DIFICEIS: ReaderOptions = {
+  ...OPCOES_RAPIDAS,
+  tryHarder: true
+};
 
-/** RGBA -> luminância (1 byte por pixel), aproximação inteira de BT.601. */
-function paraLuminancia(rgba: Uint8ClampedArray, largura: number, altura: number): Uint8ClampedArray {
-  const total = largura * altura;
-  const lum = new Uint8ClampedArray(total);
-  for (let i = 0, p = 0; i < total; i++, p += 4) {
-    // 77/256, 150/256 e 29/256 evitam três operações de ponto flutuante por
-    // pixel. Num quadro 640p são centenas de milhares de operações poupadas.
-    lum[i] = (rgba[p] * 77 + rgba[p + 1] * 150 + rgba[p + 2] * 29) >>> 8;
-  }
-  return lum;
-}
+// Começa a compilar o WASM assim que o worker nasce, antes do primeiro quadro.
+// locateFile local é obrigatório: o padrão da biblioteca aponta para CDN, o
+// que quebraria justamente no galpão sem sinal.
+const moduloPronto = prepareZXingModule({
+  overrides: {
+    locateFile: (arquivo: string, prefixo: string) => arquivo.endsWith('.wasm') ? wasmUrl : prefixo + arquivo
+  },
+  fireImmediately: true
+});
 
-self.onmessage = (ev: MessageEvent<PedidoDecodificar>) => {
+self.onmessage = async (ev: MessageEvent<PedidoDecodificar>) => {
   const { buffer, w, h, seq } = ev.data;
   let resposta: RespostaDecodificar = { seq, texto: null };
 
   try {
-    const lum = paraLuminancia(new Uint8ClampedArray(buffer), w, h);
-    const fonte = new RGBLuminanceSource(lum, w, h);
-    const bitmap = new BinaryBitmap(new HybridBinarizer(fonte));
-    resposta = { seq, texto: leitor.decode(bitmap, hints).getText() };
+    await moduloPronto;
+    const imagem = new ImageData(new Uint8ClampedArray(buffer), w, h);
+    // Quatro quadros rápidos para cada busca mais profunda. Assim etiquetas
+    // nítidas respondem logo e, algumas vezes por segundo, o motor aumenta a
+    // procura para recuperar código pequeno, inclinado ou com foco ruim.
+    const opcoes = seq % 5 === 0 ? OPCOES_DIFICEIS : OPCOES_RAPIDAS;
+    const achados = await readBarcodes(imagem, opcoes);
+    resposta = { seq, texto: achados[0]?.text || null };
   } catch {
-    // NotFoundException é o caso comum (quadro sem código). Nunca travar o loop.
-  } finally {
-    leitor.reset();
+    // Quadro sem código e falha isolada nunca derrubam o fluxo da câmera.
   }
 
-  (self as unknown as Worker).postMessage(resposta);
+  self.postMessage(resposta);
 };

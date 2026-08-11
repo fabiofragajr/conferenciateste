@@ -49,7 +49,9 @@ export default defineConfig({
       },
       workbox: {
         // tudo precache: no galpão o app abre sem rede nenhuma
-        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
+        // O fallback do leitor é WebAssembly e precisa estar no precache; sem
+        // `wasm` aqui, o iPhone abriria o app offline mas não conseguiria bipar.
+        globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2,wasm}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         // Toda rota cai no index.html: o app é um documento só, e /painel/rotas

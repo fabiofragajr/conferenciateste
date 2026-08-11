@@ -22,7 +22,10 @@ const scanner = readFileSync(new URL('../src/lib/scanner.ts', import.meta.url), 
 const worker = readFileSync(new URL('../src/lib/decoder.worker.ts', import.meta.url), 'utf8');
 assert.match(scanner, /requestVideoFrameCallback/);
 assert.match(scanner, /focusMode:\s*'continuous'/);
+assert.match(worker, /from 'zxing-wasm\/reader'/);
+assert.match(worker, /zxing_reader\.wasm\?url/);
 assert.doesNotMatch(worker, /BarcodeFormat\.(?:CODE_39|DATA_MATRIX|EAN_13|ITF)/);
+assert.match(vite, /woff2,wasm/);
 
 // Itens de menu não podem apontar para placeholders permanentes. Mapa e
 // Relatórios são módulos de verdade e precisam estar ligados ao gestor.

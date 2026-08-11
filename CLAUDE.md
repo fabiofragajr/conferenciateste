@@ -50,8 +50,8 @@ Restrição: **tudo gratuito, open source e client-side.** Roda em navegador de 
 
 | Função | Biblioteca | Por quê |
 |---|---|---|
-| Leitura de código | **ZXing** (`@zxing/browser` + `@zxing/library`) | Lê QR **e** códigos de barras 1D (Code128) na mesma lib. A etiqueta tem os dois formatos. Suporte mobile sólido, MIT. |
-| Alternativa/otimização | `BarcodeDetector` API nativa | Mais rápida no Chrome/Android, mas **não existe no iOS Safari** — usar apenas com fallback obrigatório para ZXing |
+| Leitura de código | **`BarcodeDetector` nativo + ZXing-C++ WASM** (`zxing-wasm/reader`) | O Android usa aceleração nativa quando disponível; iPhone e navegadores sem a API usam o motor C++ em worker. Ambos leem QR e Code 128. MIT. |
+| Estratégia obrigatória | `BarcodeDetector` com fallback WebAssembly local | A API nativa não existe em todos os navegadores. O `.wasm` precisa ser servido pelo próprio app e incluído no precache — nunca depender de CDN. |
 | Persistência local | IndexedDB (ou `localStorage` em protótipo) | Cadastros e sessões offline |
 | Relatório PDF | jsPDF + autoTable | Exportação do relatório final |
 
