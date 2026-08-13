@@ -140,6 +140,39 @@ export async function comprimirImagem(arquivo: File, ladoMax = 1280, qualidade =
   return blob ?? arquivo;
 }
 
+/**
+ * Segura a tela em retrato enquanto a câmera está aberta.
+ *
+ * Na doca o celular fica apontado para baixo, quase deitado sobre a caixa.
+ * Nessa posição a gravidade quase não escolhe lado, e o sensor troca de retrato
+ * para paisagem a cada tremida: a imagem gira sozinha na mão de quem está
+ * bipando, no meio da leitura. Degrada em silêncio — o Safari do iPhone não tem
+ * a API e a aba comum do Android só permite a trava em tela cheia; nesses casos
+ * o manifesto de retrato e o layout de paisagem seguram o resto.
+ */
+export async function travarOrientacao(): Promise<{ liberar: () => void }> {
+  const orientacao = globalThis.screen?.orientation as ScreenOrientation | undefined;
+  let travada = false;
+
+  if (typeof orientacao?.lock === 'function') {
+    try {
+      await orientacao.lock('portrait');
+      travada = true;
+    } catch {
+      travada = false;
+    }
+  }
+
+  return {
+    liberar: () => {
+      if (!travada) return;
+      travada = false;
+      // Sem soltar, o painel do gestor herdaria o retrato de quem estava bipando.
+      try { orientacao?.unlock(); } catch { /* sem trava, nada a soltar */ }
+    }
+  };
+}
+
 /** Mantém a tela acesa durante a conferência; degrada em silêncio onde não houver suporte. */
 export async function manterTelaAcesa(): Promise<{ liberar: () => void }> {
   type Sentinela = { release: () => Promise<void> };

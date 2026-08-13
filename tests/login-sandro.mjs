@@ -173,6 +173,18 @@ await passo('quem não é gestor também tem saída, e ela não encerra a carga'
   await p.click('#btn-voltar-bip');
   await p.waitForSelector('#view-grupo:not([hidden])', { timeout: 8000 });
 
+  // Sair da tela desliga a câmera. Ficava acesa: a conferência sumia da vista e
+  // o aparelho seguia filmando na escolha de transportadora ou no painel —
+  // bateria, luz do sensor ligada e a trava de retrato presa junto.
+  const camera = await p.evaluate(() => {
+    const v = document.querySelector('video');
+    const trilhas = v?.srcObject?.getVideoTracks?.() ?? [];
+    return { fonte: !!v?.srcObject, vivas: trilhas.filter((t) => t.readyState === 'live').length };
+  });
+  if (camera.fonte || camera.vivas) {
+    throw new Error(`câmera continuou ligada depois de sair (${camera.vivas} trilha(s) viva(s))`);
+  }
+
   // A conferência continua ABERTA: voltar é sair da tela, não encerrar a carga.
   const abertas = await p.evaluate(async () => {
     const req = indexedDB.open('logdis');

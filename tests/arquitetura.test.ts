@@ -14,10 +14,30 @@ const auth = readFileSync(new URL('../src/lib/auth.ts', import.meta.url), 'utf8'
 assert.doesNotMatch(auth, /senhaHash|PBKDF2|gerarSenhaHash|conferirSenha/);
 assert.match(auth, /entrarNoSupabase\(login, senha\)/);
 
-// Bipagem instalada precisa acompanhar a mão do operador, e o fallback não
-// pode gastar CPU procurando formatos que a etiqueta da operação não usa.
+// A doca aponta o celular para BAIXO, sobre a caixa: quase deitado, o sensor
+// troca de retrato para paisagem a cada tremida e a imagem gira sozinha na mão
+// de quem está bipando. Retrato no manifesto é o que segura a versão instalada.
 const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
-assert.match(vite, /orientation:\s*'any'/);
+assert.match(vite, /orientation:\s*'portrait'/);
+
+// A trava de tela existe para a aba comum, que ignora o manifesto — e precisa
+// soltar, senão o painel do gestor herda o retrato do operador.
+const util = readFileSync(new URL('../src/lib/util.ts', import.meta.url), 'utf8');
+assert.match(util, /export async function travarOrientacao/);
+assert.match(util, /lock\('portrait'\)/);
+assert.match(util, /unlock/);
+
+// Sair da bipagem pelo `←` não encerra a carga, mas tem que devolver o
+// aparelho: câmera acesa numa tela que não é mais a da câmera gasta bateria,
+// mantém a luz do sensor ligada e deixaria a tela travada em retrato.
+const operador = readFileSync(new URL('../src/app/operador.ts', import.meta.url), 'utf8');
+const voltar = operador.match(/async function voltarDaBipagem\(\)[\s\S]*?\n}/)?.[0] ?? '';
+assert.ok(voltar, 'voltarDaBipagem sumiu do operador');
+assert.match(voltar, /soltarAparelho\(\)/);
+const soltar = operador.match(/function soltarAparelho\(\)[\s\S]*?\n}/)?.[0] ?? '';
+assert.match(soltar, /scanner\?\.parar\(\)/);
+assert.match(soltar, /orientacao/);
+
 const scanner = readFileSync(new URL('../src/lib/scanner.ts', import.meta.url), 'utf8');
 const worker = readFileSync(new URL('../src/lib/decoder.worker.ts', import.meta.url), 'utf8');
 assert.match(scanner, /requestVideoFrameCallback/);

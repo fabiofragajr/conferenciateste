@@ -25,7 +25,7 @@ import {
   type PrimeiraLeitura
 } from '../lib/model.js';
 import {
-  $, $$, agora, comprimirImagem, esc, hora, manterTelaAcesa
+  $, $$, agora, comprimirImagem, esc, hora, manterTelaAcesa, travarOrientacao
 } from '../lib/util.js';
 import {
   exportarCSV, exportarPDF, hidratarFotos, montarRelatorio, renderizarHTML,
@@ -43,6 +43,7 @@ let rotasPorCodigo = new Map<string, Rota>();
 let nomePorTransportadora = new Map<string, string>();
 let scanner: Scanner | null = null;
 let telaAcesa: { liberar: () => void } | null = null;
+let orientacaoPresa: { liberar: () => void } | null = null;
 let relatorioAtual: DadosRelatorio | null = null;
 
 /** codigoVolume -> primeira leitura, para o duplicado dizer quem e quando. */
@@ -181,6 +182,24 @@ function definirAcessoAoPainel(): void {
 }
 
 /**
+ * Devolve o aparelho ao dono da próxima tela: câmera desligada, tela livre para
+ * apagar e para girar.
+ *
+ * Vale para toda saída da bipagem, inclusive a que NÃO encerra a carga. Sair
+ * pelo `←` deixava a câmera filmando numa tela que não é mais a da câmera —
+ * bateria, luz do sensor acesa e a trava de retrato presa no painel do gestor,
+ * que é desktop-first e precisa de paisagem.
+ */
+function soltarAparelho(): void {
+  scanner?.parar();
+  scanner = null;
+  telaAcesa?.liberar();
+  telaAcesa = null;
+  orientacaoPresa?.liberar();
+  orientacaoPresa = null;
+}
+
+/**
  * Sai da bipagem sem encerrar a conferência.
  *
  * O aviso de fila pendente é um toast, e não um diálogo: sair não põe leitura
@@ -189,6 +208,8 @@ function definirAcessoAoPainel(): void {
  * seria um passo a mais na tela onde o padrão é não acrescentar passo.
  */
 async function voltarDaBipagem(): Promise<void> {
+  soltarAparelho();
+
   const pendentes = await sync.atualizarContagem();
   if (pendentes > 0) {
     toast(`${pendentes} ${pendentes === 1 ? 'leitura ainda subindo' : 'leituras ainda subindo'} — a conferência segue aberta.`);
@@ -465,6 +486,7 @@ async function entrarNaBipagem(): Promise<void> {
   mostrarView('bipagem');
 
   telaAcesa = await manterTelaAcesa();
+  orientacaoPresa = await travarOrientacao();
   await abrirCamera();
 }
 
@@ -927,8 +949,7 @@ function ligarEventos(): void {
     if (!sessao) return;
     fecharModal(el.modalEncerrar);
 
-    scanner?.parar();
-    scanner = null;
+    soltarAparelho();
 
     const geoFim = geo.snapshot();
     sessao = await db.salvar('sessoes', {
@@ -939,8 +960,6 @@ function ligarEventos(): void {
     });
 
     geo.parar();
-    telaAcesa?.liberar();
-    telaAcesa = null;
     fb.sinalizarAcao();
 
     await mostrarRelatorio(sessao.id);
@@ -976,10 +995,7 @@ function ligarEventos(): void {
     });
   }
 
-  window.addEventListener('beforeunload', () => {
-    scanner?.parar();
-    telaAcesa?.liberar();
-  });
+  window.addEventListener('beforeunload', () => soltarAparelho());
 }
 
 let montado = false;

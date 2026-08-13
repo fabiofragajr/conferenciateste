@@ -31,10 +31,15 @@ export default defineConfig({
         start_url: '/',
         scope: '/',
         display: 'standalone',
-        // A doca usa o celular na posição que deixa a etiqueta maior. Travar o
-        // PWA em retrato fazia a versão instalada ignorar a rotação física e
-        // deixava códigos horizontais pequenos demais para enquadrar.
-        orientation: 'any',
+        // `any` foi tentado para deixar a etiqueta maior em paisagem e voltou
+        // atrás: bipando, o celular fica apontado para BAIXO, quase deitado
+        // sobre a caixa. Nessa posição a gravidade quase não escolhe lado e o
+        // sensor troca de orientação a cada tremida — a tela girava sozinha no
+        // meio da leitura, que foi a queixa da operação. Retrato é a posição em
+        // que se segura o celular com a outra mão ocupada; o QR é quadrado e
+        // não perde nada com isso, e a `.mira` continua larga o bastante para o
+        // Code 128 da mesma etiqueta.
+        orientation: 'portrait',
         categories: ['business', 'productivity', 'utilities'],
         background_color: '#f7f9f8', // --fundo: splash na mesma cor da tela de login
         theme_color: '#105945',      // --logdis-forest
